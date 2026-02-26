@@ -12,7 +12,6 @@ class ArtProvenanceIO
 public:
     ArtProvenanceIO() = default;
     explicit ArtProvenanceIO(const std::string &input_path);
-    explicit ArtProvenanceIO(std::vector<std::string> files);
 
     void write(TDirectory *d) const;
     static ArtProvenanceIO read(TDirectory *d);
