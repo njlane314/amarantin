@@ -49,6 +49,7 @@ build/obj/framework/io/source/SampleIO.o: framework/io/source/SampleIO.cc \
  /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/Riostream.h \
  /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TROOT.h \
  /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TDirectory.h \
+ framework/io/include/RunDatabaseService.hh \
  /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TFile.h \
  /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/Compression.h \
  /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TDirectoryFile.h \
@@ -56,7 +57,19 @@ build/obj/framework/io/source/SampleIO.o: framework/io/source/SampleIO.cc \
  /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/ROOT/RConcurrentHashColl.hxx \
  /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/Rtypes.h \
  /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/ROOT/TRWSpinLock.hxx \
- /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/ROOT/TSpinMutex.hxx
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/ROOT/TSpinMutex.hxx \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TTree.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/ROOT/TIOFeatures.hxx \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TArrayD.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TArray.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TArrayI.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TAttFill.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TAttLine.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TAttMarker.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TVirtualTreePlayer.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TBranch.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TBranchCacheInfo.h \
+ /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TBits.h
 
 framework/io/include/SampleIO.hh:
 
@@ -160,6 +173,8 @@ framework/io/include/RootUtils.hh:
 
 /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TDirectory.h:
 
+framework/io/include/RunDatabaseService.hh:
+
 /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TFile.h:
 
 /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/Compression.h:
@@ -175,3 +190,27 @@ framework/io/include/RootUtils.hh:
 /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/ROOT/TRWSpinLock.hxx:
 
 /cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/ROOT/TSpinMutex.hxx:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TTree.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/ROOT/TIOFeatures.hxx:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TArrayD.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TArray.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TArrayI.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TAttFill.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TAttLine.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TAttMarker.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TVirtualTreePlayer.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TBranch.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TBranchCacheInfo.h:
+
+/cvmfs/larsoft.opensciencegrid.org/products/root/v6_28_12/Linux64bit+3.10-2.17-e20-p3915-prof/include/TBits.h:

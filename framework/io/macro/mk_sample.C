@@ -3,12 +3,10 @@
 #include <string>
 
 #if defined(__CLING__)
-R__ADD_LIBRARY_PATH(build/lib)
-R__ADD_LIBRARY_PATH(../build/lib)
-R__LOAD_LIBRARY(libIO.a)
+R__ADD_LIBRARY_PATH(build/lib/libIO.so)
 #endif
 
-#include "../include/SampleIO.hh"
+#include "SampleIO.hh"
 
 void mk_sample(const char *output_path = "build/sample/beam-s0.sample.root",
                const char *list_path = "samplelists/numi_fhc_run1/beam-s0.list",
@@ -32,8 +30,7 @@ void mk_sample(const char *output_path = "build/sample/beam-s0.sample.root",
                      polarity ? polarity : "");
         sample.write(output_path);
 
-        std::cout << "mk_sample: wrote " << output_path
-                  << " from " << list_path << "\n";
+        std::cout << "mk_sample: wrote " << output_path << " from " << list_path << "\n";
     }
     catch (const std::exception &e)
     {
