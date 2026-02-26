@@ -6,7 +6,6 @@
 
 void mk_sample(const char *output_path = "build/sample/beam-s0.sample.root",
                const char *list_path = "samplelists/numi_fhc_run1/beam-s0.list",
-               const char *db_path = "",
                const char *origin = "data",
                const char *variation = "nominal",
                const char *beam = "numi",
@@ -24,8 +23,7 @@ void mk_sample(const char *output_path = "build/sample/beam-s0.sample.root",
                      origin ? origin : "",
                      variation ? variation : "",
                      beam ? beam : "",
-                     polarity ? polarity : "",
-                     db_path ? db_path : "");
+                     polarity ? polarity : "");
         sample.write(output_path);
 
         std::cout << "mk_sample: wrote " << output_path
