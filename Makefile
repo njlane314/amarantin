@@ -57,18 +57,15 @@ lists: $(listsall)
 $(foreach r,$(datasets),$(eval $(r): $(call listfiles,$(r))))
 
 $(target): $(objs)
-	@mkdir -p $(dir $@)
-	@echo "[AR ] $@"
+	mkdir -p $(dir $@)
 	ar rcs $@ $^
 
 $(objdir)/%.o: %.cc
-	@mkdir -p $(dir $@)
-	@echo "[CXX] $<"
+	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 $(sample_tool): framework/io/app/mk_sample.cc $(target)
-	@mkdir -p $(dir $@)
-	@echo "[LD ] $@"
+	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $< -L$(libdir) -lIO $(LDFLAGS) -o $@
 
 -include $(deps)
