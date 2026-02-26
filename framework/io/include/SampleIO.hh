@@ -35,9 +35,8 @@ public:
     };
 
 public:
-    static SampleIO build(std::string context, std::string key);
     static SampleIO build(std::string context, std::string key,
-                          const std::string &sample_list_path);
+                          const std::string &sample_list_path = "");
 
     void write(const std::string &path) const;
     static SampleIO read(const std::string &path);
