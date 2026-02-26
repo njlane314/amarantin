@@ -11,7 +11,7 @@ ROOTCFLAGS := $(shell root-config --cflags)
 ROOTLIBS := $(shell root-config --libs --glibs)
 SQLITELIBS := $(shell pkg-config --libs sqlite3 2>/dev/null || echo -lsqlite3)
 
-CXXFLAGS := -O2 -g -std=c++17 -Wall -Wextra -fPIC $(ROOTCFLAGS) -Iframework/io/include
+CXXFLAGS := -O2 -g -std=c++17 -Wall -Wextra -fPIC $(ROOTCFLAGS) -Iio/include
 LDFLAGS := $(ROOTLIBS) $(SQLITELIBS)
 
 libdir := build/lib
@@ -23,9 +23,9 @@ bindir := build/bin
 sample_tool := $(bindir)/mk_sample
 
 srcs := \
-	framework/io/source/SampleIO.cc \
-	framework/io/source/ArtProvenanceIO.cc \
-	framework/io/source/RunDatabaseService.cc
+	io/source/SampleIO.cc \
+	io/source/ArtProvenanceIO.cc \
+	io/source/RunDatabaseService.cc
 
 objs := $(srcs:%.cc=$(objdir)/%.o)
 deps := $(objs:.o=.d)
@@ -41,7 +41,7 @@ samplesall := $(foreach l,$(listsall),$(call list_to_sample,$(l)))
 .PHONY: samples
 samples: $(samplesall)
 
-build/sample/%.sample.root: samplelists/%.list $(target) $(sample_tool) framework/io/macro/mk_sample.C
+build/sample/%.sample.root: samplelists/%.list $(target) $(sample_tool) io/macro/mk_sample.C
 	@mkdir -p "$(dir $@)"
 	# $(sample_tool) "$@" "$<" "" "data" "nominal" "numi" "fhc"
 	@echo "sample generation command temporarily commented out"
@@ -69,7 +69,7 @@ $(objdir)/%.o: %.cc
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
-$(sample_tool): framework/io/app/mk_sample.cc $(target)
+$(sample_tool): io/app/mk_sample.cc $(target)
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $< -L$(libdir) -lIO $(LDFLAGS) -o $@
 
