@@ -8,71 +8,6 @@
 
 #include <TDirectory.h>
 #include <TFile.h>
-#include <TTree.h>
-
-namespace
-{
-    void write_provenance(TDirectory *d, const ArtProvenanceIO &provenance)
-    {
-        if (!d) throw std::runtime_error("SampleIO::write_provenance: null directory");
-        d->cd();
-
-        rootu::write_param<double>(d, "pot_sum", provenance.subrun_pot_sum());
-        rootu::write_param<long long>(d, "entries", provenance.n_events());
-
-        {
-            TTree files_t("root_files", "");
-            std::string root_file;
-            files_t.Branch("root_file", &root_file);
-            for (const auto &path : provenance.sample_files())
-            {
-                root_file = path;
-                files_t.Fill();
-            }
-            files_t.Write("root_files", TObject::kOverwrite);
-        }
-
-        {
-            TTree rs("run_subrun", "");
-            Int_t run = 0;
-            Int_t subrun = 0;
-            rs.Branch("run", &run, "run/I");
-            rs.Branch("subrun", &subrun, "subrun/I");
-            for (const auto &pair : provenance.run_subruns())
-            {
-                run = pair.first;
-                subrun = pair.second;
-                rs.Fill();
-            }
-            rs.Write("run_subrun", TObject::kOverwrite);
-        }
-    }
-
-    ArtProvenanceIO read_provenance(TDirectory *d)
-    {
-        if (!d) throw std::runtime_error("SampleIO::read_provenance: null directory");
-
-        std::vector<std::string> root_files;
-        {
-            auto *t = dynamic_cast<TTree *>(d->Get("root_files"));
-            if (!t) throw std::runtime_error("SampleIO: missing root_files tree in part/" + std::string(d->GetName()));
-
-            std::string *root_file = nullptr;
-            t->SetBranchAddress("root_file", &root_file);
-
-            const Long64_t n = t->GetEntries();
-            root_files.reserve(static_cast<size_t>(n));
-            for (Long64_t i = 0; i < n; ++i)
-            {
-                t->GetEntry(i);
-                if (!root_file) throw std::runtime_error("SampleIO: root_files missing root_file in part/" + std::string(d->GetName()));
-                root_files.push_back(*root_file);
-            }
-        }
-
-        return ArtProvenanceIO(std::move(root_files));
-    }
-} // namespace
 
 SampleIO::SampleIO(std::string c, std::string k) : context(std::move(c)), key(std::move(k))
 {
@@ -125,7 +60,7 @@ void SampleIO::write(const std::string &path) const
 
         TDirectory *pr = rootu::must_dir(f, "part", true);
         for (size_t i = 0; i < partitions.size(); ++i)
-            write_provenance(rootu::must_subdir(pr, "partition_" + std::to_string(i), true, "part"), partitions[i]);
+            partitions[i].write(rootu::must_subdir(pr, "partition_" + std::to_string(i), true, "part"));
 
         f->Write();
         f->Close();
@@ -169,7 +104,7 @@ SampleIO SampleIO::read(const std::string &path)
             {
                 TDirectory *pd = pr->GetDirectory(name.c_str());
                 if (!pd) throw std::runtime_error("SampleIO: missing part/" + name);
-                out.partitions.push_back(read_provenance(pd));
+                out.partitions.push_back(ArtProvenanceIO::read(pd));
             }
         }
 
