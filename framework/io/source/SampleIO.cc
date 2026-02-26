@@ -81,14 +81,20 @@ SampleIO::SampleIO(std::string c, std::string k) : context(std::move(c)), key(st
 }
 
 SampleIO SampleIO::build(std::string context, std::string key,
-                         const std::string &sample_list_path)
+                         const std::vector<std::string> &sample_list_path)
 {
     SampleIO out(std::move(context), std::move(key));
 
-    if (sample_list_path.empty())
-        return out;
+    out.partitions.reserve(sample_list_path.size());
+    for (const auto &partition_sample_list_path : sample_list_path)
+    {
+        if (partition_sample_list_path.empty())
+            throw std::runtime_error("SampleIO::build: empty sample list path in partitions");
 
-    out.partitions.emplace_back(sample_list_path);
+        ArtProvenanceIO partition_provenance(partition_sample_list_path);
+        out.partitions.push_back(std::move(partition_provenance));
+    }
+
     return out;
 }
 
