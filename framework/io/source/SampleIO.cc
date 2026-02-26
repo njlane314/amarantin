@@ -36,15 +36,13 @@ SampleIO::SampleIO(std::string c, std::string k) : context(std::move(c)), key(st
     if (key.empty()) throw std::runtime_error("SampleIO: key is empty");
 }
 
-SampleIO SampleIO::build(std::string context, std::string key)
-{
-    return SampleIO(std::move(context), std::move(key));
-}
-
 SampleIO SampleIO::build(std::string context, std::string key,
                          const std::string &sample_list_path)
 {
     SampleIO out(std::move(context), std::move(key));
+
+    if (sample_list_path.empty())
+        return out;
 
     Partition p;
     p.name = "all";
