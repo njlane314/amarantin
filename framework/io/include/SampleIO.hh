@@ -22,6 +22,11 @@ public:
 public:
     static SampleIO build(const std::vector<std::string> &input_paths,
                           std::string output_path);
+    static SampleIO build(const std::vector<std::string> &input_paths,
+                          std::string output_path,
+                          const std::string &db_path);
+    static double compute_normalisation(double subrun_pot_sum,
+                                        double db_tortgt_pot_sum);
 
     void write() const;
     static SampleIO read(const std::string &path);
@@ -38,6 +43,7 @@ public:
     double subrun_pot_sum = 0.0;
     double db_tortgt_pot_sum = 0.0;
     double normalisation = 1.0;
+    double normalised_pot_sum = 0.0;
 
     std::vector<ArtProvenanceIO> partitions;
 

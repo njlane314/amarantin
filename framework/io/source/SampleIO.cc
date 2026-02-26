@@ -1,6 +1,7 @@
 // SampleIO.cc
 #include "SampleIO.hh"
 #include "RootUtils.hh"
+#include "RunDatabaseService.hh"
 
 #include <stdexcept>
 #include <string>
@@ -34,10 +35,55 @@ SampleIO SampleIO::build(const std::vector<std::string> &input_paths,
     for (const auto &partition_sample_list_path : out.input_paths_)
     {
         ArtProvenanceIO partition_provenance(partition_sample_list_path);
+        out.subrun_pot_sum += partition_provenance.subrun_pot_sum();
         out.partitions.push_back(std::move(partition_provenance));
     }
 
+    out.normalisation = compute_normalisation(out.subrun_pot_sum, out.db_tortgt_pot_sum);
+    out.normalised_pot_sum = out.subrun_pot_sum * out.normalisation;
+
     return out;
+}
+
+SampleIO SampleIO::build(const std::vector<std::string> &input_paths,
+                         std::string output_path,
+                         const std::string &db_path)
+{
+    SampleIO out = build(input_paths, std::move(output_path));
+
+    if (db_path.empty())
+    {
+        throw std::runtime_error("SampleIO::build: db_path is empty");
+    }
+
+    RunDatabaseService db(db_path);
+    for (const auto &partition : out.partitions)
+    {
+        const RunInfoSums runinfo = db.sum_run_info(partition.run_subruns());
+        const double db_pot_scale = 1.0e12;
+        out.db_tortgt_pot_sum += runinfo.tortgt_sum * db_pot_scale;
+    }
+
+    out.normalisation = compute_normalisation(out.subrun_pot_sum, out.db_tortgt_pot_sum);
+    out.normalised_pot_sum = out.subrun_pot_sum * out.normalisation;
+
+    return out;
+}
+
+double SampleIO::compute_normalisation(double subrun_pot_sum,
+                                       double db_tortgt_pot_sum)
+{
+    if (subrun_pot_sum <= 0.0)
+    {
+        throw std::runtime_error("SampleIO::compute_normalisation: subrun_pot_sum must be > 0.");
+    }
+
+    if (db_tortgt_pot_sum <= 0.0)
+    {
+        return 1.0;
+    }
+
+    return db_tortgt_pot_sum / subrun_pot_sum;
 }
 
 void SampleIO::write() const
@@ -75,6 +121,7 @@ void SampleIO::write() const
         rootu::write_param<double>(s, "subrun_pot_sum", subrun_pot_sum);
         rootu::write_param<double>(s, "db_tortgt_pot_sum", db_tortgt_pot_sum);
         rootu::write_param<double>(s, "normalisation", normalisation);
+        rootu::write_param<double>(s, "normalised_pot_sum", normalised_pot_sum);
 
         TDirectory *pr = rootu::must_dir(f, "part", true);
         for (size_t i = 0; i < partitions.size(); ++i)
@@ -131,6 +178,7 @@ SampleIO SampleIO::read(const std::string &path)
         out.subrun_pot_sum = rootu::read_param<double>(s, "subrun_pot_sum");
         out.db_tortgt_pot_sum = rootu::read_param<double>(s, "db_tortgt_pot_sum");
         out.normalisation = rootu::read_param<double>(s, "normalisation");
+        out.normalised_pot_sum = rootu::read_param<double>(s, "normalised_pot_sum");
 
         if (TDirectory *pr = f->GetDirectory("part"))
         {
