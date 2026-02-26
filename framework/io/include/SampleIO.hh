@@ -20,48 +20,18 @@ public:
     enum class Variation { kNominal, kDetector, kUnknown };
 
 public:
-    struct BuildOptions
-    {
-        BuildOptions() = default;
-        Origin origin = Origin::kUnknown;
-        Variation variation = Variation::kUnknown;
-        Beam beam = Beam::kUnknown;
-        Polarity polarity = Polarity::kUnknown;
-        std::string db_path;
-
-        static BuildOptions from_strings(const std::string &origin,
-                                         const std::string &variation,
-                                         const std::string &beam,
-                                         const std::string &polarity,
-                                         const std::string &db_path = "");
-    };
-
-    explicit SampleIO(std::string output_path);
-
-    void set_metadata(Origin origin, Variation variation, Beam beam, Polarity polarity);
-    void set_metadata_from_strings(const std::string &origin,
-                                   const std::string &variation,
-                                   const std::string &beam,
-                                   const std::string &polarity);
-
-    void build(const std::vector<std::string> &input_paths, const std::string &db_path);
-    void build_from_spec(const std::string &input_paths_spec, const std::string &db_path);
-    static std::vector<std::string> parse_input_paths(const std::string &input_paths_spec);
-    static double compute_normalisation(double subrun_pot_sum, double db_tortgt_pot_sum);
-
-    void write() const;
-    static SampleIO build_and_write(std::string output_path,
-                                    std::vector<std::string> input_paths,
-                                    BuildOptions options);
-    static SampleIO build_and_write_from_spec(std::string output_path,
-                                              const std::string &input_paths_spec,
-                                              BuildOptions options);
-    static SampleIO read(const std::string &path);
+    SampleIO() = default;
+    void build(const std::string &input_paths_spec,
+               const std::string &origin,
+               const std::string &variation,
+               const std::string &beam,
+               const std::string &polarity,
+               const std::string &db_path = "");
+    void read(const std::string &path);
+    void write(const std::string &output_path) const;
 
 public:
     std::vector<std::string> input_paths_;
-    std::string output_path_;
-
     Origin origin_ = Origin::kUnknown;
     Variation variation_ = Variation::kUnknown;
     Beam beam_ = Beam::kUnknown;
@@ -155,6 +125,11 @@ public:
     }
 
 private:
+    void set_metadata(Origin origin, Variation variation, Beam beam, Polarity polarity);
+    static std::vector<std::string> parse_input_paths(const std::string &input_paths_spec);
+    void build_from(const std::vector<std::string> &input_paths, const std::string &db_path);
+    static double compute_normalisation(double subrun_pot_sum, double db_tortgt_pot_sum);
+
     static std::string lower_(std::string s)
     {
         std::transform(s.begin(), s.end(), s.begin(),

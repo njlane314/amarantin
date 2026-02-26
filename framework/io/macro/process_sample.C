@@ -11,7 +11,8 @@ void process_sample(const char *read_path)
         if (!read_path || std::string(read_path).empty())
             throw std::runtime_error("process_sample: read_path is required");
 
-        const SampleIO sample = SampleIO::read(read_path);
+        SampleIO sample;
+        sample.read(read_path);
 
         std::cout << "origin=" << SampleIO::origin_name(sample.origin_)
                   << " beam=" << SampleIO::beam_name(sample.beam_)

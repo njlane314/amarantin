@@ -19,13 +19,14 @@ void make_sample(const char *output_path,
         if (!input_paths || std::string(input_paths).empty())
             throw std::runtime_error("make_sample: input_paths is required");
 
-        const auto options = SampleIO::BuildOptions::from_strings(origin ? origin : "",
-                                                                   variation ? variation : "",
-                                                                   beam ? beam : "",
-                                                                   polarity ? polarity : "",
-                                                                   db_path ? db_path : "");
-
-        SampleIO::build_and_write_from_spec(output_path, input_paths, options);
+        SampleIO sample;
+        sample.build(input_paths,
+                     origin ? origin : "",
+                     variation ? variation : "",
+                     beam ? beam : "",
+                     polarity ? polarity : "",
+                     db_path ? db_path : "");
+        sample.write(output_path);
         std::cout << "make_sample: wrote SampleIO to " << output_path << "\n";
     }
     catch (const std::exception &e)
