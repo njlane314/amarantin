@@ -13,7 +13,7 @@
 #include <TNamed.h>
 #include <TParameter.h>
 
-namespace root
+namespace utils
 {
     inline std::string lower(std::string s)
     {
@@ -85,5 +85,6 @@ namespace root
         TParameter<T>(key, value).Write(key, TObject::kOverwrite);
     }
 } 
+
 
 #endif // ROOT_UTILS_HH

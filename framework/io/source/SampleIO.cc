@@ -10,6 +10,7 @@
 
 #include <TDirectory.h>
 #include <TFile.h>
+#include <TTree.h>
 
 namespace
 {
@@ -141,8 +142,8 @@ void SampleIO::write(const std::string &output_path) const
 
     try
     {
-        TDirectory *meta = rootu::must_dir(f, "meta", true);
-        rootu::write_named(meta, "output_path", output_path);
+        TDirectory *meta = utils::must_dir(f, "meta", true);
+        utils::write_named(meta, "output_path", output_path);
 
         TTree part_t("input_paths", "");
         std::string input_path;
@@ -154,20 +155,20 @@ void SampleIO::write(const std::string &output_path) const
         }
         part_t.Write("input_paths", TObject::kOverwrite);
 
-        TDirectory *s = rootu::must_dir(f, "sample", true);
-        rootu::write_named(s, "origin", origin_name(origin_));
-        rootu::write_named(s, "variation", variation_name(variation_));
-        rootu::write_named(s, "beam", beam_name(beam_));
-        rootu::write_named(s, "polarity", polarity_name(polarity_));
+        TDirectory *s = utils::must_dir(f, "sample", true);
+        utils::write_named(s, "origin", origin_name(origin_));
+        utils::write_named(s, "variation", variation_name(variation_));
+        utils::write_named(s, "beam", beam_name(beam_));
+        utils::write_named(s, "polarity", polarity_name(polarity_));
 
-        rootu::write_param<double>(s, "subrun_pot_sum", subrun_pot_sum_);
-        rootu::write_param<double>(s, "db_tortgt_pot_sum", db_tortgt_pot_sum_);
-        rootu::write_param<double>(s, "normalisation", normalisation_);
-        rootu::write_param<double>(s, "normalised_pot_sum", normalised_pot_sum_);
+        utils::write_param<double>(s, "subrun_pot_sum", subrun_pot_sum_);
+        utils::write_param<double>(s, "db_tortgt_pot_sum", db_tortgt_pot_sum_);
+        utils::write_param<double>(s, "normalisation", normalisation_);
+        utils::write_param<double>(s, "normalised_pot_sum", normalised_pot_sum_);
 
-        TDirectory *pr = rootu::must_dir(f, "part", true);
+        TDirectory *pr = utils::must_dir(f, "part", true);
         for (size_t i = 0; i < partitions_.size(); ++i)
-            partitions_[i].write(rootu::must_subdir(pr, "partition_" + std::to_string(i), true, "part"));
+            partitions_[i].write(utils::must_subdir(pr, "partition_" + std::to_string(i), true, "part"));
 
         f->Write();
         f->Close();
@@ -203,7 +204,7 @@ void SampleIO::read(const std::string &path)
 
     try
     {
-        TDirectory *meta = rootu::must_dir(f, "meta", false);
+        TDirectory *meta = utils::must_dir(f, "meta", false);
         std::vector<std::string> input_paths;
         {
             auto *t = dynamic_cast<TTree *>(meta->Get("input_paths"));
@@ -223,24 +224,24 @@ void SampleIO::read(const std::string &path)
             }
         }
 
-        (void)rootu::read_named(meta, "output_path");
+        (void)utils::read_named(meta, "output_path");
         build_from(input_paths, "");
 
-        TDirectory *s = rootu::must_dir(f, "sample", false);
-        origin_ = origin_from(rootu::read_named(s, "origin"));
-        variation_ = variation_from(rootu::read_named(s, "variation"));
-        beam_ = beam_from(rootu::read_named(s, "beam"));
-        polarity_ = polarity_from(rootu::read_named(s, "polarity"));
+        TDirectory *s = utils::must_dir(f, "sample", false);
+        origin_ = origin_from(utils::read_named(s, "origin"));
+        variation_ = variation_from(utils::read_named(s, "variation"));
+        beam_ = beam_from(utils::read_named(s, "beam"));
+        polarity_ = polarity_from(utils::read_named(s, "polarity"));
 
-        subrun_pot_sum_ = rootu::read_param<double>(s, "subrun_pot_sum");
-        db_tortgt_pot_sum_ = rootu::read_param<double>(s, "db_tortgt_pot_sum");
-        normalisation_ = rootu::read_param<double>(s, "normalisation");
-        normalised_pot_sum_ = rootu::read_param<double>(s, "normalised_pot_sum");
+        subrun_pot_sum_ = utils::read_param<double>(s, "subrun_pot_sum");
+        db_tortgt_pot_sum_ = utils::read_param<double>(s, "db_tortgt_pot_sum");
+        normalisation_ = utils::read_param<double>(s, "normalisation");
+        normalised_pot_sum_ = utils::read_param<double>(s, "normalised_pot_sum");
 
         partitions_.clear();
         if (TDirectory *pr = f->GetDirectory("part"))
         {
-            const auto names = rootu::list_keys(pr);
+            const auto names = utils::list_keys(pr);
             partitions_.reserve(names.size());
             for (const auto &name : names)
             {
