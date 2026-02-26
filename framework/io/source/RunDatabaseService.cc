@@ -10,6 +10,7 @@
 #include <sqlite3.h>
 
 #include <stdexcept>
+#include <set>
 #include <utility>
 
 RunDatabaseService::RunDatabaseService(std::string path) : db_path_(std::move(path))
@@ -64,6 +65,8 @@ RunInfoSums RunDatabaseService::sum_run_info(const std::vector<std::pair<int, in
         throw std::runtime_error("DB selection is empty (no run/subrun pairs).");
     }
 
+    const std::set<std::pair<int, int>> unique_pairs(pairs.begin(), pairs.end());
+
     exec("CREATE TEMP TABLE IF NOT EXISTS sel(run INTEGER, subrun INTEGER);");
     exec("DELETE FROM sel;");
     exec("BEGIN;");
@@ -71,7 +74,7 @@ RunInfoSums RunDatabaseService::sum_run_info(const std::vector<std::pair<int, in
     sqlite3_stmt *ins = nullptr;
     prepare("INSERT INTO sel(run, subrun) VALUES(?, ?);", &ins);
 
-    for (const auto &p : pairs)
+    for (const auto &p : unique_pairs)
     {
         sqlite3_reset(ins);
         sqlite3_clear_bindings(ins);
@@ -116,7 +119,7 @@ RunInfoSums RunDatabaseService::sum_run_info(const std::vector<std::pair<int, in
     }
 
     RunInfoSums out{};
-    out.n_pairs_loaded = static_cast<long long>(pairs.size());
+    out.n_pairs_loaded = static_cast<long long>(unique_pairs.size());
     out.tortgt_sum = sqlite3_column_double(q, 0);
     out.tor101_sum = sqlite3_column_double(q, 1);
     out.tor860_sum = sqlite3_column_double(q, 2);
