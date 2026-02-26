@@ -19,7 +19,9 @@ objdir := build/obj
 target := $(libdir)/libIO.a
 
 srcs := \
-	framework/io/source/DatasetIO.cc
+	framework/io/source/DatasetIO.cc \
+	framework/io/source/SampleIO.cc \
+	framework/io/source/ArtProvenanceIO.cc
 
 objs := $(srcs:%.cc=$(objdir)/%.o)
 deps := $(objs:.o=.d)
