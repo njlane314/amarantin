@@ -1,5 +1,6 @@
 // SampleIO.cc
 #include "SampleIO.hh"
+#include "ArtProvenanceIO.hh"
 #include "RootUtils.hh"
 
 #include <algorithm>
@@ -38,6 +39,30 @@ SampleIO::SampleIO(std::string c, std::string k) : context(std::move(c)), key(st
 SampleIO SampleIO::build(std::string context, std::string key)
 {
     return SampleIO(std::move(context), std::move(key));
+}
+
+SampleIO SampleIO::build(std::string context, std::string key,
+                         const std::string &sample_list_path)
+{
+    SampleIO out(std::move(context), std::move(key));
+
+    Partition p;
+    p.name = "all";
+    p.root_files = ArtProvenanceIO::read_sample_list(sample_list_path);
+    p.n_entries = static_cast<long long>(p.root_files.size());
+
+    if (!p.root_files.empty())
+    {
+        ArtProvenanceIO provenance;
+        provenance.scan_subruns(p.root_files);
+
+        p.run_subruns = provenance.run_subruns();
+        p.pot_sum = provenance.subrun_pot_sum();
+        p.n_entries = provenance.n_entries();
+    }
+
+    out.partitions.push_back(std::move(p));
+    return out;
 }
 
 void SampleIO::Partition::write(TDirectory *d) const
