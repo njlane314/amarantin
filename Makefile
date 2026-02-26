@@ -11,7 +11,7 @@ ROOTCFLAGS := $(shell root-config --cflags)
 ROOTLIBS := $(shell root-config --libs --glibs)
 SQLITELIBS := $(shell pkg-config --libs sqlite3 2>/dev/null || echo -lsqlite3)
 
-CXXFLAGS := -O2 -g -std=c++17 -Wall -Wextra $(ROOTCFLAGS) -Iframework/io/include
+CXXFLAGS := -O2 -g -std=c++17 -Wall -Wextra -fPIC $(ROOTCFLAGS) -Iframework/io/include
 LDFLAGS := $(ROOTLIBS) $(SQLITELIBS)
 
 libdir := build/lib
