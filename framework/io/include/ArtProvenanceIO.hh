@@ -10,6 +10,7 @@ class ArtProvenanceIO
 public:
     ArtProvenanceIO() = default;
     explicit ArtProvenanceIO(const std::string &input_path);
+    explicit ArtProvenanceIO(std::vector<std::string> files);
 
     void scan_subruns(const std::vector<std::string> &files);
 
@@ -17,7 +18,7 @@ public:
     const std::vector<std::pair<int, int>> &run_subruns() const { return run_subruns_; }
 
     double subrun_pot_sum() const { return pot_sum_; }
-    const long long n_events() const { return n_events; }
+    long long n_events() const { return n_events_; }
 
 private:
     static std::vector<std::string> read_sample_list(const std::string &path);
@@ -26,7 +27,7 @@ private:
     std::vector<std::pair<int, int>> run_subruns_;
 
     double pot_sum_ = 0.0;
-    long long n_event_ = 0;
+    long long n_events_ = 0;
 };
 
 #endif // ART_PROVENANCE_IO_HH

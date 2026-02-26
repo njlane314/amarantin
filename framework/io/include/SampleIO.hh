@@ -2,14 +2,14 @@
 #ifndef SAMPLE_IO_HH
 #define SAMPLE_IO_HH
 
+#include "ArtProvenanceIO.hh"
+
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
-
-class TDirectory;
 
 class SampleIO
 {
@@ -18,21 +18,6 @@ public:
     enum class Beam      { kNuMI, kBNB, kUnknown };
     enum class Polarity  { kFHC, kRHC, kUnknown };
     enum class Variation { kNominal, kDetector, kUnknown };
-
-    struct Partition
-    {
-        std::string name;
-
-        double scale = 1.0;
-        double pot_sum = 0.0;
-        long long n_entries = 0;
-
-        std::vector<std::string> root_files;
-        std::vector<std::pair<int, int>> run_subruns;
-
-        void write(TDirectory *d) const;
-        static Partition read(TDirectory *d);
-    };
 
 public:
     static SampleIO build(std::string context, std::string key,
@@ -54,7 +39,7 @@ public:
     double db_tortgt_pot_sum = 0.0;
     double normalisation = 1.0;
 
-    std::vector<Partition> partitions;
+    std::vector<ArtProvenanceIO> partitions;
 
 public:
     static const char *origin_name(Origin o)
