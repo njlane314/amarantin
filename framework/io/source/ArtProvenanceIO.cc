@@ -18,6 +18,12 @@ ArtProvenanceIO::ArtProvenanceIO(const std::string &input_path)
     if (!input_files_.empty()) scan_subruns(input_files_);
 }
 
+ArtProvenanceIO::ArtProvenanceIO(std::vector<std::string> files)
+    : input_files_(std::move(files))
+{
+    if (!input_files_.empty()) scan_subruns(input_files_);
+}
+
 std::vector<std::string> ArtProvenanceIO::read_sample_list(const std::string &path)
 {
     std::ifstream in(path);
