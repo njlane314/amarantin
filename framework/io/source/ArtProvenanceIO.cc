@@ -26,8 +26,8 @@ void ArtProvenanceIO::write(TDirectory *d) const
     if (!d) throw std::runtime_error("ArtProvenanceIO::write: null directory");
     d->cd();
 
-    rootu::write_param<double>(d, "pot_sum", subrun_pot_sum());
-    rootu::write_param<long long>(d, "entries", n_events());
+    utils::write_param<double>(d, "pot_sum", subrun_pot_sum());
+    utils::write_param<long long>(d, "entries", n_events());
 
     {
         TTree files_t("root_files", "");
@@ -62,8 +62,8 @@ ArtProvenanceIO ArtProvenanceIO::read(TDirectory *d)
     if (!d) throw std::runtime_error("ArtProvenanceIO::read: null directory");
 
     ArtProvenanceIO out;
-    out.pot_sum_ = rootu::read_param<double>(d, "pot_sum");
-    out.n_events_ = rootu::read_param<long long>(d, "entries");
+    out.pot_sum_ = utils::read_param<double>(d, "pot_sum");
+    out.n_events_ = utils::read_param<long long>(d, "entries");
 
     {
         auto *t = dynamic_cast<TTree *>(d->Get("root_files"));
