@@ -21,12 +21,6 @@ ArtProvenanceIO::ArtProvenanceIO(const std::string &input_path)
     if (!input_files_.empty()) scan_subruns(input_files_);
 }
 
-ArtProvenanceIO::ArtProvenanceIO(std::vector<std::string> files)
-    : input_files_(std::move(files))
-{
-    if (!input_files_.empty()) scan_subruns(input_files_);
-}
-
 void ArtProvenanceIO::write(TDirectory *d) const
 {
     if (!d) throw std::runtime_error("ArtProvenanceIO::write: null directory");
