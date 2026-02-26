@@ -2,6 +2,10 @@
 #include <stdexcept>
 #include <string>
 
+#if defined(__CLING__)
+R__LOAD_LIBRARY(build/lib/libIO.so)
+#endif
+
 #include "../include/SampleIO.hh"
 
 void mk_sample(const char *output_path = "build/sample/beam-s0.sample.root",

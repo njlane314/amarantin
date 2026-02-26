@@ -18,6 +18,7 @@ libdir := build/lib
 objdir := build/obj
 
 target := $(libdir)/libIO.a
+shared_target := $(libdir)/libIO.so
 bindir := build/bin
 sample_tool := $(bindir)/mk_sample
 
@@ -50,7 +51,7 @@ build/sample/%.sample.root: samplelists/%.list $(target) $(sample_tool) framewor
 .DEFAULT_GOAL := all
 
 .PHONY: all lists clean cleanlists $(datasets)
-all: $(target) $(sample_tool)
+all: $(target) $(shared_target) $(sample_tool)
 
 lists: $(listsall)
 
@@ -59,6 +60,10 @@ $(foreach r,$(datasets),$(eval $(r): $(call listfiles,$(r))))
 $(target): $(objs)
 	mkdir -p $(dir $@)
 	ar rcs $@ $^
+
+$(shared_target): $(objs)
+	mkdir -p $(dir $@)
+	$(CXX) -shared -o $@ $^ $(LDFLAGS)
 
 $(objdir)/%.o: %.cc
 	mkdir -p $(dir $@)
