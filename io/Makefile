@@ -11,8 +11,8 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -fPIC $(shell $(ROOT_CONFIG) --cflags)
 LDLIBS ?= $(shell $(ROOT_CONFIG) --libs) -lsqlite3
 
 LIB := $(BUILD_DIR)/lib/libIO.so
-SRC := $(wildcard source/*.cc)
-OBJ := $(patsubst source/%.cc,$(BUILD_DIR)/obj/io/%.o,$(SRC))
+SRC := $(wildcard src/*.cc)
+OBJ := $(patsubst src/%.cc,$(BUILD_DIR)/obj/io/%.o,$(SRC))
 DEP := $(OBJ:.o=.d)
 
 .PHONY: all clean
@@ -22,7 +22,7 @@ $(LIB): $(OBJ)
 	mkdir -p $(dir $@)
 	$(CXX) -shared $(CXXFLAGS) $^ $(LDLIBS) -o $@
 
-$(BUILD_DIR)/obj/io/%.o: source/%.cc
+$(BUILD_DIR)/obj/io/%.o: src/%.cc
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -MMD -MP -c $< -o $@
 
