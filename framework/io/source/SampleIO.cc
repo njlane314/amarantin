@@ -73,8 +73,7 @@ std::vector<std::string> SampleIO::parse_input_paths(const std::string &input_pa
     return load_paths_from_file(file_path);
 }
 
-void SampleIO::build_from(const std::vector<std::string> &input_paths,
-                          const std::string &db_path)
+void SampleIO::build_from(const std::vector<std::string> &input_paths)
 {
     input_paths_ = input_paths;
     if (input_paths_.empty())
@@ -95,9 +94,8 @@ void SampleIO::build_from(const std::vector<std::string> &input_paths,
         partitions_.push_back(std::move(partition_provenance));
     }
 
-    if (!db_path.empty())
     {
-        RunDatabaseService db(db_path);
+        RunDatabaseService db("/exp/uboone/data/uboonebeam/beamdb/run.db");
         for (const auto &partition : partitions_)
         {
             const RunInfoSums runinfo = db.sum_run_info(partition.run_subruns());
@@ -186,14 +184,13 @@ void SampleIO::build(const std::string &input_paths_spec,
                      const std::string &origin,
                      const std::string &variation,
                      const std::string &beam,
-                     const std::string &polarity,
-                     const std::string &db_path)
+                     const std::string &polarity)
 {
     set_metadata(origin_from(origin),
                  variation_from(variation),
                  beam_from(beam),
                  polarity_from(polarity));
-    build_from(parse_input_paths(input_paths_spec), db_path);
+    build_from(parse_input_paths(input_paths_spec));
 }
 
 void SampleIO::read(const std::string &path)
@@ -225,7 +222,9 @@ void SampleIO::read(const std::string &path)
         }
 
         (void)utils::read_named(meta, "output_path");
-        build_from(input_paths, "");
+        input_paths_ = std::move(input_paths);
+        if (input_paths_.empty())
+            throw std::runtime_error("SampleIO: input_paths is empty");
 
         TDirectory *s = utils::must_dir(f, "sample", false);
         origin_ = origin_from(utils::read_named(s, "origin"));

@@ -6,7 +6,6 @@
 
 void make_sample(const char *output_path,
                  const char *input_paths,
-                 const char *db_path = "",
                  const char *origin = "unknown",
                  const char *variation = "unknown",
                  const char *beam = "unknown",
@@ -24,8 +23,7 @@ void make_sample(const char *output_path,
                      origin ? origin : "",
                      variation ? variation : "",
                      beam ? beam : "",
-                     polarity ? polarity : "",
-                     db_path ? db_path : "");
+                     polarity ? polarity : "");
         sample.write(output_path);
         std::cout << "make_sample: wrote SampleIO to " << output_path << "\n";
     }
