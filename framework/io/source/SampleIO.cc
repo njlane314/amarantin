@@ -10,11 +10,20 @@
 #include <TDirectory.h>
 #include <TFile.h>
 
-SampleIO::SampleIO(std::vector<std::string> input_paths, std::string output_path)
-    : input_paths_(std::move(input_paths)), output_path_(std::move(output_path))
+SampleIO::SampleIO(std::string output_path)
+    : output_path_(std::move(output_path))
 {
-    if (input_paths_.empty())
-        throw std::runtime_error("SampleIO: input_paths_ is empty");
+    if (output_path_.empty())
+        throw std::runtime_error("SampleIO: output_path_ is empty");
+}
+
+void SampleIO::build(const std::vector<std::string> &input_paths,
+                     const std::string &db_path)
+{
+    if (input_paths.empty())
+        throw std::runtime_error("SampleIO: input_paths is empty");
+
+    input_paths_ = input_paths;
 
     for (const auto &partition : input_paths_)
     {
@@ -22,52 +31,35 @@ SampleIO::SampleIO(std::vector<std::string> input_paths, std::string output_path
             throw std::runtime_error("SampleIO: empty sample partition/provenance path");
     }
 
-    if (output_path_.empty())
-        throw std::runtime_error("SampleIO: output_path_ is empty");
-}
+    partitions_.clear();
+    subrun_pot_sum_ = 0.0;
+    db_tortgt_pot_sum_ = 0.0;
+    normalisation_ = 1.0;
+    normalised_pot_sum_ = 0.0;
+    built_ = false;
 
-SampleIO SampleIO::build(const std::vector<std::string> &input_paths,
-                         std::string output_path)
-{
-    SampleIO out(input_paths, std::move(output_path));
-
-    out.partitions.reserve(out.input_paths_.size());
-    for (const auto &partition_sample_list_path : out.input_paths_)
+    partitions_.reserve(input_paths_.size());
+    for (const auto &partition_sample_list_path : input_paths_)
     {
         ArtProvenanceIO partition_provenance(partition_sample_list_path);
-        out.subrun_pot_sum += partition_provenance.subrun_pot_sum();
-        out.partitions.push_back(std::move(partition_provenance));
+        subrun_pot_sum_ += partition_provenance.subrun_pot_sum();
+        partitions_.push_back(std::move(partition_provenance));
     }
 
-    out.normalisation = compute_normalisation(out.subrun_pot_sum, out.db_tortgt_pot_sum);
-    out.normalised_pot_sum = out.subrun_pot_sum * out.normalisation;
-
-    return out;
-}
-
-SampleIO SampleIO::build(const std::vector<std::string> &input_paths,
-                         std::string output_path,
-                         const std::string &db_path)
-{
-    SampleIO out = build(input_paths, std::move(output_path));
-
-    if (db_path.empty())
+    if (!db_path.empty())
     {
-        throw std::runtime_error("SampleIO::build: db_path is empty");
+        RunDatabaseService db(db_path);
+        for (const auto &partition : partitions_)
+        {
+            const RunInfoSums runinfo = db.sum_run_info(partition.run_subruns());
+            const double db_pot_scale = 1.0e12;
+            db_tortgt_pot_sum_ += runinfo.tortgt_sum * db_pot_scale;
+        }
     }
 
-    RunDatabaseService db(db_path);
-    for (const auto &partition : out.partitions)
-    {
-        const RunInfoSums runinfo = db.sum_run_info(partition.run_subruns());
-        const double db_pot_scale = 1.0e12;
-        out.db_tortgt_pot_sum += runinfo.tortgt_sum * db_pot_scale;
-    }
-
-    out.normalisation = compute_normalisation(out.subrun_pot_sum, out.db_tortgt_pot_sum);
-    out.normalised_pot_sum = out.subrun_pot_sum * out.normalisation;
-
-    return out;
+    normalisation_ = compute_normalisation(subrun_pot_sum_, db_tortgt_pot_sum_);
+    normalised_pot_sum_ = subrun_pot_sum_ * normalisation_;
+    built_ = true;
 }
 
 double SampleIO::compute_normalisation(double subrun_pot_sum,
@@ -88,6 +80,8 @@ double SampleIO::compute_normalisation(double subrun_pot_sum,
 
 void SampleIO::write() const
 {
+    if (!built_)
+        throw std::runtime_error("SampleIO::write: sample has not been successfully built or read");
     if (input_paths_.empty())
         throw std::runtime_error("SampleIO::write: input_paths_ is empty");
     if (output_path_.empty())
@@ -113,19 +107,19 @@ void SampleIO::write() const
         part_t.Write("input_paths", TObject::kOverwrite);
 
         TDirectory *s = rootu::must_dir(f, "sample", true);
-        rootu::write_named(s, "origin", origin_name(origin));
-        rootu::write_named(s, "variation", variation_name(variation));
-        rootu::write_named(s, "beam", beam_name(beam));
-        rootu::write_named(s, "polarity", polarity_name(polarity));
+        rootu::write_named(s, "origin", origin_name(origin_));
+        rootu::write_named(s, "variation", variation_name(variation_));
+        rootu::write_named(s, "beam", beam_name(beam_));
+        rootu::write_named(s, "polarity", polarity_name(polarity_));
 
-        rootu::write_param<double>(s, "subrun_pot_sum", subrun_pot_sum);
-        rootu::write_param<double>(s, "db_tortgt_pot_sum", db_tortgt_pot_sum);
-        rootu::write_param<double>(s, "normalisation", normalisation);
-        rootu::write_param<double>(s, "normalised_pot_sum", normalised_pot_sum);
+        rootu::write_param<double>(s, "subrun_pot_sum", subrun_pot_sum_);
+        rootu::write_param<double>(s, "db_tortgt_pot_sum", db_tortgt_pot_sum_);
+        rootu::write_param<double>(s, "normalisation", normalisation_);
+        rootu::write_param<double>(s, "normalised_pot_sum", normalised_pot_sum_);
 
         TDirectory *pr = rootu::must_dir(f, "part", true);
-        for (size_t i = 0; i < partitions.size(); ++i)
-            partitions[i].write(rootu::must_subdir(pr, "partition_" + std::to_string(i), true, "part"));
+        for (size_t i = 0; i < partitions_.size(); ++i)
+            partitions_[i].write(rootu::must_subdir(pr, "partition_" + std::to_string(i), true, "part"));
 
         f->Write();
         f->Close();
@@ -167,30 +161,33 @@ SampleIO SampleIO::read(const std::string &path)
             }
         }
 
-        SampleIO out = SampleIO::build(input_paths, rootu::read_named(meta, "output_path"));
+        SampleIO out(rootu::read_named(meta, "output_path"));
+        out.build(input_paths, "");
 
         TDirectory *s = rootu::must_dir(f, "sample", false);
-        out.origin = origin_from(rootu::read_named(s, "origin"));
-        out.variation = variation_from(rootu::read_named(s, "variation"));
-        out.beam = beam_from(rootu::read_named(s, "beam"));
-        out.polarity = polarity_from(rootu::read_named(s, "polarity"));
+        out.origin_ = origin_from(rootu::read_named(s, "origin"));
+        out.variation_ = variation_from(rootu::read_named(s, "variation"));
+        out.beam_ = beam_from(rootu::read_named(s, "beam"));
+        out.polarity_ = polarity_from(rootu::read_named(s, "polarity"));
 
-        out.subrun_pot_sum = rootu::read_param<double>(s, "subrun_pot_sum");
-        out.db_tortgt_pot_sum = rootu::read_param<double>(s, "db_tortgt_pot_sum");
-        out.normalisation = rootu::read_param<double>(s, "normalisation");
-        out.normalised_pot_sum = rootu::read_param<double>(s, "normalised_pot_sum");
+        out.subrun_pot_sum_ = rootu::read_param<double>(s, "subrun_pot_sum");
+        out.db_tortgt_pot_sum_ = rootu::read_param<double>(s, "db_tortgt_pot_sum");
+        out.normalisation_ = rootu::read_param<double>(s, "normalisation");
+        out.normalised_pot_sum_ = rootu::read_param<double>(s, "normalised_pot_sum");
 
         if (TDirectory *pr = f->GetDirectory("part"))
         {
             const auto names = rootu::list_keys(pr);
-            out.partitions.reserve(names.size());
+            out.partitions_.reserve(names.size());
             for (const auto &name : names)
             {
                 TDirectory *pd = pr->GetDirectory(name.c_str());
                 if (!pd) throw std::runtime_error("SampleIO: missing part/" + name);
-                out.partitions.push_back(ArtProvenanceIO::read(pd));
+                out.partitions_.push_back(ArtProvenanceIO::read(pd));
             }
         }
+
+        out.built_ = true;
 
         f->Close();
         delete f;

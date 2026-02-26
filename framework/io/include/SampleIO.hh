@@ -20,11 +20,10 @@ public:
     enum class Variation { kNominal, kDetector, kUnknown };
 
 public:
-    static SampleIO build(const std::vector<std::string> &input_paths,
-                          std::string output_path);
-    static SampleIO build(const std::vector<std::string> &input_paths,
-                          std::string output_path,
-                          const std::string &db_path);
+    explicit SampleIO(std::string output_path);
+
+    void build(const std::vector<std::string> &input_paths,
+               const std::string &db_path);
     static double compute_normalisation(double subrun_pot_sum,
                                         double db_tortgt_pot_sum);
 
@@ -35,17 +34,18 @@ public:
     std::vector<std::string> input_paths_;
     std::string output_path_;
 
-    Origin origin = Origin::kUnknown;
-    Variation variation = Variation::kUnknown;
-    Beam beam = Beam::kUnknown;
-    Polarity polarity = Polarity::kUnknown;
+    Origin origin_ = Origin::kUnknown;
+    Variation variation_ = Variation::kUnknown;
+    Beam beam_ = Beam::kUnknown;
+    Polarity polarity_ = Polarity::kUnknown;
 
-    double subrun_pot_sum = 0.0;
-    double db_tortgt_pot_sum = 0.0;
-    double normalisation = 1.0;
-    double normalised_pot_sum = 0.0;
+    double subrun_pot_sum_ = 0.0;
+    double db_tortgt_pot_sum_ = 0.0;
+    double normalisation_ = 1.0;
+    double normalised_pot_sum_ = 0.0;
 
-    std::vector<ArtProvenanceIO> partitions;
+    std::vector<ArtProvenanceIO> partitions_;
+    bool built_ = false;
 
 public:
     static const char *origin_name(Origin o)
@@ -127,8 +127,6 @@ public:
     }
 
 private:
-    SampleIO(std::vector<std::string> input_paths, std::string output_path);
-
     static std::string lower_(std::string s)
     {
         std::transform(s.begin(), s.end(), s.begin(),
