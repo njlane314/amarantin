@@ -17,9 +17,11 @@ libdir := build/lib
 objdir := build/obj
 
 target := $(libdir)/libIO.a
+bindir := build/bin
+sample_tool := $(bindir)/mk_sample
 
 srcs := \
-	framework/io/source/DatasetIO.cc \
+	# framework/io/source/DatasetIO.cc \
 	framework/io/source/SampleIO.cc \
 	framework/io/source/ArtProvenanceIO.cc \
 	framework/io/source/RunDatabaseService.cc
@@ -32,10 +34,23 @@ FORCE:
 listfiles = $(foreach sp,$(samples.$(1)),$(out.$(1))/$(word 1,$(subst :, ,$(sp))).list)
 listsall := $(foreach r,$(datasets),$(call listfiles,$(r)))
 
+list_to_sample = $(patsubst samplelists/%.list,build/sample/%.sample.root,$(1))
+samplesall := $(foreach l,$(listsall),$(call list_to_sample,$(l)))
+
+.PHONY: samples
+samples: $(samplesall)
+
+build/sample/%.sample.root: samplelists/%.list $(target) $(sample_tool) framework/io/macro/mk_sample.C
+	@mkdir -p "$(dir $@)"
+	# $(sample_tool) "$@" "$<" "" "data" "nominal" "numi" "fhc"
+	@echo "sample generation command temporarily commented out"
+
+
+
 .DEFAULT_GOAL := all
 
 .PHONY: all lists clean cleanlists $(datasets)
-all: $(target)
+all: $(target) $(sample_tool)
 
 lists: $(listsall)
 
@@ -48,6 +63,10 @@ $(target): $(objs)
 $(objdir)/%.o: %.cc
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
+$(sample_tool): framework/io/app/mk_sample.cc $(target)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $< -L$(libdir) -lIO $(LDFLAGS) -o $@
 
 -include $(deps)
 
