@@ -4,7 +4,6 @@
 #include "RunDatabaseService.hh"
 
 #include <fstream>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -46,24 +45,6 @@ namespace
         return paths;
     }
 
-    std::vector<std::string> split_csv_paths(const std::string &csv)
-    {
-        std::vector<std::string> paths;
-        std::stringstream ss(csv);
-        std::string token;
-
-        while (std::getline(ss, token, ','))
-        {
-            const std::string trimmed = trim_copy(token);
-            if (!trimmed.empty())
-                paths.push_back(trimmed);
-        }
-
-        if (paths.empty())
-            throw std::runtime_error("SampleIO::parse_input_paths: no CSV input paths were provided");
-
-        return paths;
-    }
 }
 
 void SampleIO::set_metadata(Origin origin,
@@ -79,18 +60,16 @@ void SampleIO::set_metadata(Origin origin,
 
 std::vector<std::string> SampleIO::parse_input_paths(const std::string &input_paths_spec)
 {
-    if (input_paths_spec.empty())
+    const std::string trimmed_spec = trim_copy(input_paths_spec);
+    if (trimmed_spec.empty())
         throw std::runtime_error("SampleIO::parse_input_paths: input_paths_spec is empty");
 
-    if (input_paths_spec.front() == '@')
-    {
-        const std::string file_path = trim_copy(input_paths_spec.substr(1));
-        if (file_path.empty())
-            throw std::runtime_error("SampleIO::parse_input_paths: file path after '@' is empty");
-        return load_paths_from_file(file_path);
-    }
+    const std::string file_path =
+        (trimmed_spec.front() == '@') ? trim_copy(trimmed_spec.substr(1)) : trimmed_spec;
+    if (file_path.empty())
+        throw std::runtime_error("SampleIO::parse_input_paths: input path file is empty");
 
-    return split_csv_paths(input_paths_spec);
+    return load_paths_from_file(file_path);
 }
 
 void SampleIO::build_from(const std::vector<std::string> &input_paths,
