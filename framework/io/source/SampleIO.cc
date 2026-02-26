@@ -3,12 +3,83 @@
 #include "RootUtils.hh"
 #include "RunDatabaseService.hh"
 
+#include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <TDirectory.h>
 #include <TFile.h>
+
+namespace
+{
+    std::string trim_copy(const std::string &input)
+    {
+        const auto first = input.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos)
+            return "";
+
+        const auto last = input.find_last_not_of(" \t\r\n");
+        return input.substr(first, last - first + 1);
+    }
+
+    std::vector<std::string> load_paths_from_file(const std::string &path)
+    {
+        std::ifstream file(path);
+        if (!file)
+            throw std::runtime_error("SampleIO::parse_input_paths: failed to open input path file: " + path);
+
+        std::vector<std::string> paths;
+        std::string line;
+        while (std::getline(file, line))
+        {
+            const std::string trimmed = trim_copy(line);
+            if (trimmed.empty() || trimmed[0] == '#')
+                continue;
+            paths.push_back(trimmed);
+        }
+
+        if (paths.empty())
+            throw std::runtime_error("SampleIO::parse_input_paths: no input paths found in file: " + path);
+
+        return paths;
+    }
+
+    std::vector<std::string> split_csv_paths(const std::string &csv)
+    {
+        std::vector<std::string> paths;
+        std::stringstream ss(csv);
+        std::string token;
+
+        while (std::getline(ss, token, ','))
+        {
+            const std::string trimmed = trim_copy(token);
+            if (!trimmed.empty())
+                paths.push_back(trimmed);
+        }
+
+        if (paths.empty())
+            throw std::runtime_error("SampleIO::parse_input_paths: no CSV input paths were provided");
+
+        return paths;
+    }
+}
+
+SampleIO::BuildOptions SampleIO::BuildOptions::from_strings(const std::string &origin,
+                                                           const std::string &variation,
+                                                           const std::string &beam,
+                                                           const std::string &polarity,
+                                                           const std::string &db_path)
+{
+    BuildOptions out;
+    out.origin = SampleIO::origin_from(origin);
+    out.variation = SampleIO::variation_from(variation);
+    out.beam = SampleIO::beam_from(beam);
+    out.polarity = SampleIO::polarity_from(polarity);
+    out.db_path = db_path;
+    return out;
+}
 
 SampleIO::SampleIO(std::string output_path)
     : output_path_(std::move(output_path))
@@ -17,14 +88,56 @@ SampleIO::SampleIO(std::string output_path)
         throw std::runtime_error("SampleIO: output_path_ is empty");
 }
 
+void SampleIO::set_metadata(Origin origin,
+                            Variation variation,
+                            Beam beam,
+                            Polarity polarity)
+{
+    origin_ = origin;
+    variation_ = variation;
+    beam_ = beam;
+    polarity_ = polarity;
+}
+
+void SampleIO::set_metadata_from_strings(const std::string &origin,
+                                         const std::string &variation,
+                                         const std::string &beam,
+                                         const std::string &polarity)
+{
+    set_metadata(origin_from(origin),
+                 variation_from(variation),
+                 beam_from(beam),
+                 polarity_from(polarity));
+}
+
+std::vector<std::string> SampleIO::parse_input_paths(const std::string &input_paths_spec)
+{
+    if (input_paths_spec.empty())
+        throw std::runtime_error("SampleIO::parse_input_paths: input_paths_spec is empty");
+
+    if (input_paths_spec.front() == '@')
+    {
+        const std::string file_path = trim_copy(input_paths_spec.substr(1));
+        if (file_path.empty())
+            throw std::runtime_error("SampleIO::parse_input_paths: file path after '@' is empty");
+        return load_paths_from_file(file_path);
+    }
+
+    return split_csv_paths(input_paths_spec);
+}
+
+void SampleIO::build_from_spec(const std::string &input_paths_spec,
+                               const std::string &db_path)
+{
+    build(parse_input_paths(input_paths_spec), db_path);
+}
+
 void SampleIO::build(const std::vector<std::string> &input_paths,
                      const std::string &db_path)
-    : input_paths_(std::move(inputs_paths))      
 {
+    input_paths_ = input_paths;
     if (input_paths_.empty())
         throw std::runtime_error("SampleIO: input_paths is empty");
-
-    // make partitions_ here
 
     partitions_.clear();
     subrun_pot_sum_ = 0.0;
@@ -126,6 +239,24 @@ void SampleIO::write() const
         delete f;
         throw;
     }
+}
+
+SampleIO SampleIO::build_and_write(std::string output_path,
+                                  std::vector<std::string> input_paths,
+                                  BuildOptions options)
+{
+    SampleIO sample(std::move(output_path));
+    sample.set_metadata(options.origin, options.variation, options.beam, options.polarity);
+    sample.build(input_paths, options.db_path);
+    sample.write();
+    return sample;
+}
+
+SampleIO SampleIO::build_and_write_from_spec(std::string output_path,
+                                            const std::string &input_paths_spec,
+                                            BuildOptions options)
+{
+    return build_and_write(std::move(output_path), parse_input_paths(input_paths_spec), std::move(options));
 }
 
 SampleIO SampleIO::read(const std::string &path)
