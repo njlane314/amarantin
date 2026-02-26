@@ -20,15 +20,15 @@ public:
     enum class Variation { kNominal, kDetector, kUnknown };
 
 public:
-    static SampleIO build(std::string context, std::string key,
-                          const std::vector<std::string> &sample_list_path = {});
+    static SampleIO build(const std::vector<std::string> &input_paths,
+                          std::string output_path);
 
-    void write(const std::string &path) const;
+    void write() const;
     static SampleIO read(const std::string &path);
 
 public:
-    std::string context;
-    std::string key;
+    std::vector<std::string> input_paths_;
+    std::string output_path_;
 
     Origin origin = Origin::kUnknown;
     Variation variation = Variation::kUnknown;
@@ -121,7 +121,7 @@ public:
     }
 
 private:
-    explicit SampleIO(std::string context, std::string key);
+    SampleIO(std::vector<std::string> input_paths, std::string output_path);
 
     static std::string lower_(std::string s)
     {

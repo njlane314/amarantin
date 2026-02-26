@@ -9,23 +9,30 @@
 #include <TDirectory.h>
 #include <TFile.h>
 
-SampleIO::SampleIO(std::string c, std::string k) : context(std::move(c)), key(std::move(k))
+SampleIO::SampleIO(std::vector<std::string> input_paths, std::string output_path)
+    : input_paths_(std::move(input_paths)), output_path_(std::move(output_path))
 {
-    if (context.empty()) throw std::runtime_error("SampleIO: context is empty");
-    if (key.empty()) throw std::runtime_error("SampleIO: key is empty");
+    if (input_paths_.empty())
+        throw std::runtime_error("SampleIO: input_paths_ is empty");
+
+    for (const auto &partition : input_paths_)
+    {
+        if (partition.empty())
+            throw std::runtime_error("SampleIO: empty sample partition/provenance path");
+    }
+
+    if (output_path_.empty())
+        throw std::runtime_error("SampleIO: output_path_ is empty");
 }
 
-SampleIO SampleIO::build(std::string context, std::string key,
-                         const std::vector<std::string> &sample_list_path)
+SampleIO SampleIO::build(const std::vector<std::string> &input_paths,
+                         std::string output_path)
 {
-    SampleIO out(std::move(context), std::move(key));
+    SampleIO out(input_paths, std::move(output_path));
 
-    out.partitions.reserve(sample_list_path.size());
-    for (const auto &partition_sample_list_path : sample_list_path)
+    out.partitions.reserve(out.input_paths_.size());
+    for (const auto &partition_sample_list_path : out.input_paths_)
     {
-        if (partition_sample_list_path.empty())
-            throw std::runtime_error("SampleIO::build: empty sample list path in partitions");
-
         ArtProvenanceIO partition_provenance(partition_sample_list_path);
         out.partitions.push_back(std::move(partition_provenance));
     }
@@ -33,20 +40,31 @@ SampleIO SampleIO::build(std::string context, std::string key,
     return out;
 }
 
-void SampleIO::write(const std::string &path) const
+void SampleIO::write() const
 {
-    if (context.empty()) throw std::runtime_error("SampleIO::write: context is empty");
-    if (key.empty()) throw std::runtime_error("SampleIO::write: key is empty");
+    if (input_paths_.empty())
+        throw std::runtime_error("SampleIO::write: input_paths_ is empty");
+    if (output_path_.empty())
+        throw std::runtime_error("SampleIO::write: output_path_ is empty");
 
-    TFile *f = TFile::Open(path.c_str(), "RECREATE");
+    TFile *f = TFile::Open(output_path_.c_str(), "RECREATE");
     if (!f || f->IsZombie())
-        throw std::runtime_error("SampleIO: failed to create: " + path);
+        throw std::runtime_error("SampleIO: failed to create: " + output_path_);
 
     try
     {
         TDirectory *meta = rootu::must_dir(f, "meta", true);
-        rootu::write_named(meta, "context", context);
-        rootu::write_named(meta, "key", key);
+        rootu::write_named(meta, "output_path", output_path_);
+
+        TTree part_t("input_paths", "");
+        std::string input_path;
+        part_t.Branch("input_path", &input_path);
+        for (const auto &partition : input_paths_)
+        {
+            input_path = partition;
+            part_t.Fill();
+        }
+        part_t.Write("input_paths", TObject::kOverwrite);
 
         TDirectory *s = rootu::must_dir(f, "sample", true);
         rootu::write_named(s, "origin", origin_name(origin));
@@ -83,8 +101,26 @@ SampleIO SampleIO::read(const std::string &path)
     try
     {
         TDirectory *meta = rootu::must_dir(f, "meta", false);
-        SampleIO out = SampleIO::build(rootu::read_named(meta, "context"),
-                                       rootu::read_named(meta, "key"));
+        std::vector<std::string> input_paths;
+        {
+            auto *t = dynamic_cast<TTree *>(meta->Get("input_paths"));
+            if (!t) throw std::runtime_error("SampleIO: missing input_paths tree in meta");
+
+            std::string *input_path = nullptr;
+            t->SetBranchAddress("input_path", &input_path);
+
+            const Long64_t n = t->GetEntries();
+            input_paths.reserve(static_cast<size_t>(n));
+            for (Long64_t i = 0; i < n; ++i)
+            {
+                t->GetEntry(i);
+                if (!input_path)
+                    throw std::runtime_error("SampleIO: input_paths missing input_path");
+                input_paths.push_back(*input_path);
+            }
+        }
+
+        SampleIO out = SampleIO::build(input_paths, rootu::read_named(meta, "output_path"));
 
         TDirectory *s = rootu::must_dir(f, "sample", false);
         out.origin = origin_from(rootu::read_named(s, "origin"));
