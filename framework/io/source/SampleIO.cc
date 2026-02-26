@@ -49,15 +49,11 @@ SampleIO SampleIO::build(std::string context, std::string key,
     Partition p;
     p.name = "all";
     ArtProvenanceIO provenance(sample_list_path);
-    p.root_files = provenance.sample_files();
-    p.n_entries = static_cast<long long>(p.root_files.size());
+    p.root_files = provenance.input_files();
 
-    if (!p.root_files.empty())
-    {
-        p.run_subruns = provenance.run_subruns();
-        p.pot_sum = provenance.subrun_pot_sum();
-        p.n_entries = provenance.n_entries();
-    }
+    p.run_subruns = provenance.run_subruns();
+    p.pot_sum = provenance.pot_sum();
+    p.n_events = provenance.n_events();
 
     out.partitions.push_back(std::move(p));
     return out;

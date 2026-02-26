@@ -12,10 +12,10 @@
 #include <TFile.h>
 #include <TTree.h>
 
-ArtProvenanceIO::ArtProvenanceIO(const std::string &sample_list_path)
+ArtProvenanceIO::ArtProvenanceIO(const std::string &input_path)
 {
-    sample_files_ = read_sample_list(sample_list_path);
-    if (!sample_files_.empty()) scan_subruns(sample_files_);
+    input_files_ = read_sample_list(input_path);
+    if (!input_files_.empty()) scan_subruns(input_files_);
 }
 
 std::vector<std::string> ArtProvenanceIO::read_sample_list(const std::string &path)
@@ -41,8 +41,9 @@ void ArtProvenanceIO::scan_subruns(const std::vector<std::string> &files)
     if (files.empty()) throw std::runtime_error("ArtProvenanceIO: no input files provided for subrun scan.");
 
     run_subruns_.clear();
-    subrun_pot_sum_ = 0.0;
-    n_entries_ = 0;
+
+    pot_sum_ = 0.0;
+    n_events_ = 0;
 
     const std::vector<std::string> candidates = {"nuselection/SubRun", "SubRun"};
     std::string tree_path;
@@ -73,18 +74,18 @@ void ArtProvenanceIO::scan_subruns(const std::vector<std::string> &files)
         chain.Add(f.c_str());
 
     if (!chain.GetBranch("run") || !chain.GetBranch("subRun") || !chain.GetBranch("pot"))
-        throw std::runtime_error("SubRun tree missing required branches (run, subRun, pot).");
+        throw std::runtime_error("SubRun tree missing required branches (run, subrun, pot).");
 
     Int_t run = 0;
-    Int_t subRun = 0;
+    Int_t subrun = 0;
     Double_t pot = 0.0;
 
     chain.SetBranchAddress("run", &run);
-    chain.SetBranchAddress("subRun", &subRun);
+    chain.SetBranchAddress("subRun", &subrun);
     chain.SetBranchAddress("pot", &pot);
 
     const Long64_t n = chain.GetEntries();
-    n_entries_ = static_cast<long long>(n);
+    n_events_ = static_cast<long long>(n);
 
     std::vector<std::pair<int, int>> pairs;
     pairs.reserve(static_cast<size_t>(n));
@@ -92,8 +93,8 @@ void ArtProvenanceIO::scan_subruns(const std::vector<std::string> &files)
     for (Long64_t i = 0; i < n; ++i)
     {
         chain.GetEntry(i);
-        subrun_pot_sum_ += static_cast<double>(pot);
-        pairs.emplace_back(static_cast<int>(run), static_cast<int>(subRun));
+        pot_sum_ += static_cast<double>(pot);
+        pairs.emplace_back(static_cast<int>(run), static_cast<int>(subrun));
     }
 
     std::sort(pairs.begin(), pairs.end(),
