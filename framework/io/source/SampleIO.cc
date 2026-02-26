@@ -66,28 +66,6 @@ namespace
     }
 }
 
-SampleIO::BuildOptions SampleIO::BuildOptions::from_strings(const std::string &origin,
-                                                           const std::string &variation,
-                                                           const std::string &beam,
-                                                           const std::string &polarity,
-                                                           const std::string &db_path)
-{
-    BuildOptions out;
-    out.origin = SampleIO::origin_from(origin);
-    out.variation = SampleIO::variation_from(variation);
-    out.beam = SampleIO::beam_from(beam);
-    out.polarity = SampleIO::polarity_from(polarity);
-    out.db_path = db_path;
-    return out;
-}
-
-SampleIO::SampleIO(std::string output_path)
-    : output_path_(std::move(output_path))
-{
-    if (output_path_.empty())
-        throw std::runtime_error("SampleIO: output_path_ is empty");
-}
-
 void SampleIO::set_metadata(Origin origin,
                             Variation variation,
                             Beam beam,
@@ -97,17 +75,6 @@ void SampleIO::set_metadata(Origin origin,
     variation_ = variation;
     beam_ = beam;
     polarity_ = polarity;
-}
-
-void SampleIO::set_metadata_from_strings(const std::string &origin,
-                                         const std::string &variation,
-                                         const std::string &beam,
-                                         const std::string &polarity)
-{
-    set_metadata(origin_from(origin),
-                 variation_from(variation),
-                 beam_from(beam),
-                 polarity_from(polarity));
 }
 
 std::vector<std::string> SampleIO::parse_input_paths(const std::string &input_paths_spec)
@@ -126,14 +93,8 @@ std::vector<std::string> SampleIO::parse_input_paths(const std::string &input_pa
     return split_csv_paths(input_paths_spec);
 }
 
-void SampleIO::build_from_spec(const std::string &input_paths_spec,
-                               const std::string &db_path)
-{
-    build(parse_input_paths(input_paths_spec), db_path);
-}
-
-void SampleIO::build(const std::vector<std::string> &input_paths,
-                     const std::string &db_path)
+void SampleIO::build_from(const std::vector<std::string> &input_paths,
+                          const std::string &db_path)
 {
     input_paths_ = input_paths;
     if (input_paths_.empty())
@@ -186,23 +147,23 @@ double SampleIO::compute_normalisation(double subrun_pot_sum,
     return db_tortgt_pot_sum / subrun_pot_sum;
 }
 
-void SampleIO::write() const
+void SampleIO::write(const std::string &output_path) const
 {
     if (!built_)
         throw std::runtime_error("SampleIO::write: sample has not been successfully built or read");
     if (input_paths_.empty())
         throw std::runtime_error("SampleIO::write: input_paths_ is empty");
-    if (output_path_.empty())
-        throw std::runtime_error("SampleIO::write: output_path_ is empty");
+    if (output_path.empty())
+        throw std::runtime_error("SampleIO::write: output_path is empty");
 
-    TFile *f = TFile::Open(output_path_.c_str(), "RECREATE");
+    TFile *f = TFile::Open(output_path.c_str(), "RECREATE");
     if (!f || f->IsZombie())
-        throw std::runtime_error("SampleIO: failed to create: " + output_path_);
+        throw std::runtime_error("SampleIO: failed to create: " + output_path);
 
     try
     {
         TDirectory *meta = rootu::must_dir(f, "meta", true);
-        rootu::write_named(meta, "output_path", output_path_);
+        rootu::write_named(meta, "output_path", output_path);
 
         TTree part_t("input_paths", "");
         std::string input_path;
@@ -241,25 +202,21 @@ void SampleIO::write() const
     }
 }
 
-SampleIO SampleIO::build_and_write(std::string output_path,
-                                  std::vector<std::string> input_paths,
-                                  BuildOptions options)
+void SampleIO::build(const std::string &input_paths_spec,
+                     const std::string &origin,
+                     const std::string &variation,
+                     const std::string &beam,
+                     const std::string &polarity,
+                     const std::string &db_path)
 {
-    SampleIO sample(std::move(output_path));
-    sample.set_metadata(options.origin, options.variation, options.beam, options.polarity);
-    sample.build(input_paths, options.db_path);
-    sample.write();
-    return sample;
+    set_metadata(origin_from(origin),
+                 variation_from(variation),
+                 beam_from(beam),
+                 polarity_from(polarity));
+    build_from(parse_input_paths(input_paths_spec), db_path);
 }
 
-SampleIO SampleIO::build_and_write_from_spec(std::string output_path,
-                                            const std::string &input_paths_spec,
-                                            BuildOptions options)
-{
-    return build_and_write(std::move(output_path), parse_input_paths(input_paths_spec), std::move(options));
-}
-
-SampleIO SampleIO::read(const std::string &path)
+void SampleIO::read(const std::string &path)
 {
     TFile *f = TFile::Open(path.c_str(), "READ");
     if (!f || f->IsZombie())
@@ -287,37 +244,38 @@ SampleIO SampleIO::read(const std::string &path)
             }
         }
 
-        SampleIO out(rootu::read_named(meta, "output_path"));
-        out.build(input_paths, "");
+        (void)rootu::read_named(meta, "output_path");
+        build_from(input_paths, "");
 
         TDirectory *s = rootu::must_dir(f, "sample", false);
-        out.origin_ = origin_from(rootu::read_named(s, "origin"));
-        out.variation_ = variation_from(rootu::read_named(s, "variation"));
-        out.beam_ = beam_from(rootu::read_named(s, "beam"));
-        out.polarity_ = polarity_from(rootu::read_named(s, "polarity"));
+        origin_ = origin_from(rootu::read_named(s, "origin"));
+        variation_ = variation_from(rootu::read_named(s, "variation"));
+        beam_ = beam_from(rootu::read_named(s, "beam"));
+        polarity_ = polarity_from(rootu::read_named(s, "polarity"));
 
-        out.subrun_pot_sum_ = rootu::read_param<double>(s, "subrun_pot_sum");
-        out.db_tortgt_pot_sum_ = rootu::read_param<double>(s, "db_tortgt_pot_sum");
-        out.normalisation_ = rootu::read_param<double>(s, "normalisation");
-        out.normalised_pot_sum_ = rootu::read_param<double>(s, "normalised_pot_sum");
+        subrun_pot_sum_ = rootu::read_param<double>(s, "subrun_pot_sum");
+        db_tortgt_pot_sum_ = rootu::read_param<double>(s, "db_tortgt_pot_sum");
+        normalisation_ = rootu::read_param<double>(s, "normalisation");
+        normalised_pot_sum_ = rootu::read_param<double>(s, "normalised_pot_sum");
 
+        partitions_.clear();
         if (TDirectory *pr = f->GetDirectory("part"))
         {
             const auto names = rootu::list_keys(pr);
-            out.partitions_.reserve(names.size());
+            partitions_.reserve(names.size());
             for (const auto &name : names)
             {
                 TDirectory *pd = pr->GetDirectory(name.c_str());
                 if (!pd) throw std::runtime_error("SampleIO: missing part/" + name);
-                out.partitions_.push_back(ArtProvenanceIO::read(pd));
+                partitions_.push_back(ArtProvenanceIO::read(pd));
             }
         }
 
-        out.built_ = true;
+        built_ = true;
 
         f->Close();
         delete f;
-        return out;
+        return;
     }
     catch (...)
     {
