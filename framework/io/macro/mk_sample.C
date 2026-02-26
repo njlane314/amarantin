@@ -3,7 +3,9 @@
 #include <string>
 
 #if defined(__CLING__)
-R__LOAD_LIBRARY(build/lib/libIO.so)
+R__ADD_LIBRARY_PATH(build/lib)
+R__ADD_LIBRARY_PATH(../build/lib)
+R__LOAD_LIBRARY(libIO.a)
 #endif
 
 #include "../include/SampleIO.hh"
