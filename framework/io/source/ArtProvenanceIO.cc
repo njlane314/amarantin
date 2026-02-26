@@ -12,6 +12,12 @@
 #include <TFile.h>
 #include <TTree.h>
 
+ArtProvenanceIO::ArtProvenanceIO(const std::string &sample_list_path)
+{
+    sample_files_ = read_sample_list(sample_list_path);
+    if (!sample_files_.empty()) scan_subruns(sample_files_);
+}
+
 std::vector<std::string> ArtProvenanceIO::read_sample_list(const std::string &path)
 {
     std::ifstream in(path);

@@ -48,14 +48,12 @@ SampleIO SampleIO::build(std::string context, std::string key,
 
     Partition p;
     p.name = "all";
-    p.root_files = ArtProvenanceIO::read_sample_list(sample_list_path);
+    ArtProvenanceIO provenance(sample_list_path);
+    p.root_files = provenance.sample_files();
     p.n_entries = static_cast<long long>(p.root_files.size());
 
     if (!p.root_files.empty())
     {
-        ArtProvenanceIO provenance;
-        provenance.scan_subruns(p.root_files);
-
         p.run_subruns = provenance.run_subruns();
         p.pot_sum = provenance.subrun_pot_sum();
         p.n_entries = provenance.n_entries();
