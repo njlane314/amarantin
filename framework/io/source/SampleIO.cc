@@ -19,17 +19,12 @@ SampleIO::SampleIO(std::string output_path)
 
 void SampleIO::build(const std::vector<std::string> &input_paths,
                      const std::string &db_path)
+    : input_paths_(std::move(inputs_paths))      
 {
-    if (input_paths.empty())
+    if (input_paths_.empty())
         throw std::runtime_error("SampleIO: input_paths is empty");
 
-    input_paths_ = input_paths;
-
-    for (const auto &partition : input_paths_)
-    {
-        if (partition.empty())
-            throw std::runtime_error("SampleIO: empty sample partition/provenance path");
-    }
+    // make partitions_ here
 
     partitions_.clear();
     subrun_pot_sum_ = 0.0;

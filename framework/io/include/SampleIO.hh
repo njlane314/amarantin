@@ -22,10 +22,8 @@ public:
 public:
     explicit SampleIO(std::string output_path);
 
-    void build(const std::vector<std::string> &input_paths,
-               const std::string &db_path);
-    static double compute_normalisation(double subrun_pot_sum,
-                                        double db_tortgt_pot_sum);
+    void build(const std::vector<std::string> &input_paths, const std::string &db_path);
+    static double compute_normalisation(double subrun_pot_sum, double db_tortgt_pot_sum);
 
     void write() const;
     static SampleIO read(const std::string &path);
