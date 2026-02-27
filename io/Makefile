@@ -7,6 +7,9 @@ CXX ?= $(shell $(ROOT_CONFIG) --cxx)
 BUILD_DIR ?= ../build
 
 CPPFLAGS += -Iinclude
+NLOHMANN_JSON_CFLAGS ?= $(shell pkg-config --silence-errors --cflags nlohmann_json 2>/dev/null || [ -z "$(NLOHMANN_JSON_INC)" ] || printf "%s" "-I$(NLOHMANN_JSON_INC)")
+CPPFLAGS += $(NLOHMANN_JSON_CFLAGS)
+
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -fPIC $(shell $(ROOT_CONFIG) --cflags)
 LDLIBS ?= $(shell $(ROOT_CONFIG) --libs) -lsqlite3
 
