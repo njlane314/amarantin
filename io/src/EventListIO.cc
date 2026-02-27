@@ -5,5 +5,8 @@ EventListIO::EventListIO(const std::string &path, Mode mode)
 {
 }
 
-EventList()::~EventList() = default; 
+EventListIO::~EventListIO() = default;
 
+void EventListIO::skim(const DatasetIO &, const AnalysisModel &, const Selection &)
+{
+}
