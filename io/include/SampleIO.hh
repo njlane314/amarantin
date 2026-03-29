@@ -25,9 +25,12 @@ public:
                const std::string &origin,
                const std::string &variation,
                const std::string &beam,
-               const std::string &polarity);
+               const std::string &polarity,
+               const std::string &run_db_path = "");
     void read(const std::string &path);
     void write(const std::string &output_path) const;
+
+    static std::string default_run_db_path();
 
 public:
     std::vector<std::string> input_paths_;
@@ -125,8 +128,10 @@ public:
 
 private:
     void set_metadata(Origin origin, Variation variation, Beam beam, Polarity polarity);
+    void validate_metadata() const;
     static std::vector<std::string> parse_input_paths(const std::string &input_paths_spec);
     void build_from(const std::vector<std::string> &input_paths);
+    void load_run_database_normalisation(const std::string &run_db_path);
     static double compute_normalisation(double subrun_pot_sum, double db_tortgt_pot_sum);
 
     static std::string lower_(std::string s)

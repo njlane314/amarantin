@@ -1,1 +1,104 @@
+Install
+=======
 
+This project currently supports two practical build paths:
+
+1. UBOONE/GPVM-style environment with CVMFS
+2. Docker-based build environment
+
+GPVM Build
+----------
+
+This is the native path the repository was originally written around.
+
+Prerequisites:
+
+- CVMFS mounted and accessible
+- UBOONE/Fermilab environment commands available
+- ROOT available through that environment
+
+From the repository root:
+
+```bash
+source ./.setup.sh
+make
+```
+
+Build outputs:
+
+- `build/lib/libIO.so`
+- `build/bin/mk_sample`
+
+Notes:
+
+- `mk_sample` can use the site-local beam database default if it exists:
+  `/exp/uboone/data/uboonebeam/beamdb/run.db`
+- You can override that path at runtime with:
+
+```bash
+build/bin/mk_sample --run-db /path/to/run.db output.root input.list data nominal numi fhc
+```
+
+Docker Build
+------------
+
+This is the cleanest portable path outside GPVM/CVMFS.
+
+Build the image from the repository root:
+
+```bash
+docker build -t amarantin-dev .
+```
+
+Run a shell in the container with the repo mounted at `/work`:
+
+```bash
+docker run --rm -it \
+  -v "$PWD":/work \
+  -w /work \
+  amarantin-dev
+```
+
+Then build inside the container:
+
+```bash
+make
+```
+
+Direct one-shot build without opening a shell:
+
+```bash
+docker run --rm \
+  -v "$PWD":/work \
+  -w /work \
+  amarantin-dev \
+  make
+```
+
+Build outputs:
+
+- `build/lib/libIO.so`
+- `build/bin/mk_sample`
+
+Optional mounts for data and beam DB:
+
+```bash
+docker run --rm -it \
+  -v "$PWD":/work \
+  -v /path/to/data:/data:ro \
+  -v /path/to/run.db:/opt/run.db:ro \
+  -w /work \
+  amarantin-dev
+```
+
+Example runtime command inside the container:
+
+```bash
+build/bin/mk_sample --run-db /opt/run.db output.root input.list data nominal numi fhc
+```
+
+Platform note:
+
+- The current Docker image was built from an `amd64` ROOT base image.
+- On Apple Silicon or other `arm64` hosts, Docker may run it under emulation.
+- The build has been verified successfully under that emulated path.

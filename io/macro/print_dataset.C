@@ -1,17 +1,16 @@
 #include <iostream>
 #include <stdexcept>
-
-#include "TChain.h"
+#include <string>
 
 #include "DatasetIO.hh"
 
 namespace
 {
-    void print_provenance(const DatasetIO::Provenance &p, std::ostream &os, int indent 4) 
+    void print_provenance(const DatasetIO::Provenance &p, std::ostream &os, int indent = 4)
     {
         const std::string pad(static_cast<size_t>(indent), ' ');
         os << pad << "scale=" << p.scale
-           << "  pot_sum" << p.pot_sum
+           << "  pot_sum=" << p.pot_sum
            << "  entries=" << p.n_entries
            << "  inputs=" << p.input_files.size()
            << "  run_subruns=" << p.run_subruns.size()
@@ -37,16 +36,16 @@ namespace
     }
 } // namespace
 
-void print_dataset(const char *read_path) 
+void print_dataset(const char *read_path)
 {
-    try 
+    try
     {
         const DatasetIO ds(read_path);
-    
-        const auto samples ds.samples();
+
+        const auto samples = ds.samples();
         std::cout << "  samples: " << samples.size() << "\n";
 
-        for (size_t i = 0; i < samples.size(); ++i) 
+        for (size_t i = 0; i < samples.size(); ++i)
             print_sample(samples[i], std::cout, i);
     }
     catch (const std::exception &e)

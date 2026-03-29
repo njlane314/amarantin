@@ -13,7 +13,8 @@ void mk_sample(const char *output_path = "build/sample/beam-s0.sample.root",
                const char *origin = "data",
                const char *variation = "nominal",
                const char *beam = "numi",
-               const char *polarity = "fhc")
+               const char *polarity = "fhc",
+               const char *run_db_path = nullptr)
 {
     try
     {
@@ -27,7 +28,8 @@ void mk_sample(const char *output_path = "build/sample/beam-s0.sample.root",
                      origin ? origin : "",
                      variation ? variation : "",
                      beam ? beam : "",
-                     polarity ? polarity : "");
+                     polarity ? polarity : "",
+                     run_db_path ? run_db_path : "");
         sample.write(output_path);
 
         std::cout << "mk_sample: wrote " << output_path << " from " << list_path << "\n";

@@ -1,18 +1,114 @@
-                     .::--==++**##%%%%##**++==--::.
-               .:-=+*#%@@@@@@@@@@@@@@@@@@@@@@@@%#*+=-:.
-           .:=*%@@@@%#*+=--::::::::::::::::--=+*#%@@@@%*=:.
-        .-*@@@%*=:.          .:--====--:.          .:=*%@@@*-.
-      .+%@@@+-.         .:=*#%@@@@@@@@@@%#*=:         .-+@@@%+.
-     :#@@@#-.        .-*%@@@%#*+=----=+*#%@@@*-.        .-#@@@#:
-    -%@@@+        .:+@@@#+-.     .::.     .-+#@@@+:.        +@@@%-
-   .#@@@#        .+@@@#:     .-*%@@@@%*-.     :#@@@+.        #@@@#.
-   :%@@@=        =@@@%.      =%@@@@@@@@%=      .%@@@=        =@@@%:
-   :%@@@=        =@@@%.      =%@@@@@@@@%=      .%@@@=        =@@@%:
-   .#@@@#        .+@@@#:     .-*%@@@@%*-.     :#@@@+.        #@@@#.
-    -%@@@+        .:+@@@#+-.     .::.     .-+#@@@+:.        +@@@%-
-     :#@@@#-.        .-*%@@@%#*+=----=+*#%@@@*-.        .-#@@@#:
-      .+%@@@+-.         .:=*#%@@@@@@@@@@%#*=:         .-+@@@%+.
-        .-*@@@%*=:.          .:--====--:.          .:=*%@@@*-.
-           .:=*%@@@@%#*+=--::::::::::::::::--=+*#%@@@@%*=:.
-               .:-=+*#%@@@@@@@@@@@@@@@@@@@@@@@@%#*+=-:.
-                     .::--==++**##%%%%##**++==--::.
+amarantin
+=========
+
+`amarantin` is a small C++/ROOT utility library plus one CLI for building
+ROOT sample containers from text lists of input ROOT files.
+
+Supported workflow
+------------------
+
+The supported path in this repository is:
+
+1. Build file lists with [`tools/mklist.sh`](/Users/user/programs/amarantin/tools/mklist.sh).
+2. Build the library and CLI with `make`.
+3. Run `build/bin/mk_sample` to produce a sample ROOT file.
+
+The `io` library contains the main logic. The `app` layer is intentionally thin.
+
+Build
+-----
+
+This repository expects a ROOT-enabled environment. On UBOONE-style systems,
+that usually means sourcing [`.setup.sh`](/Users/user/programs/amarantin/.setup.sh)
+first.
+
+Build everything:
+
+```bash
+make
+```
+
+Build only the sample CLI:
+
+```bash
+make -C app BUILD_DIR=../build all
+```
+
+Create input lists
+------------------
+
+Generate a sorted `.list` file of ROOT files from a directory:
+
+```bash
+tools/mklist.sh \
+  --dir /path/to/ntuples \
+  --pat "nu_selection.root,nu_selection_data.root" \
+  --out samplelists/run1/beam-s0.list
+```
+
+Build a sample container
+------------------------
+
+Basic usage:
+
+```bash
+build/bin/mk_sample output.root input.list [origin] [variation] [beam] [polarity]
+```
+
+The CLI also supports an explicit run database path:
+
+```bash
+build/bin/mk_sample \
+  --run-db /path/to/run.db \
+  build/samples/run1/beam-s0.root \
+  samplelists/run1/beam-s0.list \
+  data nominal numi fhc
+```
+
+If `--run-db` is not provided, the library uses:
+
+1. `AMARANTIN_RUN_DB` if it is set.
+2. `/exp/uboone/data/uboonebeam/beamdb/run.db` otherwise.
+
+Concepts
+--------
+
+`sample`
+  A ROOT container produced by `mk_sample`. It stores sample metadata, summed
+  exposure values, and per-partition provenance.
+
+`partition`
+  One entry from the top-level input list. Each partition points to a text file
+  containing ROOT file paths.
+
+`provenance`
+  The scanned metadata for a partition: source ROOT files, unique `(run, subrun)`
+  pairs, POT sum from the input `SubRun` trees, and entry counts.
+
+Repository layout
+-----------------
+
+[`io/include/SampleIO.hh`](/Users/user/programs/amarantin/io/include/SampleIO.hh)
+  Main supported API for building and reading sample ROOT files.
+
+[`io/src/ArtProvenanceIO.cc`](/Users/user/programs/amarantin/io/src/ArtProvenanceIO.cc)
+  Scans ROOT files, finds `SubRun` trees, and extracts run/subrun and POT data.
+
+[`io/src/RunDatabaseService.cc`](/Users/user/programs/amarantin/io/src/RunDatabaseService.cc)
+  Reads beam exposure summaries from SQLite for a set of run/subrun pairs.
+
+[`app/mk_sample.cc`](/Users/user/programs/amarantin/app/mk_sample.cc)
+  Thin CLI around `SampleIO`.
+
+[`samples-dag.mk`](/Users/user/programs/amarantin/samples-dag.mk)
+  Make-based batch workflow for generating many list files and sample outputs.
+
+Notes on the codebase
+---------------------
+
+`SampleIO` is the current supported container path.
+
+`DatasetIO` is a more general multi-sample container abstraction that exists in
+the tree but is not yet the main write path used by the CLI.
+
+`EventListIO` is only a stub at the moment.

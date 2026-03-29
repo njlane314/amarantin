@@ -3,7 +3,9 @@
 #include "RootUtils.hh"
 #include "RunDatabaseService.hh"
 
+#include <cstdlib>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -14,6 +16,8 @@
 
 namespace
 {
+    constexpr const char *kDefaultRunDbPath = "/exp/uboone/data/uboonebeam/beamdb/run.db";
+
     std::string trim_copy(const std::string &input)
     {
         const auto first = input.find_first_not_of(" \t\r\n");
@@ -48,6 +52,18 @@ namespace
 
 }
 
+std::string SampleIO::default_run_db_path()
+{
+    if (const char *env = std::getenv("AMARANTIN_RUN_DB"))
+    {
+        const std::string value = trim_copy(env);
+        if (!value.empty())
+            return value;
+    }
+
+    return kDefaultRunDbPath;
+}
+
 void SampleIO::set_metadata(Origin origin,
                             Variation variation,
                             Beam beam,
@@ -57,6 +73,20 @@ void SampleIO::set_metadata(Origin origin,
     variation_ = variation;
     beam_ = beam;
     polarity_ = polarity;
+}
+
+void SampleIO::validate_metadata() const
+{
+    if (origin_ == Origin::kUnknown)
+        throw std::runtime_error("SampleIO: unknown origin metadata");
+    if (variation_ == Variation::kUnknown)
+        throw std::runtime_error("SampleIO: unknown variation metadata");
+    if (beam_ == Beam::kUnknown)
+        throw std::runtime_error("SampleIO: unknown beam metadata");
+    if (beam_ == Beam::kNuMI && polarity_ == Polarity::kUnknown)
+        throw std::runtime_error("SampleIO: NuMI samples require an explicit polarity");
+    if (beam_ == Beam::kBNB && polarity_ != Polarity::kUnknown)
+        throw std::runtime_error("SampleIO: BNB samples must not set a polarity");
 }
 
 std::vector<std::string> SampleIO::parse_input_paths(const std::string &input_paths_spec)
@@ -94,19 +124,21 @@ void SampleIO::build_from(const std::vector<std::string> &input_paths)
         partitions_.push_back(std::move(partition_provenance));
     }
 
-    {
-        RunDatabaseService db("/exp/uboone/data/uboonebeam/beamdb/run.db");
-        for (const auto &partition : partitions_)
-        {
-            const RunInfoSums runinfo = db.sum_run_info(partition.run_subruns());
-            const double db_pot_scale = 1.0e12;
-            db_tortgt_pot_sum_ += runinfo.tortgt_sum * db_pot_scale;
-        }
-    }
+}
 
-    normalisation_ = compute_normalisation(subrun_pot_sum_, db_tortgt_pot_sum_);
-    normalised_pot_sum_ = subrun_pot_sum_ * normalisation_;
-    built_ = true;
+void SampleIO::load_run_database_normalisation(const std::string &run_db_path)
+{
+    const std::string resolved_run_db_path = trim_copy(run_db_path.empty() ? default_run_db_path() : run_db_path);
+    if (resolved_run_db_path.empty())
+        return;
+
+    RunDatabaseService db(resolved_run_db_path);
+    for (const auto &partition : partitions_)
+    {
+        const RunInfoSums runinfo = db.sum_run_info(partition.run_subruns());
+        const double db_pot_scale = 1.0e12;
+        db_tortgt_pot_sum_ += runinfo.tortgt_sum * db_pot_scale;
+    }
 }
 
 double SampleIO::compute_normalisation(double subrun_pot_sum,
@@ -134,14 +166,15 @@ void SampleIO::write(const std::string &output_path) const
     if (output_path.empty())
         throw std::runtime_error("SampleIO::write: output_path is empty");
 
-    TFile *f = TFile::Open(output_path.c_str(), "RECREATE");
+    std::unique_ptr<TFile> f(TFile::Open(output_path.c_str(), "RECREATE"));
     if (!f || f->IsZombie())
         throw std::runtime_error("SampleIO: failed to create: " + output_path);
 
     try
     {
-        TDirectory *meta = utils::must_dir(f, "meta", true);
+        TDirectory *meta = utils::must_dir(f.get(), "meta", true);
         utils::write_named(meta, "output_path", output_path);
+        meta->cd();
 
         TTree part_t("input_paths", "");
         std::string input_path;
@@ -153,7 +186,7 @@ void SampleIO::write(const std::string &output_path) const
         }
         part_t.Write("input_paths", TObject::kOverwrite);
 
-        TDirectory *s = utils::must_dir(f, "sample", true);
+        TDirectory *s = utils::must_dir(f.get(), "sample", true);
         utils::write_named(s, "origin", origin_name(origin_));
         utils::write_named(s, "variation", variation_name(variation_));
         utils::write_named(s, "beam", beam_name(beam_));
@@ -164,18 +197,16 @@ void SampleIO::write(const std::string &output_path) const
         utils::write_param<double>(s, "normalisation", normalisation_);
         utils::write_param<double>(s, "normalised_pot_sum", normalised_pot_sum_);
 
-        TDirectory *pr = utils::must_dir(f, "part", true);
+        TDirectory *pr = utils::must_dir(f.get(), "part", true);
         for (size_t i = 0; i < partitions_.size(); ++i)
             partitions_[i].write(utils::must_subdir(pr, "partition_" + std::to_string(i), true, "part"));
 
         f->Write();
         f->Close();
-        delete f;
     }
     catch (...)
     {
         f->Close();
-        delete f;
         throw;
     }
 }
@@ -184,24 +215,30 @@ void SampleIO::build(const std::string &input_paths_spec,
                      const std::string &origin,
                      const std::string &variation,
                      const std::string &beam,
-                     const std::string &polarity)
+                     const std::string &polarity,
+                     const std::string &run_db_path)
 {
     set_metadata(origin_from(origin),
                  variation_from(variation),
                  beam_from(beam),
                  polarity_from(polarity));
+    validate_metadata();
     build_from(parse_input_paths(input_paths_spec));
+    load_run_database_normalisation(run_db_path);
+    normalisation_ = compute_normalisation(subrun_pot_sum_, db_tortgt_pot_sum_);
+    normalised_pot_sum_ = subrun_pot_sum_ * normalisation_;
+    built_ = true;
 }
 
 void SampleIO::read(const std::string &path)
 {
-    TFile *f = TFile::Open(path.c_str(), "READ");
+    std::unique_ptr<TFile> f(TFile::Open(path.c_str(), "READ"));
     if (!f || f->IsZombie())
         throw std::runtime_error("SampleIO: failed to open: " + path);
 
     try
     {
-        TDirectory *meta = utils::must_dir(f, "meta", false);
+        TDirectory *meta = utils::must_dir(f.get(), "meta", false);
         std::vector<std::string> input_paths;
         {
             auto *t = dynamic_cast<TTree *>(meta->Get("input_paths"));
@@ -226,7 +263,7 @@ void SampleIO::read(const std::string &path)
         if (input_paths_.empty())
             throw std::runtime_error("SampleIO: input_paths is empty");
 
-        TDirectory *s = utils::must_dir(f, "sample", false);
+        TDirectory *s = utils::must_dir(f.get(), "sample", false);
         origin_ = origin_from(utils::read_named(s, "origin"));
         variation_ = variation_from(utils::read_named(s, "variation"));
         beam_ = beam_from(utils::read_named(s, "beam"));
@@ -253,13 +290,11 @@ void SampleIO::read(const std::string &path)
         built_ = true;
 
         f->Close();
-        delete f;
         return;
     }
     catch (...)
     {
         f->Close();
-        delete f;
         throw;
     }
 }

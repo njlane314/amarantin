@@ -35,9 +35,8 @@
  */
  
 #include "DatasetIO.hh"
+#include "RootUtils.hh"
 
-#include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
@@ -52,56 +51,6 @@
 #include <TObjString.h>
 #include <TParameter.h>
 #include <TTree.h>
-
-/** UTILITIES
- *  Local helpers for token normalisation, typed ROOT reads, and deterministic directory key listing.
- */
- 
-namespace
-{
-    static std::string lower(std::string s)
-    {
-        std::transform(s.begin(), s.end(), s.begin(),
-                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    }
-
-    static std::string read_named(TDirectory *d, const char *key)
-    {
-        TObject *obj = d->Get(key);
-        auto *n = dynamic_cast<TNamed *>(obj);
-        if (!n) throw std::runtime_error(std::string("DatasetIO: missing TNamed: ") + key);
-        return std::string(n->GetTitle());
-    }
-
-    template <class T>
-    static T read_param(TDirectory *d, const char *key)
-    {
-        TObject *obj = d->Get(key);
-        auto *p = dynamic_cast<TParameter<T> *>(obj);
-        if (!p) throw std::runtime_error(std::string("DatasetIO: missing TParameter: ") + key);
-        return p->GetVal();
-    }
-
-    static void write_named(TDirectory *d, const char *key, const std::string &value)
-    {
-        d->cd();
-        TNamed(key, value.c_str()).Write(key, TObject::kOverwrite);
-    }
-
-    static std::vector<std::string> list_keys(TDirectory *d)
-    {
-        std::vector<std::string> out;
-        if (!d) return out;
-
-        TIter next(d->GetListOfKeys());
-        while (TKey *k = (TKey *)next())
-            out.emplace_back(k->GetName());
-
-        std::sort(out.begin(), out.end());
-        return out;
-    }
-} 
 
 const char *DatasetIO::Sample::origin_name(Origin o)
 {
@@ -118,7 +67,7 @@ const char *DatasetIO::Sample::origin_name(Origin o)
 
 DatasetIO::Sample::Origin DatasetIO::Sample::origin_from(const std::string &s)
 {
-    const std::string o = lower(s);
+    const std::string o = utils::lower(s);
     if (o == "data") return Origin::kData;
     if (o == "external" || o == "ext") return Origin::kExternal;
     if (o == "overlay") return Origin::kOverlay;
@@ -139,7 +88,7 @@ const char *DatasetIO::Sample::beam_name(Beam b)
 
 DatasetIO::Sample::Beam DatasetIO::Sample::beam_from(const std::string &s)
 {
-    const std::string b = lower(s);
+    const std::string b = utils::lower(s);
     if (b == "bnb") return Beam::kBNB;
     if (b == "numi") return Beam::kNuMI;
     return Beam::kUnknown;
@@ -157,7 +106,7 @@ const char *DatasetIO::Sample::polarity_name(Polarity p)
 
 DatasetIO::Sample::Polarity DatasetIO::Sample::polarity_from(const std::string &s)
 {
-    const std::string p = lower(s);
+    const std::string p = utils::lower(s);
     if (p == "fhc") return Polarity::kFHC;
     if (p == "rhc") return Polarity::kRHC;
     return Polarity::kUnknown;
@@ -175,7 +124,7 @@ const char *DatasetIO::Sample::variation_name(Variation v)
 
 DatasetIO::Sample::Variation DatasetIO::Sample::variation_from(const std::string &s)
 {
-    const std::string v = lower(s);
+    const std::string v = utils::lower(s);
     if (v == "nominal") return Variation::kNominal;
     if (v == "detector" || v == "detvar") return Variation::kDetector;
     return Variation::kUnknown;
@@ -221,9 +170,9 @@ DatasetIO::Provenance DatasetIO::Provenance::read(TDirectory *d)
 {
     Provenance p;
 
-    p.scale = read_param<double>(d, "scale");
-    p.pot_sum = read_param<double>(d, "pot_sum");
-    p.n_entries = read_param<long long>(d, "entries");
+    p.scale = utils::read_param<double>(d, "scale");
+    p.pot_sum = utils::read_param<double>(d, "pot_sum");
+    p.n_entries = utils::read_param<long long>(d, "entries");
 
     {
         TObject *obj = d->Get("input_files");
@@ -312,14 +261,14 @@ DatasetIO::Sample DatasetIO::Sample::read(TDirectory *d)
 {
     Sample s;
 
-    s.origin = origin_from(read_named(d, "origin"));
-    s.variation = variation_from(read_named(d, "variation"));
-    s.beam = beam_from(read_named(d, "beam"));
-    s.polarity = polarity_from(read_named(d, "polarity"));
+    s.origin = origin_from(utils::read_named(d, "origin"));
+    s.variation = variation_from(utils::read_named(d, "variation"));
+    s.beam = beam_from(utils::read_named(d, "beam"));
+    s.polarity = polarity_from(utils::read_named(d, "polarity"));
 
-    s.subrun_pot_sum = read_param<double>(d, "subrun_pot_sum");
-    s.db_tortgt_pot_sum = read_param<double>(d, "db_tortgt_pot_sum");
-    s.normalisation = read_param<double>(d, "normalisation");
+    s.subrun_pot_sum = utils::read_param<double>(d, "subrun_pot_sum");
+    s.db_tortgt_pot_sum = utils::read_param<double>(d, "db_tortgt_pot_sum");
+    s.normalisation = utils::read_param<double>(d, "normalisation");
 
     {
         auto *t = dynamic_cast<TTree *>(d->Get("root_files"));
@@ -342,7 +291,7 @@ DatasetIO::Sample DatasetIO::Sample::read(TDirectory *d)
     TDirectory *prov_root = d->GetDirectory("prov");
     if (!prov_root) return s;
 
-    const auto keys = list_keys(prov_root);
+    const auto keys = utils::list_keys(prov_root);
     s.provenance_list.reserve(keys.size());
     for (const auto &k : keys)
     {
@@ -369,7 +318,7 @@ DatasetIO::DatasetIO(const std::string &path)
 
     if (TDirectory *meta = file_->GetDirectory("meta"))
     {
-        try { context_ = read_named(meta, "context"); }
+        try { context_ = utils::read_named(meta, "context"); }
         catch (...) { context_.clear(); }
     }
 }
@@ -436,7 +385,7 @@ void DatasetIO::ensure_layout_()
     require_open_();
 
     TDirectory *meta = must_dir_(file_, "meta", true);
-    write_named(meta, "context", context_);
+    utils::write_named(meta, "context", context_);
 
     samples_root_(true);
 }
@@ -468,7 +417,7 @@ std::vector<DatasetIO::Sample> DatasetIO::samples() const
     TDirectory *root = samples_root_(false);
     if (!root) return out;
 
-    const auto keys = list_keys(root);
+    const auto keys = utils::list_keys(root);
     out.reserve(keys.size());
     for (const auto &k : keys)
         out.push_back(get_sample_(k));
