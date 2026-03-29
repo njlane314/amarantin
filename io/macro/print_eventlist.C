@@ -1,12 +1,3 @@
-#include "MacroUtils.hh"
-
-#include <algorithm>
-#include <stdexcept>
-#include <string>
-
-#include "../include/EventListIO.hh"
-#include "TTree.h"
-
 namespace
 {
     void print_sample_tree(TTree *tree, const std::string &sample_name)

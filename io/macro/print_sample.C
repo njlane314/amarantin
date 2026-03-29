@@ -1,10 +1,3 @@
-#include "MacroUtils.hh"
-
-#include <stdexcept>
-#include <string>
-
-#include "../include/SampleIO.hh"
-
 void print_sample(const char *read_path = nullptr)
 {
     macro_utils::run_macro("print_sample", [&]() {

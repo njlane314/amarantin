@@ -1,5 +1,45 @@
 {
-    gSystem->AddIncludePath("-Iframework/io/include/");
-    gSystem->AddDynamicPath("build/lib");
-    gSystem->Load("build/lib/libIO.so");
+    const TString root_dir = gSystem->pwd();
+    const TString include_dir = root_dir + "/io/include";
+    const TString lib_dir = root_dir + "/build/lib";
+    const TString lib_path = lib_dir + "/libIO.so";
+
+    gInterpreter->AddIncludePath(include_dir.Data());
+    gSystem->AddDynamicPath(lib_dir.Data());
+    gSystem->Load(lib_path.Data());
+
+    gInterpreter->Declare(R"cpp(
+        #include <algorithm>
+        #include <exception>
+        #include <iostream>
+        #include <stdexcept>
+        #include <string>
+        #include <utility>
+
+        #include "TTree.h"
+
+        #include "SampleIO.hh"
+        #include "DatasetIO.hh"
+        #include "EventListIO.hh"
+
+        namespace macro_utils
+        {
+            template <class F>
+            void run_macro(const char *name, F &&fn)
+            {
+                try
+                {
+                    std::forward<F>(fn)();
+                }
+                catch (const std::exception &e)
+                {
+                    std::cerr << name << ": " << e.what() << "\n";
+                }
+                catch (...)
+                {
+                    std::cerr << name << ": unknown exception\n";
+                }
+            }
+        }
+    )cpp");
 }

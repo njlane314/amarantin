@@ -1,10 +1,3 @@
-#include "MacroUtils.hh"
-
-#include <stdexcept>
-#include <string>
-
-#include "../include/SampleIO.hh"
-
 void mk_sample(const char *output_path = "build/sample/beam-s0.sample.root",
                const char *list_path = "samplelists/numi_fhc_run1/beam-s0.list",
                const char *origin = "data",
