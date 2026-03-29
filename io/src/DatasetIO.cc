@@ -35,7 +35,7 @@
  */
  
 #include "DatasetIO.hh"
-#include "RootUtils.hh"
+#include "detail/RootUtils.hh"
 
 #include <cstdio>
 #include <stdexcept>

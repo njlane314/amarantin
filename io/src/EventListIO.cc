@@ -1,5 +1,5 @@
 #include "EventListIO.hh"
-#include "RootUtils.hh"
+#include "detail/RootUtils.hh"
 
 #include <memory>
 #include <stdexcept>
@@ -97,9 +97,65 @@ namespace
 EventListIO::EventListIO(const std::string &path, Mode mode)
     : path_(path), mode_(mode)
 {
+    const char *open_mode = mode_ == Mode::kRead ? "READ" : "RECREATE";
+    file_ = TFile::Open(path_.c_str(), open_mode);
+    if (!file_ || file_->IsZombie())
+    {
+        delete file_;
+        file_ = nullptr;
+        throw std::runtime_error("EventListIO: failed to open: " + path_);
+    }
 }
 
-EventListIO::~EventListIO() = default;
+EventListIO::~EventListIO()
+{
+    if (file_)
+    {
+        file_->Close();
+        delete file_;
+        file_ = nullptr;
+    }
+}
+
+void EventListIO::require_open_() const
+{
+    if (!file_)
+        throw std::runtime_error("EventListIO: file is not open");
+}
+
+std::vector<std::string> EventListIO::sample_keys() const
+{
+    require_open_();
+    TDirectory *samples = utils::must_dir(file_, "samples", false);
+    return utils::list_keys(samples);
+}
+
+TTree *EventListIO::selected_tree(const std::string &sample_key) const
+{
+    require_open_();
+    TDirectory *samples = utils::must_dir(file_, "samples", false);
+    TDirectory *sample_dir = utils::must_subdir(samples, sample_key, false, "samples");
+    TDirectory *events_dir = utils::must_dir(sample_dir, "events", false);
+    TTree *tree = dynamic_cast<TTree *>(events_dir->Get("selected"));
+    if (!tree)
+        throw std::runtime_error("EventListIO: missing selected tree for sample: " + sample_key);
+    return tree;
+}
+
+TTree *EventListIO::subrun_tree(const std::string &sample_key) const
+{
+    require_open_();
+    TDirectory *meta_dir = utils::must_dir(file_, "meta", false);
+    const std::string subrun_tree_name = utils::read_named(meta_dir, "subrun_tree_name");
+
+    TDirectory *samples = utils::must_dir(file_, "samples", false);
+    TDirectory *sample_dir = utils::must_subdir(samples, sample_key, false, "samples");
+    TDirectory *subruns_dir = utils::must_dir(sample_dir, "subruns", false);
+    TTree *tree = dynamic_cast<TTree *>(subruns_dir->Get(subrun_tree_name.c_str()));
+    if (!tree)
+        throw std::runtime_error("EventListIO: missing subrun tree for sample: " + sample_key);
+    return tree;
+}
 
 void EventListIO::skim(const DatasetIO &ds,
                        const std::string &event_tree_name,
@@ -115,20 +171,16 @@ void EventListIO::skim(const DatasetIO &ds,
     if (selection_expr.empty())
         throw std::runtime_error("EventListIO: selection_expr must not be empty");
 
-    std::unique_ptr<TFile> output(TFile::Open(path_.c_str(), "RECREATE"));
-    if (!output || output->IsZombie())
-        throw std::runtime_error("EventListIO: failed to create: " + path_);
-
     try
     {
-        TDirectory *meta_dir = utils::must_dir(output.get(), "meta", true);
+        TDirectory *meta_dir = utils::must_dir(file_, "meta", true);
         utils::write_named(meta_dir, "dataset_path", ds.path());
         utils::write_named(meta_dir, "dataset_context", ds.context());
         utils::write_named(meta_dir, "event_tree_name", event_tree_name);
         utils::write_named(meta_dir, "subrun_tree_name", subrun_tree_name);
         utils::write_named(meta_dir, "selection_expr", selection_expr);
 
-        TDirectory *samples_root = utils::must_dir(output.get(), "samples", true);
+        TDirectory *samples_root = utils::must_dir(file_, "samples", true);
         for (const auto &key : ds.sample_keys())
         {
             const DatasetIO::Sample sample = ds.sample(key);
@@ -143,12 +195,11 @@ void EventListIO::skim(const DatasetIO &ds,
             copy_subrun_tree(subruns_dir, sample, subrun_tree_name);
         }
 
-        output->Write();
-        output->Close();
+        file_->Write();
     }
     catch (...)
     {
-        output->Close();
+        file_->Close();
         throw;
     }
 }

@@ -5,7 +5,7 @@
  *  @brief Implementation of SQLite-backed run info summaries.
  */
 
-#include "RunDatabaseService.hh"
+#include "detail/RunDatabaseService.hh"
 
 #include <sqlite3.h>
 

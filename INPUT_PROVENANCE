@@ -1,0 +1,153 @@
+input tree and provenance structure
+===================================
+
+Overview
+--------
+
+The upstream production code writes two persistent trees that are relevant to
+this repository:
+
+  EventSelectionFilter
+  SubRun
+
+The EventSelectionFilter tree is the event-level analysis ntuple.
+
+The SubRun tree is the subrun-level normalization and exposure tree.
+
+EventSelectionFilter
+--------------------
+
+Always-written branches from EventSelectionFilter itself:
+
+  selected                   int
+  run                        int
+  sub                        int
+  evt                        int
+  is_data                    bool
+  is_fake_data               bool
+  is_numi                    bool
+
+Branches added by the DefaultAnalysis tool shown in the production code:
+
+  optical_filter_pe_beam             float
+  optical_filter_pe_veto             float
+  reco_neutrino_vertex_x             float
+  reco_neutrino_vertex_y             float
+  reco_neutrino_vertex_z             float
+  reco_neutrino_vertex_sce_x         float
+  reco_neutrino_vertex_sce_y         float
+  reco_neutrino_vertex_sce_z         float
+  num_slices                         int
+  crt_veto                           int
+  crt_hit_pe                         float
+  selection_pass                     int
+  software_trigger                   int
+  software_trigger_pre               int
+  software_trigger_post              int
+  software_trigger_pre_ext           int
+  software_trigger_post_ext          int
+  event_total_hits                   int
+  slice_pdg                          int
+  slice_num_hits                     int
+  slice_num_clusters                 int
+  slice_num_clusters_U               int
+  slice_num_clusters_V               int
+  slice_num_clusters_Y               int
+  num_pfps                           unsigned int
+  num_tracks                         unsigned int
+  num_showers                        unsigned int
+  total_hits_U                       unsigned int
+  total_hits_V                       unsigned int
+  total_hits_Y                       unsigned int
+  contained_fraction                 float
+  slice_id                           unsigned int
+  topological_score                  float
+  slice_cluster_fraction             float
+
+Vector-valued branches added by DefaultAnalysis:
+
+  pfp_slice_indices                  std::vector<int>
+  backtracked_pdg_codes              std::vector<int>
+  backtracked_energies               std::vector<float>
+  backtracked_track_ids              std::vector<int>
+  backtracked_purities               std::vector<float>
+  backtracked_completenesses         std::vector<float>
+  backtracked_overlay_purities       std::vector<float>
+  backtracked_momentum_x             std::vector<float>
+  backtracked_momentum_y             std::vector<float>
+  backtracked_momentum_z             std::vector<float>
+  backtracked_start_x                std::vector<float>
+  backtracked_start_y                std::vector<float>
+  backtracked_start_z                std::vector<float>
+  backtracked_start_time             std::vector<float>
+  backtracked_start_wire_U           std::vector<float>
+  backtracked_start_wire_V           std::vector<float>
+  backtracked_start_wire_Y           std::vector<float>
+  backtracked_sce_start_x            std::vector<float>
+  backtracked_sce_start_y            std::vector<float>
+  backtracked_sce_start_z            std::vector<float>
+  backtracked_sce_start_wire_U       std::vector<float>
+  backtracked_sce_start_wire_V       std::vector<float>
+  backtracked_sce_start_wire_Y       std::vector<float>
+  pfp_generations                    std::vector<uint>
+  pfp_track_daughters                std::vector<uint>
+  pfp_shower_daughters               std::vector<uint>
+  pfp_num_descendents                std::vector<uint>
+  pfp_vertex_x                       std::vector<float>
+  pfp_vertex_y                       std::vector<float>
+  pfp_vertex_z                       std::vector<float>
+  track_shower_scores                std::vector<float>
+  pfp_pdg_codes                      std::vector<int>
+  pfp_num_hits                       std::vector<int>
+  pfp_num_plane_hits_U               std::vector<int>
+  pfp_num_plane_hits_V               std::vector<int>
+  pfp_num_plane_hits_Y               std::vector<int>
+  pfp_num_subclusters_U              std::vector<int>
+  pfp_num_subclusters_V              std::vector<int>
+  pfp_num_subclusters_Y              std::vector<int>
+  pfp_max_subhit_fraction_U          std::vector<float>
+  pfp_max_subhit_fraction_V          std::vector<float>
+  pfp_max_subhit_fraction_Y          std::vector<float>
+  slice_topological_scores           std::vector<float>
+
+Notes
+-----
+
+The full event tree schema is not fixed solely by EventSelectionFilter.
+
+Additional branches can be added by:
+
+  SelectionToolBase::setBranches(...)
+  AnalysisToolBase::setBranches(...)
+
+So the persistent schema of a produced event tree depends on the configured
+selection tool and analysis tools used in production.
+
+SubRun
+------
+
+The SubRun tree contains per-subrun normalization and exposure information:
+
+  run                int
+  subRun             int
+  pot                double
+  n_beam_gates       long long
+  n_ext_gates        long long
+  pot_per_gate       double
+  ext_equiv_pot      double
+
+How this relates to this repository
+-----------------------------------
+
+SampleIO:
+  Uses the upstream SubRun tree information to derive run and subrun
+  provenance and exposure summaries for persistent sample objects.
+
+DatasetIO:
+  Collects multiple persistent SampleIO objects into one keyed dataset
+  container and stores the per-sample normalization values.
+
+EventListIO:
+  Reads the job ROOT files referenced by DatasetIO, applies a TTreeFormula
+  selection to the upstream event tree, and copies the selected event entries
+  plus the upstream SubRun tree into one persistent event-list file.

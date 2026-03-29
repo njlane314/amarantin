@@ -1,5 +1,5 @@
 #include "InputPartitionIO.hh"
-#include "RootUtils.hh"
+#include "detail/RootUtils.hh"
 
 #include <algorithm>
 #include <fstream>
