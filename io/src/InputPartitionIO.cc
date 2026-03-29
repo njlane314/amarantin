@@ -1,4 +1,4 @@
-#include "ArtProvenanceIO.hh"
+#include "InputPartitionIO.hh"
 #include "RootUtils.hh"
 
 #include <algorithm>
@@ -15,15 +15,15 @@
 #include <TObject.h>
 #include <TTree.h>
 
-ArtProvenanceIO::ArtProvenanceIO(const std::string &input_path)
+InputPartitionIO::InputPartitionIO(const std::string &input_path)
 {
     input_files_ = read_sample_list(input_path);
     if (!input_files_.empty()) scan_subruns(input_files_);
 }
 
-void ArtProvenanceIO::write(TDirectory *d) const
+void InputPartitionIO::write(TDirectory *d) const
 {
-    if (!d) throw std::runtime_error("ArtProvenanceIO::write: null directory");
+    if (!d) throw std::runtime_error("InputPartitionIO::write: null directory");
     d->cd();
 
     utils::write_param<double>(d, "pot_sum", subrun_pot_sum());
@@ -57,17 +57,17 @@ void ArtProvenanceIO::write(TDirectory *d) const
     }
 }
 
-ArtProvenanceIO ArtProvenanceIO::read(TDirectory *d)
+InputPartitionIO InputPartitionIO::read(TDirectory *d)
 {
-    if (!d) throw std::runtime_error("ArtProvenanceIO::read: null directory");
+    if (!d) throw std::runtime_error("InputPartitionIO::read: null directory");
 
-    ArtProvenanceIO out;
+    InputPartitionIO out;
     out.pot_sum_ = utils::read_param<double>(d, "pot_sum");
     out.n_events_ = utils::read_param<long long>(d, "entries");
 
     {
         auto *t = dynamic_cast<TTree *>(d->Get("root_files"));
-        if (!t) throw std::runtime_error("ArtProvenanceIO: missing root_files tree in part/" + std::string(d->GetName()));
+        if (!t) throw std::runtime_error("InputPartitionIO: missing root_files tree in part/" + std::string(d->GetName()));
 
         std::string *root_file = nullptr;
         t->SetBranchAddress("root_file", &root_file);
@@ -77,14 +77,14 @@ ArtProvenanceIO ArtProvenanceIO::read(TDirectory *d)
         for (Long64_t i = 0; i < n; ++i)
         {
             t->GetEntry(i);
-            if (!root_file) throw std::runtime_error("ArtProvenanceIO: root_files missing root_file in part/" + std::string(d->GetName()));
+            if (!root_file) throw std::runtime_error("InputPartitionIO: root_files missing root_file in part/" + std::string(d->GetName()));
             out.input_files_.push_back(*root_file);
         }
     }
 
     {
         auto *t = dynamic_cast<TTree *>(d->Get("run_subrun"));
-        if (!t) throw std::runtime_error("ArtProvenanceIO: missing run_subrun tree in part/" + std::string(d->GetName()));
+        if (!t) throw std::runtime_error("InputPartitionIO: missing run_subrun tree in part/" + std::string(d->GetName()));
 
         Int_t run = 0;
         Int_t subrun = 0;
@@ -103,10 +103,10 @@ ArtProvenanceIO ArtProvenanceIO::read(TDirectory *d)
     return out;
 }
 
-std::vector<std::string> ArtProvenanceIO::read_sample_list(const std::string &path)
+std::vector<std::string> InputPartitionIO::read_sample_list(const std::string &path)
 {
     std::ifstream in(path);
-    if (!in) throw std::runtime_error("ArtProvenanceIO: failed to open sample list: " + path);
+    if (!in) throw std::runtime_error("InputPartitionIO: failed to open sample list: " + path);
 
     std::vector<std::string> out;
     std::string line;
@@ -121,9 +121,9 @@ std::vector<std::string> ArtProvenanceIO::read_sample_list(const std::string &pa
     return out;
 }
 
-void ArtProvenanceIO::scan_subruns(const std::vector<std::string> &files)
+void InputPartitionIO::scan_subruns(const std::vector<std::string> &files)
 {
-    if (files.empty()) throw std::runtime_error("ArtProvenanceIO: no input files provided for subrun scan.");
+    if (files.empty()) throw std::runtime_error("InputPartitionIO: no input files provided for subrun scan.");
 
     run_subruns_.clear();
 

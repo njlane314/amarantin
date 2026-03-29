@@ -2,7 +2,8 @@
 #ifndef SAMPLE_IO_HH
 #define SAMPLE_IO_HH
 
-#include "ArtProvenanceIO.hh"
+#include "InputPartitionIO.hh"
+#include "DatasetIO.hh"
 
 #include <algorithm>
 #include <cctype>
@@ -29,6 +30,7 @@ public:
                const std::string &run_db_path = "");
     void read(const std::string &path);
     void write(const std::string &output_path) const;
+    DatasetIO::Sample to_dataset_sample() const;
 
     static std::string default_run_db_path();
 
@@ -44,7 +46,7 @@ public:
     double normalisation_ = 1.0;
     double normalised_pot_sum_ = 0.0;
 
-    std::vector<ArtProvenanceIO> partitions_;
+    std::vector<InputPartitionIO> partitions_;
     bool built_ = false;
 
 public:

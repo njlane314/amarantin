@@ -1,7 +1,7 @@
 // SampleIO.cc
 #include "SampleIO.hh"
 #include "RootUtils.hh"
-#include "RunDatabaseService.hh"
+#include "RunInfoDatabase.hh"
 
 #include <cstdlib>
 #include <fstream>
@@ -119,7 +119,7 @@ void SampleIO::build_from(const std::vector<std::string> &input_paths)
     partitions_.reserve(input_paths_.size());
     for (const auto &partition_sample_list_path : input_paths_)
     {
-        ArtProvenanceIO partition_provenance(partition_sample_list_path);
+        InputPartitionIO partition_provenance(partition_sample_list_path);
         subrun_pot_sum_ += partition_provenance.subrun_pot_sum();
         partitions_.push_back(std::move(partition_provenance));
     }
@@ -132,7 +132,7 @@ void SampleIO::load_run_database_normalisation(const std::string &run_db_path)
     if (resolved_run_db_path.empty())
         return;
 
-    RunDatabaseService db(resolved_run_db_path);
+    RunInfoDatabase db(resolved_run_db_path);
     for (const auto &partition : partitions_)
     {
         const RunInfoSums runinfo = db.sum_run_info(partition.run_subruns());
@@ -211,6 +211,40 @@ void SampleIO::write(const std::string &output_path) const
     }
 }
 
+DatasetIO::Sample SampleIO::to_dataset_sample() const
+{
+    if (!built_)
+        throw std::runtime_error("SampleIO::to_dataset_sample: sample has not been successfully built or read");
+
+    DatasetIO::Sample out;
+    out.origin = DatasetIO::Sample::origin_from(origin_name(origin_));
+    out.variation = DatasetIO::Sample::variation_from(variation_name(variation_));
+    out.beam = DatasetIO::Sample::beam_from(beam_name(beam_));
+    out.polarity = DatasetIO::Sample::polarity_from(polarity_name(polarity_));
+
+    out.subrun_pot_sum = subrun_pot_sum_;
+    out.db_tortgt_pot_sum = db_tortgt_pot_sum_;
+    out.normalisation = normalisation_;
+
+    out.provenance_list.reserve(partitions_.size());
+    for (const auto &partition : partitions_)
+    {
+        DatasetIO::Provenance provenance;
+        provenance.scale = normalisation_;
+        provenance.input_files = partition.sample_files();
+        provenance.pot_sum = partition.subrun_pot_sum();
+        provenance.n_entries = partition.n_events();
+        provenance.run_subruns = partition.run_subruns();
+
+        out.root_files.insert(out.root_files.end(),
+                              provenance.input_files.begin(),
+                              provenance.input_files.end());
+        out.provenance_list.push_back(std::move(provenance));
+    }
+
+    return out;
+}
+
 void SampleIO::build(const std::string &input_paths_spec,
                      const std::string &origin,
                      const std::string &variation,
@@ -283,7 +317,7 @@ void SampleIO::read(const std::string &path)
             {
                 TDirectory *pd = pr->GetDirectory(name.c_str());
                 if (!pd) throw std::runtime_error("SampleIO: missing part/" + name);
-                partitions_.push_back(ArtProvenanceIO::read(pd));
+                partitions_.push_back(InputPartitionIO::read(pd));
             }
         }
 

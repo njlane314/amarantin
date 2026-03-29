@@ -400,6 +400,13 @@ void DatasetIO::add_sample_(const std::string &key, const Sample &s)
     s.write(sd);
 }
 
+void DatasetIO::add_sample(const std::string &key, const Sample &s)
+{
+    if (key.empty())
+        throw std::runtime_error("DatasetIO: sample key must not be empty");
+    add_sample_(key, s);
+}
+
 DatasetIO::Sample DatasetIO::get_sample_(const std::string &key) const
 {
     require_open_();

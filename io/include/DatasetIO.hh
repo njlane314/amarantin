@@ -75,6 +75,8 @@ public:
     bool is_open() const { return file_ != nullptr; }
     bool is_write() const { return write_; }
 
+    void add_sample(const std::string &key, const Sample &s);
+
     std::vector<Sample> samples() const;
     std::vector<Sample> samples(Sample::Variation v) const;
 

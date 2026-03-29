@@ -12,7 +12,8 @@ The usual workflow is:
   1. Build the software
   2. Generate one or more sample list files
   3. Run mk_sample to create persistent sample ROOT files
-  4. Optionally drive many sample builds through samples-dag.mk
+  4. Optionally assemble multiple persistent samples into one DatasetIO file
+  5. Optionally drive many sample builds through samples-dag.mk
 
 Basic build workflow
 --------------------
@@ -44,6 +45,23 @@ If --run-db is not given, SampleIO uses:
 
   * AMARANTIN_RUN_DB, if it is set
   * otherwise /exp/uboone/data/uboonebeam/beamdb/run.db
+
+Basic mk_dataset usage
+----------------------
+
+General form:
+
+    build/bin/mk_dataset output.root context sample-key=sample.root [sample-key=sample.root ...]
+
+Example:
+
+    build/bin/mk_dataset \
+      build/datasets/run1-numi-fhc.root \
+      run1-numi-fhc \
+      beam-s0=build/samples/run1/beam-s0.root
+
+The mk_dataset program reads one or more persistent SampleIO ROOT files and
+writes a persistent DatasetIO ROOT file containing keyed samples.
 
 Creating a sample list
 ----------------------
@@ -82,6 +100,25 @@ Reading the arguments from left to right:
   * variation
   * beam
   * polarity
+
+Building a persistent dataset by hand
+-------------------------------------
+
+Once one or more sample ROOT files already exist, build a DatasetIO file:
+
+    build/bin/mk_dataset \
+      build/datasets/run1-numi-fhc.root \
+      run1-numi-fhc \
+      beam-s0=build/samples/run1/beam-s0.root \
+      beam-s1=build/samples/run1/beam-s1.root
+
+Reading the arguments from left to right:
+
+  * output dataset ROOT file path
+  * context string stored in the dataset metadata
+  * one or more keyed sample entries of the form key=path
+
+The key is the persistent sample name inside the DatasetIO container.
 
 Common metadata values
 ----------------------
@@ -150,6 +187,9 @@ With that configuration, the generated artifacts are:
     build/samples/run1/beam-s0.root
     build/samples/run1/beam-s0.root.stamp
 
+Those sample ROOT files can then be assembled into a persistent DatasetIO file
+with mk_dataset.
+
 Running the sample DAG
 ----------------------
 
@@ -172,6 +212,21 @@ Print the stamp files:
 Remove generated sample outputs and sample lists:
 
     make -f samples-dag.mk samples-clean
+
+Typical persistent dataset workflow
+-----------------------------------
+
+One common sequence is:
+
+    make -f samples-dag.mk samples
+
+    build/bin/mk_dataset \
+      build/datasets/run1-numi-fhc.root \
+      run1-numi-fhc \
+      beam-s0=build/samples/run1/beam-s0.root
+
+This keeps the per-sample SampleIO ROOT files as persistent intermediate
+artifacts and writes a separate DatasetIO file for downstream analysis.
 
 How the stamp files work
 ------------------------
@@ -244,6 +299,7 @@ Then build and run:
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     cmake --build build --parallel
     make -f samples-dag.mk samples
+    build/bin/mk_dataset build/datasets/run1-numi-fhc.root run1-numi-fhc beam-s0=build/samples/run1/beam-s0.root
 
 Troubleshooting
 ---------------
@@ -255,3 +311,7 @@ If mk_sample fails on beam normalization, check AMARANTIN_RUN_DB or pass
 
 If samples-dag.mk does not rebuild when expected, inspect the corresponding
 .root.stamp file and compare it against the current list contents and binary.
+
+If mk_dataset fails, check that each keyed sample argument is of the form
+key=path and that each referenced sample ROOT file is a valid persistent
+SampleIO object.

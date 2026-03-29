@@ -1,17 +1,17 @@
 set(AMARANTIN_IO_SOURCES
-  src/ArtProvenanceIO.cc
+  src/InputPartitionIO.cc
   src/DatasetIO.cc
   src/EventListIO.cc
-  src/RunDatabaseService.cc
+  src/RunInfoDatabase.cc
   src/SampleIO.cc
 )
 
 set(AMARANTIN_IO_HEADERS
-  include/ArtProvenanceIO.hh
+  include/InputPartitionIO.hh
   include/DatasetIO.hh
   include/EventListIO.hh
   include/RootUtils.hh
-  include/RunDatabaseService.hh
+  include/RunInfoDatabase.hh
   include/SampleIO.hh
 )
 

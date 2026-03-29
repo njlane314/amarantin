@@ -19,6 +19,9 @@ Generate all sample lists from datasets.mk
 Build all sample ROOT files from datasets.mk
     make -f samples-dag.mk samples
 
+Build a persistent DatasetIO file from sample ROOT files
+    build/bin/mk_dataset output.dataset.root run1-numi-fhc beam-s0=build/samples/run1/beam-s0.root
+
 Print all managed sample ROOT targets
     make -f samples-dag.mk print-samples
 
@@ -30,3 +33,6 @@ Generate one sample list directly
 
 Build one sample ROOT file directly
     build/bin/mk_sample output.root input.list data nominal numi fhc
+
+Build one persistent DatasetIO file directly
+    build/bin/mk_dataset output.dataset.root context sample-key=sample.root

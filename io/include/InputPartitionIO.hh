@@ -1,5 +1,5 @@
-#ifndef ART_PROVENANCE_IO_HH
-#define ART_PROVENANCE_IO_HH
+#ifndef INPUT_PARTITION_IO_HH
+#define INPUT_PARTITION_IO_HH
 
 #include <string>
 #include <utility>
@@ -7,14 +7,14 @@
 
 class TDirectory;
 
-class ArtProvenanceIO
+class InputPartitionIO
 {
 public:
-    ArtProvenanceIO() = default;
-    explicit ArtProvenanceIO(const std::string &input_path);
+    InputPartitionIO() = default;
+    explicit InputPartitionIO(const std::string &input_path);
 
     void write(TDirectory *d) const;
-    static ArtProvenanceIO read(TDirectory *d);
+    static InputPartitionIO read(TDirectory *d);
 
     void scan_subruns(const std::vector<std::string> &files);
 
@@ -34,4 +34,4 @@ private:
     long long n_events_ = 0;
 };
 
-#endif // ART_PROVENANCE_IO_HH
+#endif // INPUT_PARTITION_IO_HH

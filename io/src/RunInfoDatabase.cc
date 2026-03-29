@@ -1,11 +1,11 @@
 /* -- C++ -- */
 /**
- *  @file  io/src/RunDatabaseService.cc
+ *  @file  io/src/RunInfoDatabase.cc
  *
  *  @brief Implementation of SQLite-backed run info summaries.
  */
 
-#include "RunDatabaseService.hh"
+#include "RunInfoDatabase.hh"
 
 #include <sqlite3.h>
 
@@ -13,7 +13,7 @@
 #include <set>
 #include <utility>
 
-RunDatabaseService::RunDatabaseService(std::string path) : db_path_(std::move(path))
+RunInfoDatabase::RunInfoDatabase(std::string path) : db_path_(std::move(path))
 {
     sqlite3 *db = nullptr;
     const int rc = sqlite3_open_v2(db_path_.c_str(), &db, SQLITE_OPEN_READONLY, nullptr);
@@ -29,7 +29,7 @@ RunDatabaseService::RunDatabaseService(std::string path) : db_path_(std::move(pa
     db_ = db;
 }
 
-RunDatabaseService::~RunDatabaseService()
+RunInfoDatabase::~RunInfoDatabase()
 {
     if (db_)
     {
@@ -37,7 +37,7 @@ RunDatabaseService::~RunDatabaseService()
     }
 }
 
-void RunDatabaseService::exec(const std::string &sql) const
+void RunInfoDatabase::exec(const std::string &sql) const
 {
     char *err = nullptr;
     const int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &err);
@@ -49,7 +49,7 @@ void RunDatabaseService::exec(const std::string &sql) const
     }
 }
 
-void RunDatabaseService::prepare(const std::string &sql, sqlite3_stmt **stmt) const
+void RunInfoDatabase::prepare(const std::string &sql, sqlite3_stmt **stmt) const
 {
     const int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, stmt, nullptr);
     if (rc != SQLITE_OK || !stmt || !(*stmt))
@@ -58,7 +58,7 @@ void RunDatabaseService::prepare(const std::string &sql, sqlite3_stmt **stmt) co
     }
 }
 
-RunInfoSums RunDatabaseService::sum_run_info(const std::vector<std::pair<int, int>> &pairs) const
+RunInfoSums RunInfoDatabase::sum_run_info(const std::vector<std::pair<int, int>> &pairs) const
 {
     if (pairs.empty())
     {
