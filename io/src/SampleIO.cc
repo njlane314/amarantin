@@ -1,7 +1,7 @@
 // SampleIO.cc
 #include "SampleIO.hh"
 #include "RootUtils.hh"
-#include "RunInfoDatabase.hh"
+#include "RunDatabaseService.hh"
 
 #include <cstdlib>
 #include <fstream>
@@ -132,7 +132,7 @@ void SampleIO::load_run_database_normalisation(const std::string &run_db_path)
     if (resolved_run_db_path.empty())
         return;
 
-    RunInfoDatabase db(resolved_run_db_path);
+    RunDatabaseService db(resolved_run_db_path);
     for (const auto &partition : partitions_)
     {
         const RunInfoSums runinfo = db.sum_run_info(partition.run_subruns());

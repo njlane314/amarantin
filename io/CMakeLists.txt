@@ -2,22 +2,26 @@ set(AMARANTIN_IO_SOURCES
   src/InputPartitionIO.cc
   src/DatasetIO.cc
   src/EventListIO.cc
-  src/RunInfoDatabase.cc
+  src/RunDatabaseService.cc
   src/SampleIO.cc
 )
 
-set(AMARANTIN_IO_HEADERS
+set(AMARANTIN_IO_PUBLIC_HEADERS
   include/InputPartitionIO.hh
   include/DatasetIO.hh
   include/EventListIO.hh
-  include/RootUtils.hh
-  include/RunInfoDatabase.hh
   include/SampleIO.hh
+)
+
+set(AMARANTIN_IO_INTERNAL_HEADERS
+  src/RootUtils.hh
+  src/RunDatabaseService.hh
 )
 
 add_library(IO SHARED
   ${AMARANTIN_IO_SOURCES}
-  ${AMARANTIN_IO_HEADERS}
+  ${AMARANTIN_IO_PUBLIC_HEADERS}
+  ${AMARANTIN_IO_INTERNAL_HEADERS}
 )
 
 target_compile_features(IO PUBLIC cxx_std_17)
@@ -26,6 +30,8 @@ target_include_directories(IO
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/amarantin>
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 target_link_libraries(IO
@@ -63,6 +69,6 @@ install(TARGETS amarantin_root_deps
   EXPORT amarantinTargets
 )
 
-install(FILES ${AMARANTIN_IO_HEADERS}
+install(FILES ${AMARANTIN_IO_PUBLIC_HEADERS}
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amarantin"
 )

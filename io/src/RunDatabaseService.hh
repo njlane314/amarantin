@@ -1,5 +1,5 @@
-#ifndef RUN_INFO_DATABASE_HH
-#define RUN_INFO_DATABASE_HH
+#ifndef RUN_DATABASE_SERVICE_HH
+#define RUN_DATABASE_SERVICE_HH
 
 #include <string>
 #include <utility>
@@ -22,11 +22,11 @@ struct RunInfoSums
 class sqlite3;
 struct sqlite3_stmt;
 
-class RunInfoDatabase
+class RunDatabaseService
 {
 public:
-    explicit RunInfoDatabase(std::string path);
-    ~RunInfoDatabase();
+    explicit RunDatabaseService(std::string path);
+    ~RunDatabaseService();
 
     RunInfoSums sum_run_info(const std::vector<std::pair<int, int>> &pairs) const;
 
@@ -38,4 +38,4 @@ private:
     sqlite3 *db_ = nullptr;
 };
 
-#endif // RUN_INFO_DATABASE_HH
+#endif // RUN_DATABASE_SERVICE_HH
