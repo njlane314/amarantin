@@ -416,15 +416,27 @@ DatasetIO::Sample DatasetIO::get_sample_(const std::string &key) const
     return Sample::read(sd);
 }
 
+std::vector<std::string> DatasetIO::sample_keys() const
+{
+    require_open_();
+
+    TDirectory *root = samples_root_(false);
+    if (!root) return {};
+
+    return utils::list_keys(root);
+}
+
+DatasetIO::Sample DatasetIO::sample(const std::string &key) const
+{
+    return get_sample_(key);
+}
+
 std::vector<DatasetIO::Sample> DatasetIO::samples() const
 {
     require_open_();
 
     std::vector<Sample> out;
-    TDirectory *root = samples_root_(false);
-    if (!root) return out;
-
-    const auto keys = utils::list_keys(root);
+    const auto keys = sample_keys();
     out.reserve(keys.size());
     for (const auto &k : keys)
         out.push_back(get_sample_(k));

@@ -77,6 +77,8 @@ public:
 
     void add_sample(const std::string &key, const Sample &s);
 
+    std::vector<std::string> sample_keys() const;
+    Sample sample(const std::string &key) const;
     std::vector<Sample> samples() const;
     std::vector<Sample> samples(Sample::Variation v) const;
 

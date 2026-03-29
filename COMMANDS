@@ -22,6 +22,9 @@ Build all sample ROOT files from datasets.mk
 Build a persistent DatasetIO file from sample ROOT files
     build/bin/mk_dataset output.dataset.root run1-numi-fhc beam-s0=build/samples/run1/beam-s0.root
 
+Build a persistent EventListIO file from a DatasetIO file
+    build/bin/mk_eventlist output.eventlist.root input.dataset.root
+
 Print all managed sample ROOT targets
     make -f samples-dag.mk print-samples
 
@@ -36,3 +39,6 @@ Build one sample ROOT file directly
 
 Build one persistent DatasetIO file directly
     build/bin/mk_dataset output.dataset.root context sample-key=sample.root
+
+Build one persistent EventListIO file directly
+    build/bin/mk_eventlist output.eventlist.root input.dataset.root EventSelectionFilter SubRun "selected != 0"

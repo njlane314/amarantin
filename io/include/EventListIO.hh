@@ -2,13 +2,9 @@
 #define EVENTLIST_IO_HH
 
 #include <string>
-
-#include <ROOT/RDataFrame.hxx>
+#include <vector>
 
 #include "DatasetIO.hh"
-
-class AnalysisModel;
-class Selection;
 
 class EventListIO
 {
@@ -24,8 +20,9 @@ public:
     const std::string &path() const { return path_; }
 
     void skim(const DatasetIO &ds,
-              const AnalysisModel &analysis,
-              const Selection &selection);
+              const std::string &event_tree_name,
+              const std::string &subrun_tree_name,
+              const std::string &selection_expr);
 
 private:
     std::string path_;

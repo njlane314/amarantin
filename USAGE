@@ -13,7 +13,8 @@ The usual workflow is:
   2. Generate one or more sample list files
   3. Run mk_sample to create persistent sample ROOT files
   4. Optionally assemble multiple persistent samples into one DatasetIO file
-  5. Optionally drive many sample builds through samples-dag.mk
+  5. Build persistent EventListIO files from DatasetIO using event-tree selections
+  6. Optionally drive many sample builds through samples-dag.mk
 
 Basic build workflow
 --------------------
@@ -62,6 +63,26 @@ Example:
 
 The mk_dataset program reads one or more persistent SampleIO ROOT files and
 writes a persistent DatasetIO ROOT file containing keyed samples.
+
+Basic mk_eventlist usage
+------------------------
+
+General form:
+
+    build/bin/mk_eventlist output.root dataset.root [event-tree] [subrun-tree] [selection]
+
+Example:
+
+    build/bin/mk_eventlist \
+      build/eventlists/run1-numi-fhc.root \
+      build/datasets/run1-numi-fhc.root \
+      EventSelectionFilter \
+      SubRun \
+      "selected != 0"
+
+The mk_eventlist program reads a persistent DatasetIO file, chains the
+underlying per-sample job ROOT files, applies a TTreeFormula selection, and
+writes a persistent EventListIO file with one selected-event tree per sample.
 
 Creating a sample list
 ----------------------
@@ -119,6 +140,33 @@ Reading the arguments from left to right:
   * one or more keyed sample entries of the form key=path
 
 The key is the persistent sample name inside the DatasetIO container.
+
+Building a persistent event list by hand
+----------------------------------------
+
+Once a DatasetIO file already exists, build a persistent EventListIO file:
+
+    build/bin/mk_eventlist \
+      build/eventlists/run1-numi-fhc.root \
+      build/datasets/run1-numi-fhc.root \
+      EventSelectionFilter \
+      SubRun \
+      "selected != 0"
+
+Reading the arguments from left to right:
+
+  * output event-list ROOT file path
+  * input dataset ROOT file path
+  * source event tree name
+  * source subrun tree name
+  * TTreeFormula selection expression
+
+The current implementation writes:
+
+    meta/
+    samples/<sample-key>/meta/
+    samples/<sample-key>/events/selected
+    samples/<sample-key>/subruns/SubRun
 
 Common metadata values
 ----------------------
@@ -228,6 +276,22 @@ One common sequence is:
 This keeps the per-sample SampleIO ROOT files as persistent intermediate
 artifacts and writes a separate DatasetIO file for downstream analysis.
 
+Typical event-list workflow
+---------------------------
+
+After a DatasetIO file exists, produce a persistent selected-event container:
+
+    build/bin/mk_eventlist \
+      build/eventlists/run1-numi-fhc.root \
+      build/datasets/run1-numi-fhc.root \
+      EventSelectionFilter \
+      SubRun \
+      "selected != 0"
+
+This keeps DatasetIO as the persistent sample-grouping layer and writes an
+EventListIO file that can be loaded in ROOT macros for plotting and printed
+summaries.
+
 How the stamp files work
 ------------------------
 
@@ -300,6 +364,7 @@ Then build and run:
     cmake --build build --parallel
     make -f samples-dag.mk samples
     build/bin/mk_dataset build/datasets/run1-numi-fhc.root run1-numi-fhc beam-s0=build/samples/run1/beam-s0.root
+    build/bin/mk_eventlist build/eventlists/run1-numi-fhc.root build/datasets/run1-numi-fhc.root EventSelectionFilter SubRun "selected != 0"
 
 Troubleshooting
 ---------------
@@ -315,3 +380,7 @@ If samples-dag.mk does not rebuild when expected, inspect the corresponding
 If mk_dataset fails, check that each keyed sample argument is of the form
 key=path and that each referenced sample ROOT file is a valid persistent
 SampleIO object.
+
+If mk_eventlist fails, check that the dataset sample ROOT files actually
+contain the named event and subrun trees and that the TTreeFormula selection
+expression is valid for the source event tree schema.

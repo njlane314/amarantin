@@ -1,7 +1,8 @@
 add_executable(mk_sample mk_sample.cc)
 add_executable(mk_dataset mk_dataset.cc)
+add_executable(mk_eventlist mk_eventlist.cc)
 
-foreach(target_name mk_sample mk_dataset)
+foreach(target_name mk_sample mk_dataset mk_eventlist)
   target_link_libraries(${target_name}
     PRIVATE
       IO
@@ -21,6 +22,6 @@ foreach(target_name mk_sample mk_dataset)
   endif()
 endforeach()
 
-install(TARGETS mk_sample mk_dataset
+install(TARGETS mk_sample mk_dataset mk_eventlist
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 )
