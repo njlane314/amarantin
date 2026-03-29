@@ -8,9 +8,9 @@ RUN apt-get update \
         bash \
         build-essential \
         ca-certificates \
+        cmake \
         git \
         libsqlite3-dev \
-        make \
         nlohmann-json3-dev \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
