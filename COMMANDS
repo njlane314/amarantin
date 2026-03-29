@@ -1,0 +1,32 @@
+amarantin command reference
+===========================
+
+Enter the GPVM container environment
+    source ./.container.sh
+
+Set up the GPVM software environment
+    source ./.setup.sh
+
+Configure the build
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+Build the project
+    cmake --build build --parallel
+
+Generate all sample lists from datasets.mk
+    make -f samples-dag.mk samples-lists
+
+Build all sample ROOT files from datasets.mk
+    make -f samples-dag.mk samples
+
+Print all managed sample ROOT targets
+    make -f samples-dag.mk print-samples
+
+Remove generated sample ROOT files and sample lists
+    make -f samples-dag.mk samples-clean
+
+Generate one sample list directly
+    tools/mklist.sh --dir /path/to/input --pat "nu_selection.root,nu_selection_data.root" --out samplelists/example.list
+
+Build one sample ROOT file directly
+    build/bin/mk_sample output.root input.list data nominal numi fhc
