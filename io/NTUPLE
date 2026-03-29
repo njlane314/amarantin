@@ -14,6 +14,9 @@ The EventSelectionFilter tree is the event-level analysis ntuple.
 
 The SubRun tree is the subrun-level normalization and exposure tree.
 
+The production code can also write event-weight information either as branches
+on EventSelectionFilter or, if configured, in a separate EventWeights tree.
+
 EventSelectionFilter
 --------------------
 
@@ -110,6 +113,80 @@ Vector-valued branches added by DefaultAnalysis:
   pfp_max_subhit_fraction_Y          std::vector<float>
   slice_topological_scores           std::vector<float>
 
+Branches added by the EventWeightAnalysis tool
+----------------------------------------------
+
+The EventWeightAnalysis tool can write event-weight content onto the main
+EventSelectionFilter tree.
+
+Scalar branches that may be present:
+
+  weightSpline                       float
+  weightTune                         float
+  weightSplineTimesTune              float
+  ppfx_cv                            float
+  knobRPAup                          double
+  knobRPAdn                          double
+  knobCCMECup                        double
+  knobCCMECdn                        double
+  knobAxFFCCQEup                     double
+  knobAxFFCCQEdn                     double
+  knobVecFFCCQEup                    double
+  knobVecFFCCQEdn                    double
+  knobDecayAngMECup                  double
+  knobDecayAngMECdn                  double
+  knobThetaDelta2Npiup               double
+  knobThetaDelta2Npidn               double
+  knobThetaDelta2NRadup              double
+  knobThetaDelta2NRaddn              double
+  knobNormCCCOHup                    double
+  knobNormCCCOHdn                    double
+  knobNormNCCOHup                    double
+  knobNormNCCOHdn                    double
+  knobxsr_scc_Fv3up                  double
+  knobxsr_scc_Fv3dn                  double
+  knobxsr_scc_Fa3up                  double
+  knobxsr_scc_Fa3dn                  double
+  RootinoFix                         double
+
+Container branches that may be present:
+
+  weights                            std::map<std::string, std::vector<double>>
+  weightsFlux                        std::vector<unsigned short>
+  weightsGenie                       std::vector<unsigned short>
+  weightsReint                       std::vector<unsigned short>
+  weightsPPFX                        std::vector<unsigned short>
+  weightsGenieUp                     std::vector<unsigned short>
+  weightsGenieDn                     std::vector<unsigned short>
+
+Notes on EventWeightAnalysis:
+
+  The exact set of weight branches depends on configuration flags such as
+  createMapBranch, createFluxBranch, createGenieBranch, createReintBranch,
+  createSplineBranch, createTuneBranch, createSplineTimesTuneBranch,
+  createPPFXBranch, and createGenieUpDnVecs.
+
+  The weights map can include combined products like:
+
+    All_UBGenie
+    reint_all
+    ppfx_all
+    flux_all
+
+  as well as individual named weight vectors copied from the art
+  MCEventWeight products.
+
+EventWeights
+------------
+
+If EventWeightAnalysis is configured with createDedicatedTree=true, it also
+writes a separate EventWeights tree containing:
+
+  run                int
+  subRun             int
+  evt                int
+  weights            std::map<std::string, std::vector<double>>
+
 Notes
 -----
 
@@ -122,6 +199,9 @@ Additional branches can be added by:
 
 So the persistent schema of a produced event tree depends on the configured
 selection tool and analysis tools used in production.
+
+In particular, EventWeightAnalysis adds a substantial set of optional weight
+branches that are important for systematic reweighting studies.
 
 SubRun
 ------
