@@ -1,0 +1,257 @@
+amarantin usage
+===============
+
+Overview
+--------
+
+amarantin builds persistent ROOT sample containers from text lists of input
+ROOT files.
+
+The usual workflow is:
+
+  1. Build the software
+  2. Generate one or more sample list files
+  3. Run mk_sample to create persistent sample ROOT files
+  4. Optionally drive many sample builds through samples-dag.mk
+
+Basic build workflow
+--------------------
+
+Configure and build:
+
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build --parallel
+
+The main executable will be:
+
+    build/bin/mk_sample
+
+Basic mk_sample usage
+---------------------
+
+General form:
+
+    build/bin/mk_sample [--run-db PATH] output.root input.list [origin] [variation] [beam] [polarity]
+
+Example:
+
+    build/bin/mk_sample \
+      build/samples/run1/beam-s0.root \
+      samplelists/numi_fhc_run1/beam-s0.list \
+      data nominal numi fhc
+
+If --run-db is not given, SampleIO uses:
+
+  * AMARANTIN_RUN_DB, if it is set
+  * otherwise /exp/uboone/data/uboonebeam/beamdb/run.db
+
+Creating a sample list
+----------------------
+
+Use tools/mklist.sh to scan a directory and write a sorted list of matching
+ROOT files.
+
+Example:
+
+    tools/mklist.sh \
+      --dir /pnfs/uboone/scratch/users/nlane/ntuples/v08_00_00_82/numi_fhc_run1/beam/s0/out \
+      --pat "nu_selection.root,nu_selection_data.root" \
+      --out samplelists/numi_fhc_run1/beam-s0.list
+
+The output file is a plain text list, for example:
+
+    /pnfs/uboone/.../file001/nu_selection.root
+    /pnfs/uboone/.../file002/nu_selection.root
+    /pnfs/uboone/.../file003/nu_selection.root
+
+Building a single sample by hand
+--------------------------------
+
+Once a list exists, build a sample ROOT file directly:
+
+    build/bin/mk_sample \
+      build/samples/run1/beam-s0.root \
+      samplelists/numi_fhc_run1/beam-s0.list \
+      data nominal numi fhc
+
+Reading the arguments from left to right:
+
+  * output ROOT file path
+  * input list path
+  * sample origin
+  * variation
+  * beam
+  * polarity
+
+Common metadata values
+----------------------
+
+Origin values:
+
+  * data
+  * external
+  * overlay
+  * dirt
+  * enriched
+
+Variation values:
+
+  * nominal
+  * detector
+
+Beam values:
+
+  * numi
+  * bnb
+
+Polarity values:
+
+  * fhc
+  * rhc
+
+For NuMI samples, polarity should be explicit. For BNB samples, polarity is
+not meaningful and is typically left as unknown internally.
+
+Driving many samples with samples-dag.mk
+----------------------------------------
+
+The repository includes a simple make-based orchestration layer for sample
+list generation and sample ROOT production:
+
+    datasets.mk
+    samples-dag.mk
+
+The idea is to treat generated sample ROOT files as persistent build
+artifacts.
+
+Current datasets.mk example
+---------------------------
+
+The existing file declares datasets and logical samples:
+
+    user := nlane
+    release := v08_00_00_82
+    pat := nu_selection.root,nu_selection_data.root
+
+    datasets := run1
+
+    root := /pnfs/uboone/scratch/users/$(user)/ntuples/$(release)
+
+    name.run1 := numi_fhc_run1
+    base.run1 := $(root)/$(name.run1)
+    out.run1 := samplelists/$(name.run1)
+
+    samples.run1 := \
+        beam-s0:beam/s0/out
+
+With that configuration, the generated artifacts are:
+
+    samplelists/numi_fhc_run1/beam-s0.list
+    build/samples/run1/beam-s0.root
+    build/samples/run1/beam-s0.root.stamp
+
+Running the sample DAG
+----------------------
+
+Build all declared sample lists:
+
+    make -f samples-dag.mk samples-lists
+
+Build all declared sample ROOT files:
+
+    make -f samples-dag.mk samples
+
+Print the sample outputs that would be managed:
+
+    make -f samples-dag.mk print-samples
+
+Print the stamp files:
+
+    make -f samples-dag.mk print-sample-stamps
+
+Remove generated sample outputs and sample lists:
+
+    make -f samples-dag.mk samples-clean
+
+How the stamp files work
+------------------------
+
+Each generated sample ROOT file has a sibling stamp file:
+
+    build/samples/run1/beam-s0.root.stamp
+
+The stamp file is plain text and records the effective inputs used to decide
+whether the sample must be rebuilt.
+
+Example:
+
+    list_sha256=...
+    mk_sample_sha256=...
+    origin=data
+    variation=nominal
+    beam=numi
+    polarity=fhc
+    run_db=
+    dataset=run1
+    sample=beam-s0
+    sample_subdir=beam/s0/out
+
+If the current computed stamp matches the existing one, samples-dag.mk keeps
+the existing .root file and does not rerun mk_sample.
+
+This means that changing only one sample list, or changing the mk_sample
+binary, only forces regeneration of the affected sample outputs.
+
+Using a non-default run database
+--------------------------------
+
+At the command line:
+
+    build/bin/mk_sample \
+      --run-db /path/to/run.db \
+      build/samples/run1/beam-s0.root \
+      samplelists/numi_fhc_run1/beam-s0.list \
+      data nominal numi fhc
+
+With samples-dag.mk:
+
+    make -f samples-dag.mk RUN_DB_PATH=/path/to/run.db samples
+
+GPVM workflow
+-------------
+
+Typical sequence:
+
+    source ./.container.sh
+    source ./.setup.sh
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build --parallel
+    make -f samples-dag.mk samples
+
+Docker workflow
+---------------
+
+Build the image:
+
+    docker build -t amarantin-dev .
+
+Run the repository in the container:
+
+    docker run --rm -it -v "$PWD":/work -w /work amarantin-dev
+
+Then build and run:
+
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build --parallel
+    make -f samples-dag.mk samples
+
+Troubleshooting
+---------------
+
+If CMake cannot find ROOT, make sure root-config is on PATH or set ROOT_DIR.
+
+If mk_sample fails on beam normalization, check AMARANTIN_RUN_DB or pass
+--run-db explicitly.
+
+If samples-dag.mk does not rebuild when expected, inspect the corresponding
+.root.stamp file and compare it against the current list contents and binary.
