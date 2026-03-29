@@ -1,8 +1,10 @@
+#include "MacroUtils.hh"
+
 #include <algorithm>
-#include <iostream>
+#include <stdexcept>
 #include <string>
 
-#include "EventListIO.hh"
+#include "../include/EventListIO.hh"
 #include "TTree.h"
 
 namespace
@@ -67,13 +69,18 @@ namespace
     }
 }
 
-void print_eventlist(const char *read_path)
+void print_eventlist(const char *read_path = nullptr)
 {
-    EventListIO eventlist(read_path, EventListIO::Mode::kRead);
+    macro_utils::run_macro("print_eventlist", [&]() {
+        if (!read_path || std::string(read_path).empty())
+            throw std::runtime_error("print_eventlist: read_path is required");
 
-    for (const auto &sample_name : eventlist.sample_keys())
-    {
-        TTree *selected = eventlist.selected_tree(sample_name);
-        print_sample_tree(selected, sample_name);
-    }
+        EventListIO eventlist(read_path, EventListIO::Mode::kRead);
+
+        for (const auto &sample_name : eventlist.sample_keys())
+        {
+            TTree *selected = eventlist.selected_tree(sample_name);
+            print_sample_tree(selected, sample_name);
+        }
+    });
 }

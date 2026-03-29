@@ -1,8 +1,9 @@
-#include <iostream>
+#include "MacroUtils.hh"
+
 #include <stdexcept>
 #include <string>
 
-#include "DatasetIO.hh"
+#include "../include/DatasetIO.hh"
 
 namespace
 {
@@ -36,10 +37,12 @@ namespace
     }
 } // namespace
 
-void print_dataset(const char *read_path)
+void print_dataset(const char *read_path = nullptr)
 {
-    try
-    {
+    macro_utils::run_macro("print_dataset", [&]() {
+        if (!read_path || std::string(read_path).empty())
+            throw std::runtime_error("print_dataset: read_path is required");
+
         const DatasetIO ds(read_path);
 
         const auto samples = ds.samples();
@@ -47,10 +50,5 @@ void print_dataset(const char *read_path)
 
         for (size_t i = 0; i < samples.size(); ++i)
             print_sample(samples[i], std::cout, i);
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "print_dataset: " << e.what() << "\n";
-        throw;
-    }
+    });
 }

@@ -1,15 +1,15 @@
-#include <iostream>
+#include "MacroUtils.hh"
+
 #include <stdexcept>
 #include <string>
 
-#include "SampleIO.hh"
+#include "../include/SampleIO.hh"
 
-void process_sample(const char *read_path)
+void print_sample(const char *read_path = nullptr)
 {
-    try
-    {
+    macro_utils::run_macro("print_sample", [&]() {
         if (!read_path || std::string(read_path).empty())
-            throw std::runtime_error("process_sample: read_path is required");
+            throw std::runtime_error("print_sample: read_path is required");
 
         SampleIO sample;
         sample.read(read_path);
@@ -20,10 +20,5 @@ void process_sample(const char *read_path)
                   << " partitions=" << sample.partitions_.size()
                   << " normalised_pot_sum=" << sample.normalised_pot_sum_
                   << "\n";
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "process_sample: " << e.what() << "\n";
-        throw;
-    }
+    });
 }
