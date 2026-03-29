@@ -1,97 +1,18 @@
-amarantin
-=========
-
-`amarantin` is a small C++/ROOT library plus one CLI for building ROOT sample
-containers from text lists of input ROOT files.
-
-Build
------
-
-The project now uses CMake.
-
-Standard out-of-source build:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
-```
-
-To install into a local prefix:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$PWD/install
-cmake --build build --parallel
-cmake --install build
-```
-
-You can also disable the application and build only the library:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAMARANTIN_BUILD_APP=OFF
-cmake --build build --parallel
-```
-
-Environment
------------
-
-This repository expects:
-
-- C++17 compiler
-- CMake >= 3.16
-- ROOT
-- SQLite3 development files
-
-On the intended uBooNE/Fermilab stack:
-
-```bash
-source ./.setup.sh
-```
-
-If ROOT is not discovered automatically, set `ROOT_DIR` to the directory
-containing `ROOTConfig.cmake`, or ensure `root-config` is on `PATH`.
-
-Docker
-------
-
-A portable container build path is included:
-
-```bash
-docker build -t amarantin-dev .
-docker run --rm -it -v "$PWD":/work -w /work amarantin-dev
-```
-
-Then inside the container:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
-```
-
-CLI
----
-
-The main executable is `mk_sample`:
-
-```bash
-build/bin/mk_sample [--run-db <path>] <output.root> <input.list> [origin] [variation] [beam] [polarity]
-```
-
-If `--run-db` is not provided, the library uses:
-
-1. `AMARANTIN_RUN_DB` if it is set
-2. `/exp/uboone/data/uboonebeam/beamdb/run.db` otherwise
-
-Repository layout
------------------
-
-`io/`
-  Main library sources and headers
-
-`app/`
-  CLI entry point for `mk_sample`
-
-`tools/`
-  Helper scripts such as sample-list generation
-
-`cmake/`
-  Installed package config template for downstream CMake consumers
+                     .::--==++**##%%%%##**++==--::.
+               .:-=+*#%@@@@@@@@@@@@@@@@@@@@@@@@%#*+=-:.
+           .:=*%@@@@%#*+=--::::::::::::::::--=+*#%@@@@%*=:.
+        .-*@@@%*=:.          .:--====--:.          .:=*%@@@*-.
+      .+%@@@+-.         .:=*#%@@@@@@@@@@%#*=:         .-+@@@%+.
+     :#@@@#-.        .-*%@@@%#*+=----=+*#%@@@*-.        .-#@@@#:
+    -%@@@+        .:+@@@#+-.     .::.     .-+#@@@+:.        +@@@%-
+   .#@@@#        .+@@@#:     .-*%@@@@%*-.     :#@@@+.        #@@@#.
+   :%@@@=        =@@@%.      =%@@@@@@@@%=      .%@@@=        =@@@%:
+   :%@@@=        =@@@%.      =%@@@@@@@@%=      .%@@@=        =@@@%:
+   .#@@@#        .+@@@#:     .-*%@@@@%*-.     :#@@@+.        #@@@#.
+    -%@@@+        .:+@@@#+-.     .::.     .-+#@@@+:.        +@@@%-
+     :#@@@#-.        .-*%@@@%#*+=----=+*#%@@@*-.        .-#@@@#:
+      .+%@@@+-.         .:=*#%@@@@@@@@@@%#*=:         .-+@@@%+.
+        .-*@@@%*=:.          .:--====--:.          .:=*%@@@*-.
+           .:=*%@@@@%#*+=--::::::::::::::::--=+*#%@@@@%*=:.
+               .:-=+*#%@@@@@@@@@@@@@@@@@@@@@@@@%#*+=-:.
+                     .::--==++**##%%%%##**++==--::.

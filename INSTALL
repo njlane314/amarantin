@@ -1,12 +1,33 @@
 amarantin installation
 ======================
 
+Overview
+--------
+
+amarantin is a small C++ and ROOT library plus one CLI for building ROOT
+sample containers from text lists of input ROOT files.
+
 This project is expected to build in two environments.
 
 The first is on the uBooNE GPVMs using the provided .container.sh and .setup.sh
 scripts.
 
 The second is in the Docker-based portable development container.
+
+Repository layout
+-----------------
+
+io/
+  Main library sources and headers
+
+app/
+  CLI entry point for mk_sample
+
+tools/
+  Helper scripts such as sample-list generation
+
+cmake/
+  Installed package config template for downstream CMake consumers
 
 Dependencies
 ------------
@@ -70,6 +91,10 @@ One-shot build without opening a shell:
     docker run --rm -v "$PWD":/work -w /work amarantin-dev \
       cmake --build build --parallel
 
+Portable Docker workflow has been verified with this repository. The current
+Docker image uses an amd64 ROOT base image. On arm64 hosts, Docker may build
+and run it under emulation.
+
 Configuration notes
 -------------------
 
@@ -104,6 +129,12 @@ Install from an existing build tree:
 
     cmake --install build
 
+To stage into a local prefix:
+
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$PWD/install
+    cmake --build build --parallel
+    cmake --install build
+
 Installed files
 ---------------
 
@@ -118,6 +149,13 @@ Downstream CMake use
     find_package(amarantin CONFIG REQUIRED)
     target_link_libraries(your_target PRIVATE amarantin::IO)
 
+CLI
+---
+
+The main executable is mk_sample:
+
+    build/bin/mk_sample [--run-db <path>] <output.root> <input.list> [origin] [variation] [beam] [polarity]
+
 Notes
 -----
 
@@ -128,6 +166,3 @@ SampleIO uses the beam database in one of two ways.
 If AMARANTIN_RUN_DB is set, that path is used.
 
 Otherwise it falls back to /exp/uboone/data/uboonebeam/beamdb/run.db.
-
-The Docker image currently uses an amd64 ROOT base image. On arm64 hosts,
-Docker may build and run it under emulation.
