@@ -93,8 +93,16 @@ namespace plot_utils
         const TH1D *passed_hist() const noexcept { return h_passed_.get(); }
         const TGraphAsymmErrors *eff_graph() const noexcept { return g_eff_.get(); }
 
+        // Raw selected row counts, retained for compatibility with older callers.
         std::uint64_t denom_entries() const noexcept { return n_denom_; }
         std::uint64_t pass_entries() const noexcept { return n_pass_; }
+        std::uint64_t denom_rows() const noexcept { return n_denom_; }
+        std::uint64_t pass_rows() const noexcept { return n_pass_; }
+
+        // Weighted totals track the actually plotted histograms.
+        double denom_total() const noexcept;
+        double pass_total() const noexcept;
+        double overall_efficiency() const noexcept;
 
         bool ready() const noexcept { return ready_; }
 

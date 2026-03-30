@@ -1,129 +1,502 @@
 # ExecPlan
 
+## ExecPlan Addendum: Plot Stale-State Cleanup Pass
+
+### 1. Objective
+Trim stale state and legacy carryover from the new `plot/` surface without
+changing the external plotting workflows.
+
+### 2. Constraints
+- Preserve the `Plot` target and current stack / unstack / efficiency entry
+  points.
+- Keep the cleanup scoped to stale members, stale helper coupling, and
+  undocumented compatibility carryover.
+- Leave unrelated worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- add abstractions only when they delete complexity
+- keep module boundaries sharp
+- do a small deletion pass after every feature pass
+
+That favors deleting dead plot state and moving shared histogram math into one
+private helper surface rather than letting copy-by-declaration coupling persist.
+
+### 4. System map
+- `plot/StackedHist.hh`
+- `plot/StackedHist.cc`
+- `plot/UnstackedHist.hh`
+- `plot/UnstackedHist.cc`
+- `plot/EfficiencyPlot.hh`
+- `plot/EfficiencyPlot.cc`
+- `plot/PlottingHelper.hh`
+- `plot/PlottingHelper.cc`
+- `plot/bits/DataMcHistogramUtils.hh`
+- `docs/minimality-log.md`
+- verification:
+  - `git diff --check -- <touched plot files>`
+  - Docker `cmake --build ... --target Plot --parallel`
+
+### 5. Milestone
+- status: done
+- hypothesis: deleting dead member state, exposing accurate efficiency totals,
+  and consolidating shared ratio/error helpers will make the new plotting layer
+  smaller and easier to maintain without changing rendered behavior
+- files / symbols touched:
+  - `plot/StackedHist.hh`
+  - `plot/StackedHist.cc`
+  - `plot/UnstackedHist.hh`
+  - `plot/UnstackedHist.cc`
+  - `plot/EfficiencyPlot.hh`
+  - `plot/EfficiencyPlot.cc`
+  - `plot/PlottingHelper.hh`
+  - `plot/PlottingHelper.cc`
+  - `plot/bits/DataMcHistogramUtils.hh`
+- verification results:
+  - `git diff --check` passed on the touched tracking and `plot/` files
+  - Docker `Plot` target rebuild passed in `/tmp/amarantin-plot-cleanup-build`
+
 ## 1. Objective
-Make `tools/run-macro` smaller, flatter, and more portable by removing the
-`mapfile` dependency, collapsing duplicated literal-coercion branches, and
-preserving the documented invocation grammar.
+Port the legacy `heron` plotting surface into `amarantin` by adding a smaller,
+`EventListIO`-native version of `Plotter`, `PlottingHelper`, `StackedHist`, and
+`UnstackedHist`, while keeping the existing `Plot` target and current plotting
+entrypoints intact.
 
 ## 2. Constraints
-- Preserve the supported invocation shape documented in `COMMANDS` and `USAGE`.
-- Do not change installed headers, installed targets, or root `CMake` surfaces.
-- Keep `io/`, `ana/`, `syst/`, and `plot/` behavior unchanged in this pass.
-- Treat `ana/Snapshot.hh`, `io/EventListIO.hh`, and `syst/Systematics.hh` as
-  audit-only unless a private-side simplification avoids public-surface edits.
+- Preserve existing installed targets, especially `Plot`.
+- Keep the current `EventDisplay`, `EventListPlotting`, and `EfficiencyPlot`
+  behavior unchanged.
+- Do not pull `heron`'s old selection / frame wrapper stack into this repo.
+- Keep the new plotting layer centered on `EventListIO`, framework-owned event
+  list branches, and direct ROOT drawing.
 - Leave unrelated worktree changes untouched.
 
 ## 3. Design anchor
 From `DESIGN.md`:
-- keep workflows direct and cheap to change
+- keep `io/` persistence-only
 - add abstractions only when they delete complexity
-- keep module boundaries sharp
-- do a small deletion pass after each feature pass
+- prefer plain data and namespace functions
+- prefer `EventListIO`-first downstream APIs in `plot/`
 
-For this pass, that means preferring a concentrated `tools/` simplification over
-speculative public-header churn.
+That means porting the plotting capability, but not the old `SelectionEntry` /
+`Frame` graph from `heron`.
 
 ## 4. System map
-- `tools/run-macro`
-- `.agent/PLANS.md`
-- `.agent/current_execplan.md`
-- `docs/minimality-log.md`
+- `plot/CMakeLists.txt`
+- `plot/PlotDescriptors.hh`
+- `plot/PlotChannels.hh`
+- `plot/PlottingHelper.hh`
+- `plot/PlottingHelper.cc`
+- `plot/Plotter.hh`
+- `plot/Plotter.cc`
+- `plot/StackedHist.hh`
+- `plot/StackedHist.cc`
+- `plot/UnstackedHist.hh`
+- `plot/UnstackedHist.cc`
+- `.rootlogon.C`
+- legacy reference files under
+  `/Users/user/programs/heron/framework/modules/plot/`
 - verification commands:
-  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
-  - `cmake --build build --parallel`
-  - `cmake --build build --target IO Ana Syst Plot mk_sample mk_dataset mk_eventlist`
-  - `bash -n tools/mklist.sh tools/run-macro tools/overnight-minimality-pass.sh`
-  - `build/bin/mk_sample --help`
-  - `build/bin/mk_dataset --help || true`
-  - `build/bin/mk_eventlist --help || true`
+  - `cmake --build build --target Plot --parallel`
+  - `bash -n tools/run-macro`
+  - one focused smoke that instantiates the new plotting surface
 
 ## 5. Candidate simplifications
 
-### script simplification
-- `tools/run-macro`: score `5.0`
-  - simplicity gain: high
-  - regression risk: low
-  - reason: concentrated non-installed shell complexity, plus a real Bash 3
-    portability bug from `mapfile` that currently breaks type inference
+### boundary sharpening
+- keep the port on top of `EventListIO` sample trees, `__analysis_channel__`,
+  and `__w__`
+- avoid reviving legacy selection wrapper types that do not exist here
 
 ### wrapper collapse
-- private cleanup behind `EventListIO` / `Snapshot` / `Systematics`: score `1.0`
-  - simplicity gain: moderate
-  - regression risk: moderate to high
-  - reason: useful later, but the hotspot headers define downstream contracts
-
-### boundary sharpening
-- keep the public hotspot audit in the ledger, but do not edit installed
-  surfaces in this pass
+- expose one small descriptor layer instead of spreading plotting parameters
+  across ad hoc helpers
 
 ### doc / build cleanup
-- update only the tracking files required for this milestone
+- wire the new public headers into `Plot`
+- expose them through `.rootlogon.C` for ROOT macro usage
 
 ### stale scaffolding
-- no separate stale-scaffolding milestone unless verification exposes a local
-  deletion in touched files
+- do not introduce macro-only or repo-utility wrappers unless verification
+  proves they are needed
 
 ## 6. Milestones
 
 ### Milestone 1
 - status: done
-- hypothesis: replacing `mapfile` with a direct Bash loop and folding literal
-  matching into shared helpers will make `tools/run-macro` shorter to audit,
-  more portable, and closer to its documented typed-argument behavior
+- hypothesis: a small descriptor layer plus direct `EventListIO`-based
+  stack/unstack renderers will recover the useful `heron` plotting capability
+  with less coupling than the legacy implementation
 - files / symbols touched:
-  - `tools/run-macro`
-  - `.agent/current_execplan.md`
+  - `plot/PlotDescriptors.hh`
+  - `plot/PlotChannels.hh`
+  - `plot/PlottingHelper.hh`
+  - `plot/PlottingHelper.cc`
+  - `plot/Plotter.hh`
+  - `plot/Plotter.cc`
+  - `plot/StackedHist.hh`
+  - `plot/StackedHist.cc`
+  - `plot/UnstackedHist.hh`
+  - `plot/UnstackedHist.cc`
+  - `plot/CMakeLists.txt`
+  - `.rootlogon.C`
   - `docs/minimality-log.md`
-- expected behavior risk: low
+- expected behavior risk: moderate
 - verification commands:
-  - `bash -n tools/mklist.sh tools/run-macro tools/overnight-minimality-pass.sh`
-  - stubbed `root` invocation checks for representative macros
-  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
-  - `cmake --build build --parallel`
-  - `cmake --build build --target IO Ana Syst Plot mk_sample mk_dataset mk_eventlist`
-  - `build/bin/mk_sample --help`
-  - `build/bin/mk_dataset --help || true`
-  - `build/bin/mk_eventlist --help || true`
+  - `cmake --build build --target Plot --parallel`
+  - `bash -n tools/run-macro`
+  - focused compile or ROOT smoke using the new plot classes
 - acceptance criteria:
-  - no `mapfile` dependency remains in `tools/run-macro`
-  - representative numeric and boolean arguments stay unquoted in the generated
-    ROOT invocation
-  - shell checks pass
-  - requested configure/build/smoke verification is attempted and any failures
-    are repaired or recorded
+  - `Plot` builds with the new headers and sources
+  - the new plotting layer can produce stack and unstack plots from
+    `EventListIO`
+  - existing plot code continues to compile
+  - the port stays `EventListIO`-first and does not import legacy selection
+    wrappers
 
 ## 7. Public-surface check
-- compatibility impact: none intended; this pass stays inside `tools/` plus the
-  required tracking docs
-- migration note: non-goal; keep current macro wrapper invocation shape
-- reviewer sign-off: not required because no installed header, CLI executable,
-  or build surface changes are planned
+- compatibility impact: adds installed public headers under `plot/` and extends
+  the public `Plot` surface
+- migration note: additive only; existing plotting entrypoints remain supported
+- reviewer sign-off: required only if follow-up work wants to remove or rename
+  the new headers after this port
 
 ## 8. Reduction ledger
 - files deleted: 0
 - wrappers removed: 0
-- shell branches removed:
-  - removed the `mapfile` dependency from argument-kind loading
-  - collapsed three standalone literal matcher helpers into one shared matcher
-  - replaced the prefixed-literal regex cascade with one `case` dispatch
-  - replaced the manual argument join loop with one formatted join
+- shell branches removed: 0
 - stale docs removed: 0
 - targets or dependencies removed: 0
-- approximate LOC delta: `git diff --stat` for this pass is `153 insertions`,
-  `313 deletions`; the code change in `tools/run-macro` is net small but
-  flatter in control flow
+- approximate LOC delta: pending implementation and verification
+- approximate LOC delta: about `+2k` additive LOC across the new plotting
+  surface and integration points
 
 ## 9. Decision log
-- Prioritize the `tools/run-macro` portability bug over broader C++ cleanup.
-- Treat `ana/Snapshot.hh`, `io/EventListIO.hh`, and `syst/Systematics.hh` as
-  current audit hotspots, not edit targets.
-- Keep the milestone fully inside non-installed code unless verification forces
-  a follow-up fix.
-- Stop after the tool-only milestone because the remaining audited hotspots are
-  public-surface work and the requested build verification is environment-limited.
+- Reuse the legacy visual model and API shape where it helps, but keep the data
+  source model native to `amarantin`.
+- Treat external samples as MC-like stack components, not overlaid data, because
+  `EventListBuild` gives them framework channel code `1` and weighted yields.
+- Prefer direct ROOT histogram filling from per-sample `TTree`s over introducing
+  `RDataFrame`-specific wrapper types that the current repo does not have.
 
 ## 10. Stop conditions
-- Stop after this verified loop unless another non-installed simplification has
-  clearly comparable payoff and low risk.
-- Stop if the remaining work is mostly public-API churn, formatting, or broad
-  reorganization.
+- Stop after the new plotting surface is built and smoke-tested.
+- Stop if parity with `heron` requires importing large legacy abstractions
+  rather than extending the new `EventListIO`-native layer.
+- Stop if the remaining work is mostly styling or macro sugar rather than core
+  plotting capability.
+
+---
+
+# ExecPlan Addendum: Fit Library Pass
+
+## 1. Objective
+Add a small native `fit/` library that profiles a `ChannelIO` signal-strength
+parameter against persisted process templates and mode payloads, while keeping
+the current `io/` / `syst/` boundaries intact and documenting the fit surface in
+the root `README`.
+
+## 2. Constraints
+- Preserve existing installed targets and keep the new work additive.
+- Keep `io/` persistence-only; do not move fit logic or optimizer code there.
+- Keep the first pass centered on `ChannelIO`, not on raw ntuples or ad hoc
+  ROOT macro entrypoints.
+- Leave unrelated worktree changes untouched.
+
+## 3. Design anchor
+From `DESIGN.md`:
+- `io/` owns persistence only
+- keep workflows in `app/`
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+That justifies a new, flat `fit/` module with plain structs plus free
+functions, instead of importing `collie`'s old I/O and fitter class graph.
+
+## 4. System map
+- `CMakeLists.txt`
+- `fit/CMakeLists.txt`
+- `fit/XsecFit.hh`
+- `fit/XsecFit.cc`
+- `README`
+- `io/ChannelIO.hh`
+- verification commands:
+  - `cmake --build build --target Fit --parallel`
+
+## 5. Candidate simplifications
+
+### boundary sharpening
+- keep the fit layer on `ChannelIO` rather than reaching back into `EventListIO`
+  or pushing optimizer logic into `io/`
+
+### wrapper collapse
+- expose one small `fit::Model` / `fit::Result` surface instead of several
+  builder or manager classes
+
+### doc / build cleanup
+- wire the new library into the main CMake graph and document the toy scan in
+  the root `README`
+
+### stale scaffolding
+- avoid porting `collie`'s legacy loader and mass-point wrapper surface
+
+## 6. Milestones
+
+### Milestone 1
+- status: done
+- hypothesis: one additive `Fit` library with a direct `ChannelIO` surface is a
+  smaller and easier-to-grep first step than porting `collie` wholesale
+- files / symbols touched:
+  - `CMakeLists.txt`
+  - `fit/CMakeLists.txt`
+  - `fit/XsecFit.hh`
+  - `fit/XsecFit.cc`
+  - `README`
+  - `docs/minimality-log.md`
+- expected behavior risk: moderate
+- verification commands:
+  - `cmake --build build --target Fit --parallel`
+- acceptance criteria:
+  - `Fit` builds as a standalone library target
+  - the public fit surface stays plain-data and `ChannelIO`-first
+  - the root `README` documents the toy scan requested by the user
+
+## 7. Public-surface check
+- compatibility impact: additive installed target `Fit` and additive public
+  header `XsecFit.hh`
+- migration note: no existing CLI or installed header was renamed or removed
+- reviewer sign-off: required only if follow-up work wants to change the new
+  header name or fold `fit/` into another module
+
+## 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- targets or dependencies removed: 0
+- approximate LOC delta: about `+500` additive LOC for the first native fit pass
+
+## 9. Decision log
+- Use one nuisance per persisted mode by default and leave shared
+  cross-process-correlation bookkeeping to a later channel-assembly pass.
+- Prefer a small built-in profile scan over adding another external fitting
+  dependency in the first pass.
+
+## 10. Stop conditions
+- Stop after the additive `Fit` target builds and the root `README` is updated.
+- Stop if the next useful step requires redesigning persisted correlation
+  metadata rather than finishing the small native fitter surface.
+
+---
+
+# ExecPlan Addendum: Fit Workflow Wiring Pass
+
+## 1. Objective
+Wire the additive `fit/` library into the normal `amarantin` workflow so a user
+can assemble a small `ChannelIO` fit input and run the native xsec fit through
+`app/` executables instead of ad hoc local code.
+
+## 2. Constraints
+- Preserve existing installed targets and current `mk_sample` / `mk_dataset` /
+  `mk_eventlist` behavior.
+- Keep `io/` persistence-only and keep workflow orchestration in `app/`.
+- Keep the first channel assembly pass small: one signal process, one
+  background process, and optional observed data bins on common binning.
+- Leave unrelated worktree changes untouched.
+
+## 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+That favors two thin CLIs on top of the existing `ChannelIO` and `fit::`
+surfaces, rather than another persistence class or macro-only workflow.
+
+## 4. System map
+- `app/CMakeLists.txt`
+- `app/mk_channel.cc`
+- `app/mk_xsec_fit.cc`
+- `fit/XsecFit.hh`
+- `fit/XsecFit.cc`
+- `COMMANDS`
+- `INSTALL`
+- `USAGE`
+- `README`
+- verification commands:
+  - `cmake --build build --target mk_channel --parallel`
+  - `cmake --build build --target mk_xsec_fit --parallel`
+  - `build/bin/mk_channel --help || true`
+  - `build/bin/mk_xsec_fit --help || true`
+
+## 5. Candidate simplifications
+
+### boundary sharpening
+- keep channel assembly and fit execution in `app/` instead of `io/` or
+  ROOT-only macros
+
+### wrapper collapse
+- add one direct `fit::profile_xsec(...)` convenience overload for
+  `ChannelIO::Channel` so the CLI stays thin
+
+### doc / build cleanup
+- document the new `mk_channel` and `mk_xsec_fit` workflow next to the existing
+  `mk_*` commands
+
+### stale scaffolding
+- avoid adding a new fit-result persistence layer until a real downstream need
+  appears
+
+## 6. Milestones
+
+### Milestone 1
+- status: done
+- hypothesis: a small `mk_channel` + `mk_xsec_fit` path is the smallest change
+  that makes the native fit library usable in the repo's normal workflow
+- files / symbols touched:
+  - `app/CMakeLists.txt`
+  - `app/mk_channel.cc`
+  - `app/mk_xsec_fit.cc`
+  - `fit/XsecFit.hh`
+  - `fit/XsecFit.cc`
+  - `COMMANDS`
+  - `INSTALL`
+  - `USAGE`
+  - `README`
+- expected behavior risk: moderate
+- verification commands:
+  - `cmake --build build --target mk_channel --parallel`
+  - `cmake --build build --target mk_xsec_fit --parallel`
+  - focused CLI help / smoke checks
+- acceptance criteria:
+  - the repo builds additive `mk_channel` and `mk_xsec_fit` executables
+  - `mk_xsec_fit` runs directly from `ChannelIO`
+  - the docs show the end-to-end channel and fit workflow
+
+## 7. Public-surface check
+- compatibility impact: additive executables and additive `fit::` convenience
+  overloads only
+- migration note: existing users of `fit::Model` keep working; the new CLI path
+  is an additive shortcut
+- reviewer sign-off: required only if a later pass wants to replace existing
+  workflow commands rather than extend them
+
+## 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- targets or dependencies removed: 0
+- approximate LOC delta: about `+250` additive LOC for the CLI wiring plus doc
+  updates
+
+## 9. Decision log
+- Prefer a text-report fit result over adding `FitResultIO` in the first app
+  wiring pass.
+- Keep the first `mk_channel` path intentionally small and explicit rather than
+  adding generic multi-process parsing.
+
+## 10. Stop conditions
+- Stop after the CLI workflow builds and the docs reflect it.
+- Stop if the next step is mostly a generalized process-spec parser or a new
+  persistence surface rather than direct workflow wiring.
+
+---
+
+# ExecPlan Addendum: Root-Clutter Reduction Pass
+
+## 1. Objective
+Reduce root-directory clutter from ad hoc CMake build trees without changing
+the canonical `build/` workflow or deleting any existing generated directories.
+
+## 2. Constraints
+- Preserve the documented primary build path:
+  `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+- Do not delete or move existing build trees in this pass.
+- Keep the change small and tool-based: prevent new clutter rather than trying
+  to clean the whole workspace aggressively.
+- Leave unrelated worktree changes untouched.
+
+## 3. Design anchor
+From `DESIGN.md`:
+- keep workflows direct
+- keep helper scripts short
+- add abstractions only when they delete complexity
+
+That favors one short helper script plus workspace exclusions, rather than a
+larger build-management layer.
+
+## 4. System map
+- `.gitignore`
+- `.vscode/settings.json`
+- `tools/configure-build`
+- `COMMANDS`
+- `INSTALL`
+- `USAGE`
+- verification commands:
+  - `bash -n tools/configure-build`
+  - `python3 -m json.tool .vscode/settings.json`
+
+## 5. Candidate simplifications
+
+### script simplification
+- add one tiny helper that routes extra builds into `.build/<name>`
+
+### boundary sharpening
+- keep the canonical `build/` path for the main documented workflow
+- keep scratch builds in one hidden parent instead of many root-level
+  directories
+
+### doc / build cleanup
+- document the hidden multi-build convention next to the existing build docs
+- hide clutter in the workspace explorer without changing build outputs
+
+### stale scaffolding
+- avoid deleting existing build trees in this pass
+
+## 6. Milestones
+
+### Milestone 1
+- status: done
+- hypothesis: one hidden-parent convention plus editor exclusions is enough to
+  stop root clutter from getting worse
+- files / symbols touched:
+  - `.gitignore`
+  - `.vscode/settings.json`
+  - `tools/configure-build`
+  - `COMMANDS`
+  - `INSTALL`
+  - `USAGE`
+- expected behavior risk: low
+- verification commands:
+  - `bash -n tools/configure-build`
+  - `python3 -m json.tool .vscode/settings.json`
+- acceptance criteria:
+  - extra builds can be configured under `.build/<name>`
+  - common editor views hide root-level generated build trees
+  - docs point users at the new convention
+
+## 7. Public-surface check
+- compatibility impact: additive helper script and additive workspace settings
+  only
+- migration note: the existing `build/` path remains the primary documented
+  build path
+
+## 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- targets or dependencies removed: 0
+- approximate LOC delta: about `+40` additive LOC for one helper, one workspace
+  settings file, and small doc updates
+
+## 9. Decision log
+- Use a hidden `.build/` parent for extra build trees instead of changing the
+  canonical `build/` directory.
+- Prefer non-destructive decluttering over deleting existing build trees.
+
+## 10. Stop conditions
+- Stop after the helper, ignores, and docs are in place.
+- Stop if the next step would require deleting or relocating user build trees
+  without an explicit ask.

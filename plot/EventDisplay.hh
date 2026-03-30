@@ -13,10 +13,10 @@
 
 #include "TCanvas.h"
 #include "TTree.h"
+#include "TTreeReader.h"
+#include "TTreeReaderValue.h"
 
-class TH1F;
 class TH2F;
-class TLegend;
 
 namespace plot_utils
 {
@@ -66,20 +66,17 @@ namespace plot_utils
                                                int requested_h,
                                                std::size_t flat_size);
         void setup_canvas(TCanvas &canvas) const;
-        void build_histogram();
-        void style_axes() const;
-        void draw_detector(TCanvas &canvas);
-        void draw_semantic(TCanvas &canvas);
-        void draw_semantic_legend();
+        std::unique_ptr<TH2F> build_histogram() const;
+        void style_axes(TH2F &hist) const;
+        void draw_detector(TCanvas &canvas, TH2F &hist) const;
+        void draw_semantic(TCanvas &canvas, TH2F &hist) const;
+        void draw_semantic_legend() const;
 
         Spec spec_;
         Options opt_;
         DetectorData detector_;
         SemanticData semantic_;
         SparseIndex indices_;
-        std::unique_ptr<TH2F> hist_;
-        std::unique_ptr<TLegend> legend_;
-        std::vector<std::unique_ptr<TH1F>> legend_entries_;
     };
 
     namespace event_display
@@ -124,27 +121,6 @@ namespace plot_utils
             return branches.idx_w;
         }
 
-        template <class T>
-        inline std::vector<T> read_vector_branch(TTree *tree,
-                                                 const std::string &branch_name,
-                                                 Long64_t entry)
-        {
-            std::vector<T> *ptr = nullptr;
-            tree->SetBranchAddress(branch_name.c_str(), &ptr);
-            tree->GetEntry(entry);
-            return ptr ? *ptr : std::vector<T>{};
-        }
-
-        inline int read_int_branch(TTree *tree,
-                                   const std::string &branch_name,
-                                   Long64_t entry)
-        {
-            int value = 0;
-            tree->SetBranchAddress(branch_name.c_str(), &value);
-            tree->GetEntry(entry);
-            return value;
-        }
-
         inline TCanvas *draw_one(const EventListIO &eventlist,
                                  const std::string &sample_key,
                                  Long64_t entry,
@@ -161,41 +137,63 @@ namespace plot_utils
             if (entry < 0 || entry >= tree->GetEntries())
                 throw std::runtime_error("plot_utils::event_display::draw_one: entry out of range");
 
-            const int run = read_int_branch(tree, branches.run, entry);
-            const int sub = read_int_branch(tree, branches.sub, entry);
-            const int evt = read_int_branch(tree, branches.evt, entry);
-
-            const std::string id = plane + "_" + std::to_string(run) + "_" +
-                                   std::to_string(sub) + "_" + std::to_string(evt);
-            const std::string title =
-                std::string(mode == EventDisplay::Mode::kDetector ? "Detector" : "Semantic") +
-                " Image, Plane " + plane +
-                " - Run " + std::to_string(run) +
-                ", Subrun " + std::to_string(sub) +
-                ", Event " + std::to_string(evt);
-
-            EventDisplay::Spec spec{id, title, mode, grid_w, grid_h};
-            std::vector<std::uint32_t> indices =
-                read_vector_branch<std::uint32_t>(tree, index_branch_for_plane(branches, plane), entry);
+            const std::string context = "plot_utils::event_display::draw_one";
+            TTreeReader reader(tree);
+            TTreeReaderValue<int> run_reader(reader, branches.run.c_str());
+            TTreeReaderValue<int> sub_reader(reader, branches.sub.c_str());
+            TTreeReaderValue<int> evt_reader(reader, branches.evt.c_str());
+            TTreeReaderValue<std::vector<std::uint32_t>> index_reader(reader,
+                                                                      index_branch_for_plane(branches, plane).c_str());
 
             if (mode == EventDisplay::Mode::kDetector)
             {
-                EventDisplay::DetectorData data =
-                    read_vector_branch<float>(tree, branch_for_plane(branches, plane, mode), entry);
-                EventDisplay display(spec, options, std::move(data), std::move(indices));
+                TTreeReaderValue<std::vector<float>> data_reader(reader,
+                                                                 branch_for_plane(branches, plane, mode).c_str());
+                if (reader.SetEntry(entry) != TTreeReader::kEntryValid)
+                    throw std::runtime_error(context + ": failed to read requested entry");
+
+                const int run = *run_reader;
+                const int sub = *sub_reader;
+                const int evt = *evt_reader;
+
+                const std::string id = plane + "_" + std::to_string(run) + "_" +
+                                       std::to_string(sub) + "_" + std::to_string(evt);
+                const std::string title =
+                    "Detector Image, Plane " + plane +
+                    " - Run " + std::to_string(run) +
+                    ", Subrun " + std::to_string(sub) +
+                    ", Event " + std::to_string(evt);
+
+                EventDisplay::Spec spec{id, title, mode, grid_w, grid_h};
+                EventDisplay display(spec, options, *data_reader, *index_reader);
                 TCanvas *canvas = new TCanvas(id.c_str(), title.c_str(),
                                               options.canvas_size, options.canvas_size);
                 display.draw(*canvas);
                 return canvas;
             }
 
-            std::vector<unsigned char> raw =
-                read_vector_branch<unsigned char>(tree, branch_for_plane(branches, plane, mode), entry);
+            TTreeReaderValue<std::vector<unsigned char>> raw_reader(reader,
+                                                                    branch_for_plane(branches, plane, mode).c_str());
+            if (reader.SetEntry(entry) != TTreeReader::kEntryValid)
+                throw std::runtime_error(context + ": failed to read requested entry");
+
+            const int run = *run_reader;
+            const int sub = *sub_reader;
+            const int evt = *evt_reader;
+            const std::string id = plane + "_" + std::to_string(run) + "_" +
+                                   std::to_string(sub) + "_" + std::to_string(evt);
+            const std::string title =
+                "Semantic Image, Plane " + plane +
+                " - Run " + std::to_string(run) +
+                ", Subrun " + std::to_string(sub) +
+                ", Event " + std::to_string(evt);
+
             EventDisplay::SemanticData data;
-            data.reserve(raw.size());
-            for (unsigned char value : raw)
+            data.reserve(raw_reader->size());
+            for (unsigned char value : *raw_reader)
                 data.push_back(static_cast<int>(value));
-            EventDisplay display(spec, options, std::move(data), std::move(indices));
+            EventDisplay::Spec spec{id, title, mode, grid_w, grid_h};
+            EventDisplay display(spec, options, std::move(data), *index_reader);
             TCanvas *canvas = new TCanvas(id.c_str(), title.c_str(),
                                           options.canvas_size, options.canvas_size);
             display.draw(*canvas);

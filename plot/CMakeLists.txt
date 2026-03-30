@@ -2,12 +2,22 @@ set(AMARANTIN_PLOT_SOURCES
   EfficiencyPlot.cc
   EventDisplay.cc
   EventListPlotting.cc
+  Plotter.cc
+  PlottingHelper.cc
+  StackedHist.cc
+  UnstackedHist.cc
 )
 
 set(AMARANTIN_PLOT_PUBLIC_HEADERS
   EfficiencyPlot.hh
   EventDisplay.hh
   EventListPlotting.hh
+  PlotChannels.hh
+  PlotDescriptors.hh
+  Plotter.hh
+  PlottingHelper.hh
+  StackedHist.hh
+  UnstackedHist.hh
 )
 
 add_library(Plot SHARED

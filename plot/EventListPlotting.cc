@@ -12,6 +12,14 @@
 
 namespace plot_utils
 {
+    namespace
+    {
+        bool uses_event_weights(const EventListIO &eventlist, const std::string &sample_key)
+        {
+            return eventlist.sample(sample_key).origin != DatasetIO::Sample::Origin::kData;
+        }
+    }
+
     std::vector<std::string> selected_sample_keys(const EventListIO &eventlist,
                                                   const char *sample_key)
     {
@@ -44,7 +52,8 @@ namespace plot_utils
                 continue;
 
             const std::string draw_expr = std::string(branch_expr) + ">>+" + hist_name;
-            tree->Draw(draw_expr.c_str(), "", "goff");
+            const char *weight_expr = uses_event_weights(eventlist, key) ? "__w__" : "";
+            tree->Draw(draw_expr.c_str(), weight_expr, "goff");
         }
 
         return hist;

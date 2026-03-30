@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cctype>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -59,6 +60,11 @@ namespace
             return 0;
         const std::string expr = selection == "1" ? std::string{} : selection;
         return static_cast<std::uint64_t>(tree->Draw("1", expr.c_str(), "goff"));
+    }
+
+    double histogram_yield(const TH1D &hist)
+    {
+        return hist.Integral(0, hist.GetNbinsX() + 1);
     }
 
     std::unique_ptr<TGraphAsymmErrors> make_efficiency_graph(const TH1D &passed,
@@ -149,6 +155,22 @@ namespace plot_utils
     }
 
     EfficiencyPlot::~EfficiencyPlot() = default;
+
+    double EfficiencyPlot::denom_total() const noexcept
+    {
+        return h_total_ ? histogram_yield(*h_total_) : 0.0;
+    }
+
+    double EfficiencyPlot::pass_total() const noexcept
+    {
+        return h_passed_ ? histogram_yield(*h_passed_) : 0.0;
+    }
+
+    double EfficiencyPlot::overall_efficiency() const noexcept
+    {
+        const double denom = denom_total();
+        return denom > 0.0 ? pass_total() / denom : 0.0;
+    }
 
     int EfficiencyPlot::compute(const EventListIO &eventlist,
                                 const std::string &denom_sel,
@@ -387,16 +409,33 @@ namespace plot_utils
         text.SetTextFont(42);
         text.SetTextSize(0.035);
 
+        const double reported_denom = cfg_.use_weighted_events
+                                          ? denom_total()
+                                          : static_cast<double>(n_denom_);
+        const double reported_pass = cfg_.use_weighted_events
+                                         ? pass_total()
+                                         : static_cast<double>(n_pass_);
+        const double reported_eff = cfg_.use_weighted_events
+                                        ? overall_efficiency()
+                                        : (reported_denom > 0.0 ? reported_pass / reported_denom : 0.0);
+
         double text_y = 0.88;
         if (cfg_.draw_stats_text)
         {
             std::ostringstream stats;
-            const double overall = n_denom_ > 0
-                                       ? static_cast<double>(n_pass_) / static_cast<double>(n_denom_)
-                                       : 0.0;
-            stats << "denom=" << n_denom_
-                  << " pass=" << n_pass_
-                  << " eff=" << overall;
+            stats << std::setprecision(6);
+            if (cfg_.use_weighted_events)
+            {
+                stats << "denom_w=" << reported_denom
+                      << " pass_w=" << reported_pass
+                      << " eff_w=" << reported_eff;
+            }
+            else
+            {
+                stats << "denom=" << n_denom_
+                      << " pass=" << n_pass_
+                      << " eff=" << reported_eff;
+            }
             text.DrawLatex(0.16, text_y, stats.str().c_str());
             text_y -= 0.05;
         }
@@ -409,15 +448,25 @@ namespace plot_utils
 
         if (cfg_.print_stats)
         {
-            const double overall = n_denom_ > 0
-                                       ? static_cast<double>(n_pass_) / static_cast<double>(n_denom_)
-                                       : 0.0;
-            std::cout << "efficiency_plot"
-                      << " branch=" << spec_.branch_expr
-                      << " denom=" << n_denom_
-                      << " pass=" << n_pass_
-                      << " efficiency=" << overall
-                      << "\n";
+            std::ostringstream msg;
+            msg << std::setprecision(6)
+                << "efficiency_plot"
+                << " branch=" << spec_.branch_expr;
+            if (cfg_.use_weighted_events)
+            {
+                msg << " denom_w=" << reported_denom
+                    << " pass_w=" << reported_pass
+                    << " efficiency_w=" << reported_eff
+                    << " denom_rows=" << n_denom_
+                    << " pass_rows=" << n_pass_;
+            }
+            else
+            {
+                msg << " denom=" << n_denom_
+                    << " pass=" << n_pass_
+                    << " efficiency=" << reported_eff;
+            }
+            std::cout << msg.str() << "\n";
         }
 
         canvas->cd();

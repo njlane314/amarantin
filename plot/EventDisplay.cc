@@ -11,11 +11,10 @@
 
 #include "TCanvas.h"
 #include "TColor.h"
-#include "TH1F.h"
 #include "TH2F.h"
 #include "TLegend.h"
+#include "TLegendEntry.h"
 #include "TStyle.h"
-#include "TTree.h"
 
 namespace plot_utils
 {
@@ -34,19 +33,20 @@ namespace plot_utils
     void EventDisplay::draw(TCanvas &canvas)
     {
         setup_canvas(canvas);
-        build_histogram();
+        auto hist = build_histogram();
 
         if (spec_.mode == Mode::kDetector)
         {
-            draw_detector(canvas);
+            draw_detector(canvas, *hist);
         }
         else
         {
-            draw_semantic(canvas);
+            draw_semantic(canvas, *hist);
             if (opt_.show_legend)
                 draw_semantic_legend();
         }
 
+        canvas.Modified();
         canvas.Update();
     }
 
@@ -87,7 +87,7 @@ namespace plot_utils
         gStyle->SetTitleY(1 - m / 3.0);
     }
 
-    void EventDisplay::build_histogram()
+    std::unique_ptr<TH2F> EventDisplay::build_histogram() const
     {
         const std::size_t flat_size =
             !indices_.empty()
@@ -96,15 +96,15 @@ namespace plot_utils
 
         const auto [w, h] = deduce_grid(spec_.grid_w, spec_.grid_h, flat_size);
 
-        hist_.reset(new TH2F(spec_.id.c_str(),
-                             spec_.title.c_str(),
-                             w,
-                             0,
-                             w,
-                             h,
-                             0,
-                             h));
-        hist_->SetDirectory(nullptr);
+        auto hist = std::unique_ptr<TH2F>(new TH2F(spec_.id.c_str(),
+                                                   spec_.title.c_str(),
+                                                   w,
+                                                   0,
+                                                   w,
+                                                   h,
+                                                   0,
+                                                   h));
+        hist->SetDirectory(nullptr);
 
         const int bin_offset = 1;
         if (spec_.mode == Mode::kDetector)
@@ -123,7 +123,7 @@ namespace plot_utils
                     float x = detector_[static_cast<std::size_t>(i)];
                     if (opt_.use_log_z && x <= opt_.det_min)
                         x = static_cast<float>(opt_.det_min);
-                    hist_->SetBinContent(c + bin_offset, r + bin_offset, x);
+                    hist->SetBinContent(c + bin_offset, r + bin_offset, x);
                 }
             }
             else
@@ -138,7 +138,7 @@ namespace plot_utils
                         float x = detector_[static_cast<std::size_t>(idx)];
                         if (opt_.use_log_z && x <= opt_.det_min)
                             x = static_cast<float>(opt_.det_min);
-                        hist_->SetBinContent(c + bin_offset, r + bin_offset, x);
+                        hist->SetBinContent(c + bin_offset, r + bin_offset, x);
                     }
                 }
             }
@@ -156,8 +156,8 @@ namespace plot_utils
                     const int c = static_cast<int>(idx % static_cast<std::uint32_t>(w));
                     if (r >= h || c >= w)
                         continue;
-                    hist_->SetBinContent(c + bin_offset, r + bin_offset,
-                                         semantic_[static_cast<std::size_t>(i)]);
+                    hist->SetBinContent(c + bin_offset, r + bin_offset,
+                                        semantic_[static_cast<std::size_t>(i)]);
                 }
             }
             else
@@ -169,44 +169,45 @@ namespace plot_utils
                         const int idx = r * w + c;
                         if (idx >= n)
                             break;
-                        hist_->SetBinContent(c + bin_offset, r + bin_offset,
-                                             semantic_[static_cast<std::size_t>(idx)]);
+                        hist->SetBinContent(c + bin_offset, r + bin_offset,
+                                            semantic_[static_cast<std::size_t>(idx)]);
                     }
                 }
             }
         }
+        return hist;
     }
 
-    void EventDisplay::style_axes() const
+    void EventDisplay::style_axes(TH2F &hist) const
     {
-        hist_->GetXaxis()->SetTitle("Local Wire Coordinate");
-        hist_->GetYaxis()->SetTitle("Local Drift Coordinate");
-        hist_->GetXaxis()->CenterTitle(true);
-        hist_->GetYaxis()->CenterTitle(true);
-        hist_->GetXaxis()->SetTitleOffset(0.80);
-        hist_->GetYaxis()->SetTitleOffset(0.80);
-        hist_->GetXaxis()->SetTickLength(0);
-        hist_->GetYaxis()->SetTickLength(0);
-        hist_->GetXaxis()->SetLabelSize(0);
-        hist_->GetYaxis()->SetLabelSize(0);
-        hist_->GetXaxis()->SetAxisColor(0);
-        hist_->GetYaxis()->SetAxisColor(0);
+        hist.GetXaxis()->SetTitle("Local Wire Coordinate");
+        hist.GetYaxis()->SetTitle("Local Drift Coordinate");
+        hist.GetXaxis()->CenterTitle(true);
+        hist.GetYaxis()->CenterTitle(true);
+        hist.GetXaxis()->SetTitleOffset(0.80);
+        hist.GetYaxis()->SetTitleOffset(0.80);
+        hist.GetXaxis()->SetTickLength(0);
+        hist.GetYaxis()->SetTickLength(0);
+        hist.GetXaxis()->SetLabelSize(0);
+        hist.GetYaxis()->SetLabelSize(0);
+        hist.GetXaxis()->SetAxisColor(0);
+        hist.GetYaxis()->SetAxisColor(0);
     }
 
-    void EventDisplay::draw_detector(TCanvas &canvas)
+    void EventDisplay::draw_detector(TCanvas &canvas, TH2F &hist) const
     {
         canvas.SetFillColor(kWhite);
         canvas.SetTicks(0, 0);
         canvas.SetLogz(opt_.use_log_z ? 1 : 0);
 
-        hist_->SetStats(false);
-        hist_->SetMinimum(opt_.det_min);
-        hist_->SetMaximum(opt_.det_max);
-        style_axes();
-        hist_->Draw("COL");
+        hist.SetStats(false);
+        hist.SetMinimum(opt_.det_min);
+        hist.SetMaximum(opt_.det_max);
+        style_axes(hist);
+        hist.DrawCopy("COL");
     }
 
-    void EventDisplay::draw_semantic(TCanvas &canvas)
+    void EventDisplay::draw_semantic(TCanvas &canvas, TH2F &hist) const
     {
         constexpr int palette_size = 15;
         const int background = TColor::GetColor(230, 230, 230);
@@ -232,13 +233,13 @@ namespace plot_utils
         canvas.SetFrameFillColor(background);
         canvas.SetTicks(0, 0);
 
-        hist_->SetStats(false);
-        hist_->GetZaxis()->SetRangeUser(-0.5, palette_size - 0.5);
-        style_axes();
-        hist_->Draw("COL");
+        hist.SetStats(false);
+        hist.GetZaxis()->SetRangeUser(-0.5, palette_size - 0.5);
+        style_axes(hist);
+        hist.DrawCopy("COL");
     }
 
-    void EventDisplay::draw_semantic_legend()
+    void EventDisplay::draw_semantic_legend() const
     {
         constexpr int palette_size = 15;
         const int background = TColor::GetColor(230, 230, 230);
@@ -258,13 +259,14 @@ namespace plot_utils
 
         const double legend_y_max = 1.0 - margin - 0.01;
         const double legend_y_min = std::max(0.80, legend_y_max - 0.10);
-        legend_.reset(new TLegend(0.12, legend_y_min, 0.95, legend_y_max, "", "brNDC"));
-        legend_->SetNColumns(std::max(1, opt_.legend_cols));
-        legend_->SetFillColor(background);
-        legend_->SetFillStyle(1001);
-        legend_->SetBorderSize(0);
-        legend_->SetTextFont(42);
-        legend_->SetTextSize(0.025);
+        TLegend *legend = new TLegend(0.12, legend_y_min, 0.95, legend_y_max, "", "brNDC");
+        legend->SetNColumns(std::max(1, opt_.legend_cols));
+        legend->SetFillColor(background);
+        legend->SetFillStyle(1001);
+        legend->SetBorderSize(0);
+        legend->SetTextFont(42);
+        legend->SetTextSize(0.025);
+        legend->SetBit(kCanDelete);
 
         const std::array<const char *, palette_size> labels = {
             "#emptyset",
@@ -300,30 +302,18 @@ namespace plot_utils
             TColor::GetColor("#a6cee3"),
             TColor::GetColor("#b15928")};
 
-        legend_entries_.clear();
         for (int idx : order)
         {
-            auto h = std::make_unique<TH1F>((spec_.id + "_leg_" + std::to_string(idx)).c_str(), "", 1, 0, 1);
-            if (counts[idx] > 0)
-            {
-                h->SetFillColor(palette[static_cast<std::size_t>(idx)]);
-                h->SetLineColor(palette[static_cast<std::size_t>(idx)]);
-                h->SetLineWidth(1);
-                h->SetFillStyle(1001);
-                legend_->AddEntry(h.get(), labels[static_cast<std::size_t>(idx)], "f");
-            }
-            else
-            {
-                h->SetFillColor(background);
-                h->SetLineColor(background);
-                h->SetLineWidth(0);
-                h->SetFillStyle(1001);
-                legend_->AddEntry(h.get(), "", "f");
-            }
-            legend_entries_.push_back(std::move(h));
+            TLegendEntry *entry = legend->AddEntry(static_cast<TObject *>(nullptr),
+                                                   counts[idx] > 0 ? labels[static_cast<std::size_t>(idx)] : "",
+                                                   "f");
+            entry->SetFillColor(counts[idx] > 0 ? palette[static_cast<std::size_t>(idx)] : background);
+            entry->SetLineColor(counts[idx] > 0 ? palette[static_cast<std::size_t>(idx)] : background);
+            entry->SetLineWidth(counts[idx] > 0 ? 1 : 0);
+            entry->SetFillStyle(1001);
         }
 
-        legend_->Draw();
+        legend->Draw();
     }
 
 }
