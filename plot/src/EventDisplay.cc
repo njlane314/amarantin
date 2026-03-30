@@ -52,16 +52,17 @@ namespace plot_utils
                                                   int requested_h,
                                                   std::size_t flat_size)
     {
+        const int cells = std::max<int>(1, static_cast<int>(flat_size));
         if (requested_w > 0 && requested_h > 0)
             return {requested_w, requested_h};
         if (requested_w > 0 && requested_h == 0)
-            return {requested_w, std::max(1, static_cast<int>(flat_size / requested_w))};
+            return {requested_w, std::max(1, static_cast<int>((cells + requested_w - 1) / requested_w))};
         if (requested_h > 0 && requested_w == 0)
-            return {std::max(1, static_cast<int>(flat_size / requested_h)), requested_h};
+            return {std::max(1, static_cast<int>((cells + requested_h - 1) / requested_h)), requested_h};
 
-        int dim = static_cast<int>(std::sqrt(static_cast<double>(flat_size)));
-        dim = std::max(1, dim);
-        return {dim, dim};
+        const int width = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(cells)))));
+        const int height = std::max(1, static_cast<int>((cells + width - 1) / width));
+        return {width, height};
     }
 
     void EventDisplay::setup_canvas(TCanvas &canvas) const
@@ -90,12 +91,6 @@ namespace plot_utils
             !indices_.empty()
                 ? (static_cast<std::size_t>(*std::max_element(indices_.begin(), indices_.end())) + 1)
                 : (spec_.mode == Mode::kDetector ? detector_.size() : semantic_.size());
-
-        if (!indices_.empty() && spec_.grid_w <= 0 && spec_.grid_h <= 0)
-        {
-            throw std::runtime_error(
-                "plot_utils::EventDisplay: sparse image display requires grid_w or grid_h");
-        }
 
         const auto [w, h] = deduce_grid(spec_.grid_w, spec_.grid_h, flat_size);
 

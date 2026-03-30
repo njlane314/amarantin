@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+cd "${ROOT_DIR}"
+
+usage() {
+  cat <<'EOF'
+usage: tools/run-macro <macro-name> [args...]
+
+Runs a ROOT macro by friendly name without exposing the raw ROOT command line.
+
+Argument types are inferred from the macro signature.
+Optional prefixes can override inference:
+  s:<text>   explicit string
+  i:<int>    integer
+  f:<float>  floating-point
+  b:true     boolean
+  n:null     nullptr
+
+Examples:
+  tools/run-macro print_eventlist build/eventlists/run1.root
+  tools/run-macro plot_topological_score build/eventlists/run1.root beam-s0
+  tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector
+  tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector 512 512
+  tools/run-macro mk_snapshot build/eventlists/run1.root train.root reco_neutrino_vertex_x,__w__
+
+Available names are discovered from:
+  io/macro
+  plot/macro
+EOF
+}
+
+if [[ $# -lt 1 ]]; then
+  usage >&2
+  exit 1
+fi
+
+macro_name=${1//-/_}
+shift || true
+
+find_macro() {
+  local name=$1
+  local path
+  for path in "io/macro/${name}.C" "plot/macro/${name}.C"; do
+    if [[ -f "${path}" ]]; then
+      printf '%s\n' "${path}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+macro_path=$(find_macro "${macro_name}") || {
+  {
+    echo "tools/run-macro: unknown macro: ${macro_name}"
+    echo
+    usage
+  } >&2
+  exit 1
+}
+
+escape_cpp_string() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\t'/\\t}
+  printf '%s' "${s}"
+}
+
+extract_signature() {
+  local name=$1
+  local path=$2
+  awk -v name="${name}" '
+    BEGIN { capture = 0 }
+    {
+      line = $0
+      sub(/\/\/.*/, "", line)
+      if (!capture && line ~ "^[[:space:]]*void[[:space:]]+" name "\\(")
+        capture = 1
+      if (capture)
+      {
+        printf "%s ", line
+        if (line ~ /\)[[:space:]]*\{/ || line ~ /\)[[:space:]]*$/)
+          exit
+      }
+    }
+  ' "${path}"
+}
+
+parameter_kinds() {
+  local signature=$1
+  local params=${signature#*(}
+  params=${params%)*}
+  params=${params%\{}
+
+  IFS=',' read -r -a raw_params <<< "${params}"
+  local raw
+  for raw in "${raw_params[@]}"; do
+    raw=${raw%%=*}
+    raw=$(printf '%s' "${raw}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+    [[ -z "${raw}" ]] && continue
+    if [[ "${raw}" =~ (^|[[:space:]\*&])(bool)([[:space:]\*&]|$) ]]; then
+      printf 'bool\n'
+    elif [[ "${raw}" =~ Long64_t|int|size_t|unsigned[[:space:]]+long|unsigned[[:space:]]+int ]]; then
+      printf 'int\n'
+    elif [[ "${raw}" =~ float|double ]]; then
+      printf 'float\n'
+    else
+      printf 'string\n'
+    fi
+  done
+}
+
+to_cpp_literal() {
+  local arg=$1
+  local kind=${2:-string}
+
+  if [[ "${arg}" == n:null ]]; then
+    printf 'nullptr'
+    return 0
+  fi
+  if [[ "${arg}" =~ ^b:(true|false)$ ]]; then
+    printf '%s' "${arg#b:}"
+    return 0
+  fi
+  if [[ "${arg}" =~ ^i:[-+]?[0-9]+$ ]]; then
+    printf '%s' "${arg#i:}"
+    return 0
+  fi
+  if [[ "${arg}" =~ ^f:[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
+    printf '%s' "${arg#f:}"
+    return 0
+  fi
+
+  case "${kind}" in
+    bool)
+      if [[ "${arg}" =~ ^(true|false)$ ]]; then
+        printf '%s' "${arg}"
+        return 0
+      fi
+      ;;
+    int)
+      if [[ "${arg}" =~ ^[-+]?[0-9]+$ ]]; then
+        printf '%s' "${arg}"
+        return 0
+      fi
+      ;;
+    float)
+      if [[ "${arg}" =~ ^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
+        printf '%s' "${arg}"
+        return 0
+      fi
+      ;;
+  esac
+
+  if [[ "${arg}" == s:* ]]; then
+    arg=${arg#s:}
+  fi
+
+  printf '"%s"' "$(escape_cpp_string "${arg}")"
+}
+
+build_invocation() {
+  local path=$1
+  local name=$2
+  shift || true
+  shift || true
+
+  if [[ $# -eq 0 ]]; then
+    printf '%s' "${path}"
+    return 0
+  fi
+
+  local signature
+  signature=$(extract_signature "${name}" "${path}")
+  local -a kinds
+  local kind_line
+  while IFS= read -r kind_line; do
+    [[ -n "${kind_line}" ]] && kinds+=("${kind_line}")
+  done <<EOF
+$(parameter_kinds "${signature}")
+EOF
+
+  local args=()
+  local arg
+  local i=0
+  for arg in "$@"; do
+    local kind=string
+    if [[ ${i} -lt ${#kinds[@]} ]]; then
+      kind=${kinds[$i]}
+    fi
+    args+=("$(to_cpp_literal "${arg}" "${kind}")")
+    i=$((i + 1))
+  done
+
+  local joined=
+  local i
+  for i in "${!args[@]}"; do
+    if [[ $i -gt 0 ]]; then
+      joined+=", "
+    fi
+    joined+="${args[$i]}"
+  done
+
+  printf '%s(%s)' "${path}" "${joined}"
+}
+
+invocation=$(build_invocation "${macro_path}" "${macro_name}" "$@")
+exec root -l -q "${invocation}"

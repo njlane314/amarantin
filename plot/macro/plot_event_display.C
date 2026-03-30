@@ -1,3 +1,7 @@
+#include <stdexcept>
+
+#include "EventDisplay.hh"
+
 void plot_event_display(const char *read_path = nullptr,
                         const char *sample_key = nullptr,
                         Long64_t entry = 0,
