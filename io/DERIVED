@@ -14,6 +14,17 @@ EventListIO copies selected entries from the upstream event tree and adds a
 small framework-owned set of helper columns. SnapshotService can then produce
 flat training trees from those selected event lists.
 
+In the current code layout:
+
+  EventListIO
+    owns the file format and persistence only
+
+  ana::EventListBuilder
+    builds selected event lists and helper columns into EventListIO
+
+  syst::SystematicsCacheBuilder
+    computes and persists rebinnable systematics caches into EventListIO
+
 Framework-owned column naming rule
 ----------------------------------
 
@@ -311,6 +322,13 @@ The intended workflow is:
   1. precompute a fine-binned cache once
   2. persist it into EventListIO
   3. rebin the cached nominal/templates/eigenmodes later during plotting
+
+These caches can be built either:
+
+  * as part of the event-list workflow by running ana::EventListBuilder and then
+    syst::SystematicsCacheBuilder
+  * later on an existing file by reopening EventListIO in update mode and
+    calling syst::SystematicsCacheBuilder
 
 Detector-systematic caching stores per-variation fine templates so envelopes
 can be rebuilt after rebinning.

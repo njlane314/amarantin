@@ -754,7 +754,7 @@ namespace
     }
 }
 
-namespace plot_utils
+namespace syst
 {
     std::string SystematicsEngine::cache_key(const HistogramSpec &spec,
                                              const SystematicsOptions &options)

@@ -1,27 +1,29 @@
-set(AMARANTIN_PLOT_SOURCES
-  src/EventDisplay.cc
-  src/EventListPlotting.cc
+set(AMARANTIN_SYST_SOURCES
+  src/Systematics.cc
+  src/SystematicsCacheBuilder.cc
 )
 
-set(AMARANTIN_PLOT_PUBLIC_HEADERS
-  include/EventDisplay.hh
-  include/EventListPlotting.hh
+set(AMARANTIN_SYST_PUBLIC_HEADERS
+  include/Systematics.hh
+  include/SystematicsCacheBuilder.hh
 )
 
-add_library(Plot SHARED
-  ${AMARANTIN_PLOT_SOURCES}
-  ${AMARANTIN_PLOT_PUBLIC_HEADERS}
+add_library(Syst SHARED
+  ${AMARANTIN_SYST_SOURCES}
+  ${AMARANTIN_SYST_PUBLIC_HEADERS}
 )
 
-target_compile_features(Plot PUBLIC cxx_std_17)
+find_package(Eigen3 QUIET)
 
-target_include_directories(Plot
+target_compile_features(Syst PUBLIC cxx_std_17)
+
+target_include_directories(Syst
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/amarantin>
 )
 
-target_link_libraries(Plot
+target_link_libraries(Syst
   PUBLIC
     IO
     amarantin_root_deps
@@ -29,8 +31,13 @@ target_link_libraries(Plot
     amarantin_build_options
 )
 
-set_target_properties(Plot PROPERTIES
-  OUTPUT_NAME Plot
+if(Eigen3_FOUND)
+  target_link_libraries(Syst PRIVATE Eigen3::Eigen)
+  target_compile_definitions(Syst PRIVATE AMARANTIN_HAVE_EIGEN=1)
+endif()
+
+set_target_properties(Syst PROPERTIES
+  OUTPUT_NAME Syst
   VERSION ${PROJECT_VERSION}
   SOVERSION ${PROJECT_VERSION_MAJOR}
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
@@ -38,7 +45,7 @@ set_target_properties(Plot PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
-install(TARGETS Plot
+install(TARGETS Syst
   EXPORT amarantinTargets
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -46,6 +53,6 @@ install(TARGETS Plot
   INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amarantin"
 )
 
-install(FILES ${AMARANTIN_PLOT_PUBLIC_HEADERS}
+install(FILES ${AMARANTIN_SYST_PUBLIC_HEADERS}
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amarantin"
 )

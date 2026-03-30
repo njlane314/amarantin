@@ -10,7 +10,7 @@
 
 class TH1D;
 
-namespace plot_utils
+namespace syst
 {
     struct HistogramSpec
     {
@@ -109,5 +109,7 @@ namespace plot_utils
                                                     const char *title = "");
     };
 }
+
+namespace plot_utils = syst;
 
 #endif // SYSTEMATICS_HH

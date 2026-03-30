@@ -7,6 +7,7 @@
 
 #include "EventListIO.hh"
 #include "Systematics.hh"
+#include "SystematicsCacheBuilder.hh"
 
 void cache_systematics(const char *read_path = nullptr,
                        const char *sample_key = nullptr,
@@ -57,27 +58,45 @@ void cache_systematics(const char *read_path = nullptr,
 
         EventListIO eventlist(read_path, EventListIO::Mode::kUpdate);
 
+        syst::CacheBuildOptions cache_options;
+        cache_options.overwrite_existing = true;
+        cache_options.cache_nbins = std::max(nbins, cache_nbins);
+        cache_options.enable_genie = enable_genie;
+        cache_options.enable_flux = enable_flux;
+        cache_options.enable_reint = enable_reint;
+
+        syst::CacheRequest request;
+        request.sample_key = sample_key;
+        request.branch_expr = branch_expr;
+        request.nbins = nbins;
+        request.xmin = xmin;
+        request.xmax = xmax;
+        request.selection_expr = (selection_expr && *selection_expr) ? selection_expr : "";
+        request.detector_sample_keys =
+            (detector_samples_csv && *detector_samples_csv) ? split_csv(detector_samples_csv)
+                                                            : std::vector<std::string>{};
+        cache_options.requests.push_back(request);
+
+        syst::SystematicsCacheBuilder::build(eventlist, cache_options);
+
         plot_utils::HistogramSpec spec;
-        spec.branch_expr = branch_expr;
-        spec.nbins = nbins;
-        spec.xmin = xmin;
-        spec.xmax = xmax;
-        spec.selection_expr = (selection_expr && *selection_expr) ? selection_expr : "";
+        spec.branch_expr = request.branch_expr;
+        spec.nbins = request.nbins;
+        spec.xmin = request.xmin;
+        spec.xmax = request.xmax;
+        spec.selection_expr = request.selection_expr;
 
-        plot_utils::SystematicsOptions options;
-        options.persistent_cache = plot_utils::CachePolicy::kRebuild;
-        options.cache_nbins = std::max(nbins, cache_nbins);
-        options.enable_detector = (detector_samples_csv && *detector_samples_csv);
-        options.detector_sample_keys =
-            options.enable_detector ? split_csv(detector_samples_csv) : std::vector<std::string>{};
-        options.enable_genie = enable_genie;
-        options.enable_flux = enable_flux;
-        options.enable_reint = enable_reint;
-        options.persist_covariance = true;
-        options.enable_eigenmode_compression = true;
-        options.build_full_covariance = false;
+        plot_utils::SystematicsOptions readback_options;
+        readback_options.enable_memory_cache = false;
+        readback_options.persistent_cache = plot_utils::CachePolicy::kLoadOnly;
+        readback_options.cache_nbins = cache_options.cache_nbins;
+        readback_options.enable_detector = !request.detector_sample_keys.empty();
+        readback_options.detector_sample_keys = request.detector_sample_keys;
+        readback_options.enable_genie = cache_options.enable_genie;
+        readback_options.enable_flux = cache_options.enable_flux;
+        readback_options.enable_reint = cache_options.enable_reint;
 
-        const auto result = plot_utils::SystematicsEngine::evaluate(eventlist, sample_key, spec, options);
+        const auto result = plot_utils::SystematicsEngine::evaluate(eventlist, sample_key, spec, readback_options);
         std::cout << "cache_key=" << result.cache_key
                   << " cached_nbins=" << result.cached_nbins
                   << " loaded_from_persistent_cache=" << (result.loaded_from_persistent_cache ? 1 : 0)

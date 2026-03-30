@@ -1,27 +1,28 @@
-set(AMARANTIN_PLOT_SOURCES
-  src/EventDisplay.cc
-  src/EventListPlotting.cc
+set(AMARANTIN_ANA_SOURCES
+  src/EventListBuilder.cc
+  src/EventListSelection.cc
 )
 
-set(AMARANTIN_PLOT_PUBLIC_HEADERS
-  include/EventDisplay.hh
-  include/EventListPlotting.hh
+set(AMARANTIN_ANA_PUBLIC_HEADERS
+  include/AnalysisChannels.hh
+  include/EventListBuilder.hh
+  include/EventListSelection.hh
 )
 
-add_library(Plot SHARED
-  ${AMARANTIN_PLOT_SOURCES}
-  ${AMARANTIN_PLOT_PUBLIC_HEADERS}
+add_library(Ana SHARED
+  ${AMARANTIN_ANA_SOURCES}
+  ${AMARANTIN_ANA_PUBLIC_HEADERS}
 )
 
-target_compile_features(Plot PUBLIC cxx_std_17)
+target_compile_features(Ana PUBLIC cxx_std_17)
 
-target_include_directories(Plot
+target_include_directories(Ana
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/amarantin>
 )
 
-target_link_libraries(Plot
+target_link_libraries(Ana
   PUBLIC
     IO
     amarantin_root_deps
@@ -29,8 +30,8 @@ target_link_libraries(Plot
     amarantin_build_options
 )
 
-set_target_properties(Plot PROPERTIES
-  OUTPUT_NAME Plot
+set_target_properties(Ana PROPERTIES
+  OUTPUT_NAME Ana
   VERSION ${PROJECT_VERSION}
   SOVERSION ${PROJECT_VERSION_MAJOR}
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
@@ -38,7 +39,7 @@ set_target_properties(Plot PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
-install(TARGETS Plot
+install(TARGETS Ana
   EXPORT amarantinTargets
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -46,6 +47,6 @@ install(TARGETS Plot
   INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amarantin"
 )
 
-install(FILES ${AMARANTIN_PLOT_PUBLIC_HEADERS}
+install(FILES ${AMARANTIN_ANA_PUBLIC_HEADERS}
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amarantin"
 )

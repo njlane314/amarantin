@@ -2,12 +2,27 @@ add_executable(mk_sample mk_sample.cc)
 add_executable(mk_dataset mk_dataset.cc)
 add_executable(mk_eventlist mk_eventlist.cc)
 
+target_link_libraries(mk_sample
+  PRIVATE
+    IO
+    amarantin_build_options
+)
+
+target_link_libraries(mk_dataset
+  PRIVATE
+    IO
+    amarantin_build_options
+)
+
+target_link_libraries(mk_eventlist
+  PRIVATE
+    IO
+    Ana
+    Syst
+    amarantin_build_options
+)
+
 foreach(target_name mk_sample mk_dataset mk_eventlist)
-  target_link_libraries(${target_name}
-    PRIVATE
-      IO
-      amarantin_build_options
-  )
 
   set_target_properties(${target_name} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"

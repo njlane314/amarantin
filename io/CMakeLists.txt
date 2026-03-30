@@ -2,7 +2,6 @@ set(AMARANTIN_IO_SOURCES
   src/InputPartitionIO.cc
   src/DatasetIO.cc
   src/EventListIO.cc
-  src/EventListSelection.cc
   src/SnapshotService.cc
   src/detail/RunDatabaseService.cc
   src/SampleIO.cc
@@ -10,9 +9,8 @@ set(AMARANTIN_IO_SOURCES
 
 set(AMARANTIN_IO_PUBLIC_HEADERS
   include/InputPartitionIO.hh
-  include/DatasetIO.hh
   include/EventListIO.hh
-  include/EventListSelection.hh
+  include/DatasetIO.hh
   include/SnapshotService.hh
   include/SampleIO.hh
 )

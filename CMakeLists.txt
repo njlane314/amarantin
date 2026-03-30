@@ -80,6 +80,8 @@ elseif(MSVC)
 endif()
 
 add_subdirectory(io)
+add_subdirectory(ana)
+add_subdirectory(syst)
 add_subdirectory(plot)
 if(AMARANTIN_BUILD_APP)
   add_subdirectory(app)
