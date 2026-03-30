@@ -40,7 +40,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 macro_name=${1//-/_}
-shift || true
+shift
 
 macro_path=
 for macro_dir in "${MACRO_DIRS[@]}"; do
@@ -89,9 +89,25 @@ extract_signature() {
   ' "${path}"
 }
 
-is_bool_literal() { [[ "$1" == true || "$1" == false ]]; }
-is_int_literal() { [[ "$1" =~ ^[-+]?[0-9]+$ ]]; }
-is_float_literal() { [[ "$1" =~ ^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; }
+literal_matches_kind() {
+  local kind=$1
+  local value=$2
+
+  case "${kind}" in
+    bool)
+      [[ "${value}" == true || "${value}" == false ]]
+      ;;
+    int)
+      [[ "${value}" =~ ^[-+]?[0-9]+$ ]]
+      ;;
+    float)
+      [[ "${value}" =~ ^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 parameter_kinds() {
   local signature=$1
@@ -119,25 +135,33 @@ parameter_kinds() {
 
 prefixed_literal() {
   local arg=$1
+  local kind=
+  local value=
 
-  if [[ "${arg}" == n:null ]]; then
-    printf 'nullptr'
-    return 0
-  fi
-  if [[ "${arg}" =~ ^b:(true|false)$ ]]; then
-    printf '%s' "${arg#b:}"
-    return 0
-  fi
-  if [[ "${arg}" =~ ^i:[-+]?[0-9]+$ ]]; then
-    printf '%s' "${arg#i:}"
-    return 0
-  fi
-  if [[ "${arg}" =~ ^f:[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
-    printf '%s' "${arg#f:}"
-    return 0
-  fi
+  case "${arg}" in
+    n:null)
+      printf 'nullptr'
+      return 0
+      ;;
+    b:*)
+      kind=bool
+      value=${arg#b:}
+      ;;
+    i:*)
+      kind=int
+      value=${arg#i:}
+      ;;
+    f:*)
+      kind=float
+      value=${arg#f:}
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 
-  return 1
+  literal_matches_kind "${kind}" "${value}" || return 1
+  printf '%s' "${value}"
 }
 
 to_cpp_literal() {
@@ -148,26 +172,10 @@ to_cpp_literal() {
     return 0
   fi
 
-  case "${kind}" in
-    bool)
-      if is_bool_literal "${arg}"; then
-        printf '%s' "${arg}"
-        return 0
-      fi
-      ;;
-    int)
-      if is_int_literal "${arg}"; then
-        printf '%s' "${arg}"
-        return 0
-      fi
-      ;;
-    float)
-      if is_float_literal "${arg}"; then
-        printf '%s' "${arg}"
-        return 0
-      fi
-      ;;
-  esac
+  if literal_matches_kind "${kind}" "${arg}"; then
+    printf '%s' "${arg}"
+    return 0
+  fi
 
   if [[ "${arg}" == s:* ]]; then
     arg=${arg#s:}
@@ -189,28 +197,25 @@ build_invocation() {
   local signature
   signature=$(extract_signature "${name}" "${path}")
   local -a kinds=()
-  mapfile -t kinds < <(parameter_kinds "${signature}")
+  local kind
+  while IFS= read -r kind; do
+    [[ -n "${kind}" ]] && kinds+=("${kind}")
+  done < <(parameter_kinds "${signature}")
 
-  local args=()
-  local arg
-  local i=0
-  for arg in "$@"; do
-    local kind=string
+  local -a raw_args=("$@")
+  local -a args=()
+  local i
+  for i in "${!raw_args[@]}"; do
+    kind=string
     if [[ ${i} -lt ${#kinds[@]} ]]; then
       kind=${kinds[$i]}
     fi
-    args+=("$(to_cpp_literal "${arg}" "${kind}")")
-    i=$((i + 1))
+    args+=("$(to_cpp_literal "${raw_args[$i]}" "${kind}")")
   done
 
   local joined=
-  local i
-  for i in "${!args[@]}"; do
-    if [[ $i -gt 0 ]]; then
-      joined+=", "
-    fi
-    joined+="${args[$i]}"
-  done
+  printf -v joined '%s, ' "${args[@]}"
+  joined=${joined%, }
 
   printf '%s(%s)' "${path}" "${joined}"
 }

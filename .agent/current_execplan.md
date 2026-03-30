@@ -1,59 +1,75 @@
 # ExecPlan
 
 ## 1. Objective
-Run small verified simplification loops that make local hotspots flatter and
-easier to grep while preserving documented behavior and installed surfaces.
+Make `tools/run-macro` smaller, flatter, and more portable by removing the
+`mapfile` dependency, collapsing duplicated literal-coercion branches, and
+preserving the documented invocation grammar.
 
 ## 2. Constraints
-- Do not change the supported invocation grammar described in `COMMANDS`.
-- Do not change installed headers or CMake targets.
-- Keep the change local to `tools/` plus the required tracking files.
-- Leave `io/`, `ana/`, `syst/`, and `plot/` behavior untouched.
+- Preserve the supported invocation shape documented in `COMMANDS` and `USAGE`.
+- Do not change installed headers, installed targets, or root `CMake` surfaces.
+- Keep `io/`, `ana/`, `syst/`, and `plot/` behavior unchanged in this pass.
+- Treat `ana/Snapshot.hh`, `io/EventListIO.hh`, and `syst/Systematics.hh` as
+  audit-only unless a private-side simplification avoids public-surface edits.
+- Leave unrelated worktree changes untouched.
 
 ## 3. Design anchor
 From `DESIGN.md`:
-- prefer plain data and namespace functions
+- keep workflows direct and cheap to change
 - add abstractions only when they delete complexity
-- after every feature pass, do a small deletion pass
+- keep module boundaries sharp
+- do a small deletion pass after each feature pass
 
-For this milestone, that means reducing shell branching and helper ceremony in
-`tools/run-macro` without widening its scope.
+For this pass, that means preferring a concentrated `tools/` simplification over
+speculative public-header churn.
 
 ## 4. System map
 - `tools/run-macro`
-- `COMMANDS`
-- `AGENTS.md`
 - `.agent/PLANS.md`
+- `.agent/current_execplan.md`
 - `docs/minimality-log.md`
-
-Verification:
-- `bash -n tools/mklist.sh tools/run-macro tools/overnight-minimality-pass.sh`
-- one representative wrapper smoke check if ROOT is available
+- verification commands:
+  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+  - `cmake --build build --parallel`
+  - `cmake --build build --target IO Ana Syst Plot mk_sample mk_dataset mk_eventlist`
+  - `bash -n tools/mklist.sh tools/run-macro tools/overnight-minimality-pass.sh`
+  - `build/bin/mk_sample --help`
+  - `build/bin/mk_dataset --help || true`
+  - `build/bin/mk_eventlist --help || true`
 
 ## 5. Candidate simplifications
 
-### wrapper collapse
-- inline macro-path lookup instead of a dedicated search helper
-- flatten typed-literal coercion into smaller reusable checks
-
 ### script simplification
-- remove duplicated regex branches
-- replace heredoc array fill with `mapfile`
+- `tools/run-macro`: score `5.0`
+  - simplicity gain: high
+  - regression risk: low
+  - reason: concentrated non-installed shell complexity, plus a real Bash 3
+    portability bug from `mapfile` that currently breaks type inference
+
+### wrapper collapse
+- private cleanup behind `EventListIO` / `Snapshot` / `Systematics`: score `1.0`
+  - simplicity gain: moderate
+  - regression risk: moderate to high
+  - reason: useful later, but the hotspot headers define downstream contracts
 
 ### boundary sharpening
-- keep the change fully inside `tools/`
+- keep the public hotspot audit in the ledger, but do not edit installed
+  surfaces in this pass
 
 ### doc / build cleanup
-- no doc change unless CLI behavior changes
+- update only the tracking files required for this milestone
 
 ### stale scaffolding
-- none in this milestone
+- no separate stale-scaffolding milestone unless verification exposes a local
+  deletion in touched files
 
 ## 6. Milestones
 
 ### Milestone 1
 - status: done
-- hypothesis: a flatter `tools/run-macro` is easier to audit and maintain
+- hypothesis: replacing `mapfile` with a direct Bash loop and folding literal
+  matching into shared helpers will make `tools/run-macro` shorter to audit,
+  more portable, and closer to its documented typed-argument behavior
 - files / symbols touched:
   - `tools/run-macro`
   - `.agent/current_execplan.md`
@@ -61,197 +77,53 @@ Verification:
 - expected behavior risk: low
 - verification commands:
   - `bash -n tools/mklist.sh tools/run-macro tools/overnight-minimality-pass.sh`
-  - `bash tools/run-macro plot_event_display`
+  - stubbed `root` invocation checks for representative macros
+  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+  - `cmake --build build --parallel`
+  - `cmake --build build --target IO Ana Syst Plot mk_sample mk_dataset mk_eventlist`
+  - `build/bin/mk_sample --help`
+  - `build/bin/mk_dataset --help || true`
+  - `build/bin/mk_eventlist --help || true`
 - acceptance criteria:
-  - script is shorter or flatter
-  - documented invocation forms still work
+  - no `mapfile` dependency remains in `tools/run-macro`
+  - representative numeric and boolean arguments stay unquoted in the generated
+    ROOT invocation
   - shell checks pass
-
-### Milestone 2
-- status: done
-- hypothesis: `SnapshotService` should stop being the only API shape internally;
-  a namespace-style API plus a wrapper class is flatter and fits `DESIGN.md`
-  better without breaking installed code
-- files / symbols touched:
-  - `io/include/SnapshotService.hh`
-  - `io/src/SnapshotService.cc`
-  - `io/macro/mk_snapshot.C`
-- expected behavior risk: low
-- verification commands:
-  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target IO --parallel && bash tools/run-macro mk_snapshot'`
-- acceptance criteria:
-  - installed `SnapshotService` API still compiles
-  - internal call sites can use namespace functions instead of the static-only class
-  - `IO` builds and the snapshot macro reaches its entry point
-
-### Milestone 3
-- status: done
-- hypothesis: `EventListSelection` should follow the same pattern as `SnapshotService`;
-  namespace functions are the simpler shape, while the installed class can remain
-  as a thin compatibility wrapper
-- files / symbols touched:
-  - `ana/include/EventListSelection.hh`
-  - `ana/src/EventListSelection.cc`
-  - `ana/src/EventListBuilder.cc`
-- expected behavior risk: low
-- verification commands:
-  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target Ana mk_eventlist --parallel && ./build/bin/mk_eventlist --help || true'`
-- acceptance criteria:
-  - installed `EventListSelection` API still compiles
-  - internal builder code can use namespace functions instead of the static-only class
-  - `Ana` and `mk_eventlist` build and the CLI still responds normally
-
-### Milestone 4
-- status: done
-- hypothesis: `AnalysisChannels` should use the same namespace-first pattern as the other static-only public utility headers; this keeps the preferred internal shape simple without breaking the installed header
-- files / symbols touched:
-  - `ana/include/AnalysisChannels.hh`
-  - `ana/src/EventListBuilder.cc`
-- expected behavior risk: low
-- verification commands:
-  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target Ana mk_eventlist --parallel && ./build/bin/mk_eventlist --help || true'`
-- acceptance criteria:
-  - installed `AnalysisChannels` API still compiles
-  - internal builder code can use namespace functions instead of the static-only class
-  - `Ana` and `mk_eventlist` build and the CLI still responds normally
-
-### Milestone 5
-- status: done
-- hypothesis: `SystematicsEngine` should follow the same namespace-first pattern as the other static-only utility headers; the installed wrapper can remain while internal code moves to direct `syst::...` calls
-- files / symbols touched:
-  - `syst/include/Systematics.hh`
-  - `syst/src/Systematics.cc`
-  - `syst/src/SystematicsCacheBuilder.cc`
-  - `plot/macro/cache_systematics.C`
-- expected behavior risk: low
-- verification commands:
-  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target Syst Plot mk_eventlist --parallel && bash tools/run-macro cache_systematics && ./build/bin/mk_eventlist --help || true'`
-- acceptance criteria:
-  - installed `SystematicsEngine` API still compiles
-  - internal `syst/` and macro code can use namespace functions instead of the static-only class
-  - `Syst`, `Plot`, and `mk_eventlist` build and the macro/CLI smoke checks still respond normally
-
-### Milestone 6
-- status: done
-- hypothesis: `SystematicsCacheBuilder` is not a real subsystem; folding its structs and one function into `Systematics.hh/cc` should reduce conceptual spread and delete one source file while keeping include compatibility
-- files / symbols touched:
-  - `syst/include/Systematics.hh`
-  - `syst/include/SystematicsCacheBuilder.hh`
-  - `syst/src/Systematics.cc`
-  - `syst/src/SystematicsCacheBuilder.cc`
-  - `syst/CMakeLists.txt`
-- expected behavior risk: low
-- verification commands:
-  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target Syst Plot mk_eventlist --parallel && bash tools/run-macro cache_systematics && ./build/bin/mk_eventlist --help || true'`
-- acceptance criteria:
-  - `CacheRequest`, `CacheBuildOptions`, and `build_systematics_cache(...)` live in the main `Systematics` interface
-  - `SystematicsCacheBuilder.hh` remains as a compatibility shim
-  - one source file is removed from the build
-  - `Syst`, `Plot`, and `mk_eventlist` build and the macro/CLI smoke checks still respond normally
-
-### Milestone 7
-- status: done
-- hypothesis: if `io/` is to be strict, `SnapshotService` must leave `IO` entirely; moving it to `Ana` should make the module boundary match the architecture docs without changing the public header name or the snapshot macro path
-- files / symbols touched:
-  - `io/CMakeLists.txt`
-  - `ana/CMakeLists.txt`
-  - `io/include/SnapshotService.hh`
-  - `io/src/SnapshotService.cc`
-  - `ana/include/SnapshotService.hh`
-  - `ana/src/SnapshotService.cc`
-  - `AGENTS.md`
-  - `DESIGN.md`
-  - `docs/START_PROMPT.md`
-  - `docs/minimality-log.md`
-  - `io/DERIVED`
-- expected behavior risk: low
-- verification commands:
-  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target IO Ana mk_eventlist --parallel && bash tools/run-macro mk_snapshot && ./build/bin/mk_eventlist --help || true'`
-- acceptance criteria:
-  - `IO` no longer builds or installs `SnapshotService`
-  - `Ana` owns `SnapshotService`
-  - snapshot macro path still works
-  - `mk_eventlist` still builds and responds normally
+  - requested configure/build/smoke verification is attempted and any failures
+    are repaired or recorded
 
 ## 7. Public-surface check
-- compatibility impact:
-  - Milestone 1: none intended
-  - Milestone 2: additive namespace API in `SnapshotService.hh`; existing class kept as a compatibility wrapper
-  - Milestone 3: additive namespace API in `EventListSelection.hh`; existing class kept as a compatibility wrapper
-  - Milestone 4: additive namespace API in `AnalysisChannels.hh`; existing class kept as a compatibility wrapper
-  - Milestone 5: additive namespace API in `Systematics.hh`; existing class kept as a compatibility wrapper
-  - Milestone 6: `SystematicsCacheBuilder.hh` becomes a compatibility include shim; declarations move into `Systematics.hh`
-  - Milestone 7: `SnapshotService.hh` moves from `io/` to `ana/`; the header name remains the same but ownership and installed target change
-- migration note:
-  - Milestone 1: non-goal; keep current CLI behavior
-  - Milestone 2: internal and new code should prefer `snapshot::...`; existing `SnapshotService::...` remains valid
-  - Milestone 3: internal and new code should prefer `eventlist_selection::...`; existing `EventListSelection::...` remains valid
-  - Milestone 4: internal and new code should prefer `analysis_channels::...`; existing `AnalysisChannels::...` remains valid
-  - Milestone 5: internal and new code should prefer free `syst::...` functions; existing `syst::SystematicsEngine::...` remains valid
-  - Milestone 6: internal and new code should include `Systematics.hh`; existing includes of `SystematicsCacheBuilder.hh` remain valid
-  - Milestone 7: new code should treat snapshotting as `ana` functionality; include compatibility remains because headers install into the common include prefix
-- reviewer sign-off: not required; no installed surface was removed
+- compatibility impact: none intended; this pass stays inside `tools/` plus the
+  required tracking docs
+- migration note: non-goal; keep current macro wrapper invocation shape
+- reviewer sign-off: not required because no installed header, CLI executable,
+  or build surface changes are planned
 
 ## 8. Reduction ledger
 - files deleted: 0
-- wrappers removed:
-  - `find_macro`
-  - duplicated per-call snapshot orchestration collapsed into `snapshot_to_scratch(...)`
-  - `EventListSelection` no longer serves as the only real API shape internally
-  - `AnalysisChannels` no longer serves as the only real API shape internally
-  - `SystematicsEngine` no longer serves as the only real API shape internally
-  - `SystematicsCacheBuilder` is no longer a separate compiled layer
-  - `SnapshotService` is no longer part of the `IO` library
-- shell branches removed: several duplicated literal-coercion branches folded behind shared checks
+- wrappers removed: 0
+- shell branches removed:
+  - removed the `mapfile` dependency from argument-kind loading
+  - collapsed three standalone literal matcher helpers into one shared matcher
+  - replaced the prefixed-literal regex cascade with one `case` dispatch
+  - replaced the manual argument join loop with one formatted join
 - stale docs removed: 0
 - targets or dependencies removed: 0
-- approximate LOC delta:
-  - `tools/run-macro` +6 lines, with flatter control flow
-  - `SnapshotService` implementation +54 lines, but with one shared snapshot path and a smaller public pattern
-  - `EventListSelection` touched in 3 files, net larger, but with a flatter internal call path
-  - `AnalysisChannels` touched in 2 files, net larger, but with a flatter internal call path
-  - `SystematicsEngine` touched in 4 files, net larger, but with a flatter internal call path
-  - `SystematicsCacheBuilder` folded into `Systematics`, with 1 source file deleted
-  - `SnapshotService` moved from `io/` to `ana/`, leaving `IO` with only IO classes plus low-level persistence helpers
-
-### Milestone 8
-- status: done
-- hypothesis: for a repo this size, co-locating public headers and their main
-  `.cc` files in each module root is easier to grep and flatter than carrying
-  parallel `include/` and `src/` trees
-- files / symbols touched:
-  - `io/CMakeLists.txt`
-  - `ana/CMakeLists.txt`
-  - `syst/CMakeLists.txt`
-  - `plot/CMakeLists.txt`
-  - module-root `*.hh` and `*.cc` files in `io/`, `ana/`, `syst/`, and `plot/`
-  - `.rootlogon.C`
-  - `DESIGN.md`
-  - `AGENTS.md`
-  - `docs/START_PROMPT.md`
-  - `docs/minimality-log.md`
-- expected behavior risk: low to medium
-- verification commands:
-  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && bash tools/run-macro mk_snapshot && ./build/bin/mk_eventlist --help || true'`
-- acceptance criteria:
-  - no library keeps a public `include/` or implementation `src/` split
-  - each module exports its root as the build include path
-  - private shared helpers stay under `detail/`
-  - full build and representative smoke checks still pass
+- approximate LOC delta: `git diff --stat` for this pass is `153 insertions`,
+  `313 deletions`; the code change in `tools/run-macro` is net small but
+  flatter in control flow
 
 ## 9. Decision log
-- Keep the milestone inside `tools/run-macro`.
-- Preserve the typed prefix overrides and signature-based inference.
-- Accept a small LOC increase when it removes repetition and keeps behavior stable.
-- For public static-only utility headers, prefer additive namespace functions plus compatibility wrappers before considering a breaking rewrite.
-- Keep `EventListBuilder` using the namespace-first API where possible.
-- Keep header-only classification logic header-only if the API stays small and self-contained.
-- For wrappers returning types with forward declarations, keep the wrapper definitions out of public headers.
-- If a header/source pair only carries one function plus two small structs, prefer folding it into the main module surface and leaving a shim include.
-- If `io/` exports anything that is not a persistence class or low-level persistence helper, move it out rather than documenting the mismatch.
-- For this repo size, prefer flat module roots over mirrored `include/` and `src/` trees.
-- Treat `EventListIO` as the downstream contract: `ana` produces it, `syst` augments it, and `plot` should prefer APIs that stay on it instead of reopening files internally.
+- Prioritize the `tools/run-macro` portability bug over broader C++ cleanup.
+- Treat `ana/Snapshot.hh`, `io/EventListIO.hh`, and `syst/Systematics.hh` as
+  current audit hotspots, not edit targets.
+- Keep the milestone fully inside non-installed code unless verification forces
+  a follow-up fix.
+- Stop after the tool-only milestone because the remaining audited hotspots are
+  public-surface work and the requested build verification is environment-limited.
 
 ## 10. Stop conditions
-- stop after the current verified loop
-- do not broaden beyond the current layout cleanup in this pass
+- Stop after this verified loop unless another non-installed simplification has
+  clearly comparable payoff and low risk.
+- Stop if the remaining work is mostly public-API churn, formatting, or broad
+  reorganization.

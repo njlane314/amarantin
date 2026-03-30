@@ -1,129 +1,203 @@
 @startuml
-title amarantin internals\nrow store -> bin store -> channel store
+' =============================================================================
+' amarantin internals
+' Same visual style as the EventSelectionFilter example, laid out for A4
+' landscape output.
+' =============================================================================
+!pragma layout smetana
 
 top to bottom direction
-scale max 900 width
+' A4 landscape @160dpi ~ 1870x1320px: keep the layout page-shaped, not panoramic.
+scale max 1750*980
 
-skinparam backgroundColor #FCFCFA
-skinparam shadowing false
-skinparam roundCorner 10
-skinparam packageStyle rectangle
-skinparam defaultTextAlignment center
-skinparam ArrowThickness 1.3
-skinparam ArrowColor #475569
-skinparam ArrowFontColor #334155
+skinparam defaultFontSize 10
+skinparam wrapWidth 160
+skinparam nodesep 6
+skinparam ranksep 18
+skinparam padding 1
+
+!$INK     = "#111827"
+!$MUTED   = "#6B7280"
+!$ART     = "#1D4ED8"
+!$TOOLS   = "#15803D"
+!$CFG     = "#B45309"
+!$DATA    = "#111827"
+!$NOTE_BG = "#F9FAFB"
+!$NOTE_BR = "#9CA3AF"
+
+hide stereotype
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Helvetica
+skinparam defaultFontColor $INK
 skinparam linetype ortho
+skinparam shadowing false
+skinparam roundCorner 0
+skinparam dpi 160
+skinparam defaultTextAlignment center
+skinparam LineThickness 1
+skinparam ArrowThickness 1.1
+skinparam ArrowColor $INK
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
 
-skinparam packageBorderColor #64748B
-skinparam packageFontColor #0F172A
-
-skinparam classBackgroundColor #FFFFFF
-skinparam classBorderColor #334155
-skinparam classFontColor #0F172A
-skinparam classStereotypeFontColor #475569
-
-skinparam noteBackgroundColor #FFF8D6
-skinparam noteBorderColor #C9A227
-skinparam noteFontColor #3F3F46
-
-package "app /\nentry points" #E5E7EB {
-  class mk_sample #FFFFFF
-  class mk_dataset #FFFFFF
-  class mk_eventlist #FFFFFF
+skinparam component<<cfg>> {
+  BackgroundColor #FEF3C7
+  BorderColor $CFG
+  FontColor $INK
+}
+skinparam artifact<<cfg>> {
+  BackgroundColor #FEF3C7
+  BorderColor $CFG
+  FontColor $INK
 }
 
-package "io /\npersistence" #E0F2FE {
-  class InputPartitionIO #FFFFFF
-  class SampleIO #FFFFFF
-  class DatasetIO #FFFFFF
-  class EventListIO <<row store>> #FFFFFF
-  class DistributionIO <<bin store>> #FFFFFF
-  class ChannelIO <<channel store>> #FFFFFF
-  note bottom of DistributionIO
-    nominal bins
-    sumw2
-    detector payloads
-    universe covariance / eigenmodes
-  end note
-  note bottom of ChannelIO
-    named processes
-    common binning
-    data + per-process payloads
-  end note
+skinparam package<<art>> {
+  BackgroundColor #E3EAFD
+  BorderColor $ART
+  FontColor $INK
+}
+skinparam component<<art>> {
+  BackgroundColor #E3EAFD
+  BorderColor $ART
+  FontColor $INK
 }
 
-package "ana /\ntransforms" #DCFCE7 {
-  class "ana::build_event_list(...)" as BuildEventList <<function>> #FFFFFF
-  class "snapshot::sample(...)" as SnapshotSample <<function>> #FFFFFF
-  class "snapshot::merged(...)" as SnapshotMerged <<function>> #FFFFFF
+skinparam package<<tools>> {
+  BackgroundColor #E0F2E9
+  BorderColor $TOOLS
+  FontColor $INK
+}
+skinparam component<<tools>> {
+  BackgroundColor #E0F2E9
+  BorderColor $TOOLS
+  FontColor $INK
 }
 
-package "syst /\nuncertainty" #FEF3C7 {
-  class "syst::evaluate(...)" as SystEval <<function>> #FFFFFF
-  class "syst::build_systematics_cache(...)" as SystBuild <<function>> #FFFFFF
+skinparam artifact<<data>> {
+  BackgroundColor #F3F4F6
+  BorderColor $DATA
+  FontColor $INK
 }
 
-package "plot /\nrendering" #FCE7F3 {
-  class "plot_utils::make_histogram(...)" as PlotHist <<function>> #FFFFFF
-  class "plot_utils::draw_event_display(...)" as PlotDisplay <<function>> #FFFFFF
+skinparam note {
+  BackgroundColor $NOTE_BG
+  BorderColor $NOTE_BR
+  FontColor $INK
 }
 
-InputPartitionIO --> SampleIO
-SampleIO --> DatasetIO
-DatasetIO --> BuildEventList
-BuildEventList --> EventListIO
+' =============================================================================
+' Configuration
+' =============================================================================
+component "Job launchers\nmk_sample\nmk_dataset\nmk_eventlist" as LAUNCH <<cfg>>
+artifact "Workflow inputs\nsample defs\npreset\nselection expr" as CFG <<cfg>>
 
-EventListIO --> SnapshotSample
-EventListIO --> SnapshotMerged
+' =============================================================================
+' Source-side persistence
+' =============================================================================
+package "Source-side persistence" <<art>> {
+  artifact "InputPartitionIO\npartition summaries" as INPUT <<data>>
+  artifact "SampleIO\nsample containers" as SAMPLE <<data>>
+  artifact "DatasetIO\nsample metadata\n+ provenance" as DATASET <<data>>
 
-EventListIO --> SystEval : exploratory
-EventListIO --> SystBuild : source rows
-SystBuild --> DistributionIO
-DistributionIO --> SystEval : persisted cache
-DistributionIO --> ChannelIO : assembled channels
+  INPUT -[hidden]down-> SAMPLE
+  SAMPLE -[hidden]down-> DATASET
+}
 
-EventListIO --> PlotHist : exploratory
-DistributionIO --> PlotHist : repeated
-ChannelIO --> PlotHist : final channels
-EventListIO --> PlotDisplay
+' =============================================================================
+' Analysis stages
+' =============================================================================
+package "Analysis stages" <<art>> {
+  component "ana::build_event_list(...)\nselection + derived columns" as BUILD_EVENTLIST <<tools>>
+  component "snapshot::sample(...)\nsnapshot::merged(...)" as SNAPSHOT <<tools>>
+  component "plot_utils::draw_event_display(...)\nevent view" as PLOT_DISPLAY <<tools>>
+  component "syst::build_systematics_cache(...)\nrow -> bin cache build" as BUILD_SYST <<tools>>
+  component "plot_utils::make_histogram(...)" as PLOT_HIST <<tools>>
+  component "syst::evaluate(...)\nexploratory or cached" as EVAL_SYST <<tools>>
 
-mk_sample --> SampleIO
-mk_dataset --> DatasetIO
-mk_eventlist --> BuildEventList
-mk_eventlist --> SystBuild
+  BUILD_EVENTLIST -[hidden]right-> SNAPSHOT
+  SNAPSHOT -[hidden]right-> PLOT_DISPLAY
+  BUILD_EVENTLIST -[hidden]down-> BUILD_SYST
+  BUILD_SYST -[hidden]right-> PLOT_HIST
+  PLOT_HIST -[hidden]down-> EVAL_SYST
+}
 
-mk_eventlist -[hidden]down-> InputPartitionIO
-ChannelIO -[hidden]down-> PlotHist
+' =============================================================================
+' Persistent products
+' =============================================================================
+package "Persistent products" {
+  artifact "EventListIO\nrow store" as EVENTLIST <<data>>
+  artifact "DistributionIO\nbin store" as DIST <<data>>
+  artifact "ChannelIO\nchannel store" as CHANNEL <<data>>
 
-note right of EventListIO
-  selected event trees
-  subrun trees
-  sample metadata
+  EVENTLIST -[hidden]down-> DIST
+  DIST -[hidden]down-> CHANNEL
+}
+
+' =============================================================================
+' Layout nudges
+' =============================================================================
+LAUNCH -[hidden]down-> CFG
+CFG -[hidden]down-> INPUT
+DATASET -[hidden]right-> BUILD_EVENTLIST
+PLOT_DISPLAY -[hidden]right-> EVENTLIST
+
+' =============================================================================
+' Wiring
+' =============================================================================
+LAUNCH --> BUILD_EVENTLIST : runs
+LAUNCH --> BUILD_SYST : optional\ncache pass
+CFG ..> BUILD_EVENTLIST : configures
+
+INPUT --> SAMPLE : scans
+SAMPLE --> DATASET : exports sample\nmetadata
+DATASET --> BUILD_EVENTLIST : reads
+
+BUILD_EVENTLIST --> EVENTLIST : writes\nselected rows
+EVENTLIST --> BUILD_SYST : source rows
+BUILD_SYST --> DIST : writes bins
+DIST --> CHANNEL : assemble channels
+
+EVENTLIST --> SNAPSHOT : reads
+EVENTLIST ..> EVAL_SYST : direct row-wise path
+DIST --> EVAL_SYST : persisted cache
+EVENTLIST --> PLOT_HIST : exploratory plots
+DIST --> PLOT_HIST : repeated plots
+CHANNEL --> PLOT_HIST : final regions
+EVENTLIST --> PLOT_DISPLAY : event view
+
+note left of INPUT
+  Raw ROOT file partitions
+  are scanned here before
+  sample assembly.
 end note
 
-note right of BuildEventList
-  ana produces EventListIO
+note left of BUILD_EVENTLIST
+  ana is a one-way translation layer:
+  DatasetIO -> EventListIO
 end note
 
-note right of SystBuild
-  syst reads EventListIO
-  and writes DistributionIO
+note right of EVENTLIST
+  Selected event trees,
+  subrun trees, and
+  sample metadata.
 end note
 
-note bottom
-  preferred downstream use:
-  EventListIO for row-wise work
-  DistributionIO for bin-wise work
-  ChannelIO for final region/process views
+note right of DIST
+  Nominal bins, sumw2,
+  detector payloads,
+  covariance and eigenmodes.
 end note
 
-legend bottom
-|= colour |= meaning |
-|<#E0F2FE>| persistence / stored objects |
-|<#DCFCE7>| analysis transforms |
-|<#FEF3C7>| systematic derivation |
-|<#FCE7F3>| rendering / presentation |
-|<#E5E7EB>| command-line entry points |
-endlegend
+note right of CHANNEL
+  Named processes,
+  common binning,
+  observed data,
+  final region view.
+end note
+
+note bottom of PLOT_HIST
+  Preferred downstream ladder:
+  EventListIO -> DistributionIO -> ChannelIO
+end note
 
 @enduml
