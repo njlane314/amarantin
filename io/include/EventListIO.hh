@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "DatasetIO.hh"
+#include "EventListSelection.hh"
 
 class TFile;
 class TTree;
@@ -29,7 +30,9 @@ public:
     void skim(const DatasetIO &ds,
               const std::string &event_tree_name,
               const std::string &subrun_tree_name,
-              const std::string &selection_expr);
+              const std::string &selection_expr,
+              const std::string &selection_name = "raw",
+              const EventListSelection::Config &selection_config = EventListSelection::Config{});
 
 private:
     void require_open_() const;

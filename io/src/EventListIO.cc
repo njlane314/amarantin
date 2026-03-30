@@ -9,6 +9,7 @@
 #include <TChain.h>
 #include <TDirectory.h>
 #include <TFile.h>
+#include <TKey.h>
 #include <TObject.h>
 #include <TTree.h>
 #include <TTreeFormula.h>
@@ -16,6 +17,7 @@
 namespace
 {
     constexpr const char *kEventWeightBranch = "__w__";
+    constexpr const char *kEventWeightSquaredBranch = "__w2__";
 
     const char *orthogonal_selection_for_sample(const DatasetIO::Sample &sample)
     {
@@ -46,6 +48,25 @@ namespace
             return orthogonal_expr;
 
         return "(" + selection_expr + ") && (" + orthogonal_expr + ")";
+    }
+
+    std::vector<std::string> branch_names(TTree *tree)
+    {
+        std::vector<std::string> names;
+        if (!tree) return names;
+
+        TObjArray *branches = tree->GetListOfBranches();
+        if (!branches) return names;
+
+        const int n = branches->GetEntries();
+        names.reserve(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i)
+        {
+            TObject *obj = branches->At(i);
+            if (obj)
+                names.emplace_back(obj->GetName());
+        }
+        return names;
     }
 
     bool is_mc_origin(const DatasetIO::Sample &sample)
@@ -176,7 +197,11 @@ namespace
             chain.SetBranchAddress("RootinoFix", &rootino_fix);
 
         double event_weight = 1.0;
+        double event_weight_squared = 1.0;
         selected->Branch(kEventWeightBranch, &event_weight, (std::string(kEventWeightBranch) + "/D").c_str());
+        selected->Branch(kEventWeightSquaredBranch,
+                         &event_weight_squared,
+                         (std::string(kEventWeightSquaredBranch) + "/D").c_str());
 
         int current_tree_number = -1;
         const Long64_t n_entries = chain.GetEntries();
@@ -204,6 +229,7 @@ namespace
                                                       ppfx_cv,
                                                       has_rootino_fix,
                                                       rootino_fix);
+                event_weight_squared = event_weight * event_weight;
                 selected->Fill();
             }
         }
@@ -298,7 +324,9 @@ TTree *EventListIO::subrun_tree(const std::string &sample_key) const
 void EventListIO::skim(const DatasetIO &ds,
                        const std::string &event_tree_name,
                        const std::string &subrun_tree_name,
-                       const std::string &selection_expr)
+                       const std::string &selection_expr,
+                       const std::string &selection_name,
+                       const EventListSelection::Config &selection_config)
 {
     if (mode_ != Mode::kWrite)
         throw std::runtime_error("EventListIO: skim requires write mode");
@@ -306,7 +334,7 @@ void EventListIO::skim(const DatasetIO &ds,
         throw std::runtime_error("EventListIO: event_tree_name must not be empty");
     if (subrun_tree_name.empty())
         throw std::runtime_error("EventListIO: subrun_tree_name must not be empty");
-    if (selection_expr.empty())
+    if (selection_expr.empty() && selection_name.empty())
         throw std::runtime_error("EventListIO: selection_expr must not be empty");
 
     try
@@ -316,7 +344,11 @@ void EventListIO::skim(const DatasetIO &ds,
         utils::write_named(meta_dir, "dataset_context", ds.context());
         utils::write_named(meta_dir, "event_tree_name", event_tree_name);
         utils::write_named(meta_dir, "subrun_tree_name", subrun_tree_name);
+        utils::write_named(meta_dir, "selection_name", selection_name);
         utils::write_named(meta_dir, "selection_expr", selection_expr);
+        utils::write_param<int>(meta_dir, "slice_required_count", selection_config.slice_required_count);
+        utils::write_param<double>(meta_dir, "slice_min_topology_score", selection_config.slice_min_topology_score);
+        utils::write_param<int>(meta_dir, "numi_run_boundary", selection_config.numi_run_boundary);
 
         TDirectory *samples_root = utils::must_dir(file_, "samples", true);
         for (const auto &key : ds.sample_keys())
@@ -329,7 +361,29 @@ void EventListIO::skim(const DatasetIO &ds,
             TDirectory *subruns_dir = utils::must_dir(sample_dir, "subruns", true);
 
             write_sample_metadata(sample_meta_dir, sample);
-            copy_selected_tree(events_dir, sample, event_tree_name, selection_expr);
+            TChain preview_chain(event_tree_name.c_str());
+            for (const auto &path : sample.root_files)
+                preview_chain.Add(path.c_str());
+            if (preview_chain.GetNtrees() == 0)
+                throw std::runtime_error("EventListIO: no input trees found for event tree " + event_tree_name);
+
+            std::string effective_selection_expr = selection_expr;
+            if (!selection_name.empty() && selection_name != "raw")
+            {
+                TTree *preview_tree = preview_chain.GetTree();
+                if (!preview_tree)
+                {
+                    preview_chain.LoadTree(0);
+                    preview_tree = preview_chain.GetTree();
+                }
+                effective_selection_expr = EventListSelection::expression(
+                    EventListSelection::preset_from_string(selection_name),
+                    sample,
+                    branch_names(preview_tree),
+                    selection_config);
+            }
+
+            copy_selected_tree(events_dir, sample, event_tree_name, effective_selection_expr);
             copy_subrun_tree(subruns_dir, sample, subrun_tree_name);
         }
 

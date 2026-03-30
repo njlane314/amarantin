@@ -5,6 +5,7 @@
 
 #include "DatasetIO.hh"
 #include "EventListIO.hh"
+#include "EventListSelection.hh"
 
 namespace
 {
@@ -15,11 +16,14 @@ namespace
         std::string event_tree_name = "EventSelectionFilter";
         std::string subrun_tree_name = "SubRun";
         std::string selection_expr = "selected != 0";
+        std::string selection_name = "raw";
+        bool explicit_selection = false;
     };
 
     void print_usage(std::ostream &os)
     {
-        os << "usage: mk_eventlist <output.root> <dataset.root> [event-tree] [subrun-tree] [selection]\n";
+        os << "usage: mk_eventlist [--preset <name> | --selection <expr>] "
+              "[--event-tree <name>] [--subrun-tree <name>] <output.root> <dataset.root>\n";
     }
 
     [[noreturn]] void print_usage_and_throw()
@@ -30,15 +34,50 @@ namespace
 
     CliOptions parse_args(int argc, char **argv)
     {
-        if (argc < 3 || argc > 6)
+        if (argc < 3)
             print_usage_and_throw();
 
         CliOptions options;
-        options.output_path = argv[1] ? argv[1] : "";
-        options.dataset_path = argv[2] ? argv[2] : "";
-        if (argc > 3) options.event_tree_name = argv[3];
-        if (argc > 4) options.subrun_tree_name = argv[4];
-        if (argc > 5) options.selection_expr = argv[5];
+
+        int i = 1;
+        for (; i < argc; ++i)
+        {
+            const std::string arg = argv[i] ? argv[i] : "";
+            if (arg == "--preset")
+            {
+                if (++i >= argc) print_usage_and_throw();
+                options.selection_name = argv[i] ? argv[i] : "";
+                options.explicit_selection = false;
+                continue;
+            }
+            if (arg == "--selection")
+            {
+                if (++i >= argc) print_usage_and_throw();
+                options.selection_expr = argv[i] ? argv[i] : "";
+                options.selection_name = "raw";
+                options.explicit_selection = true;
+                continue;
+            }
+            if (arg == "--event-tree")
+            {
+                if (++i >= argc) print_usage_and_throw();
+                options.event_tree_name = argv[i] ? argv[i] : "";
+                continue;
+            }
+            if (arg == "--subrun-tree")
+            {
+                if (++i >= argc) print_usage_and_throw();
+                options.subrun_tree_name = argv[i] ? argv[i] : "";
+                continue;
+            }
+            break;
+        }
+
+        if (argc - i != 2)
+            print_usage_and_throw();
+
+        options.output_path = argv[i] ? argv[i] : "";
+        options.dataset_path = argv[i + 1] ? argv[i + 1] : "";
         return options;
     }
 }
@@ -51,10 +90,16 @@ int main(int argc, char **argv)
 
         DatasetIO dataset(options.dataset_path);
         EventListIO event_list(options.output_path, EventListIO::Mode::kWrite);
+
+        std::string selection_expr = options.selection_expr;
+        if (!options.explicit_selection && options.selection_name != "raw")
+            selection_expr.clear();
+
         event_list.skim(dataset,
                         options.event_tree_name,
                         options.subrun_tree_name,
-                        options.selection_expr);
+                        selection_expr,
+                        options.selection_name);
 
         std::cout << "mk_eventlist: wrote " << options.output_path
                   << " from dataset " << options.dataset_path << "\n";
