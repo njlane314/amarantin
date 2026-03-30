@@ -1,14 +1,23 @@
 set(AMARANTIN_SYST_SOURCES
   Systematics.cc
+  SystematicsDetector.cc
+  SystematicsSupport.cc
+  SystematicsUniverseFill.cc
+  SystematicsUniverseSummary.cc
 )
 
 set(AMARANTIN_SYST_PUBLIC_HEADERS
   Systematics.hh
 )
 
+set(AMARANTIN_SYST_INTERNAL_HEADERS
+  bits/SystematicsInternal.hh
+)
+
 add_library(Syst SHARED
   ${AMARANTIN_SYST_SOURCES}
   ${AMARANTIN_SYST_PUBLIC_HEADERS}
+  ${AMARANTIN_SYST_INTERNAL_HEADERS}
 )
 
 find_package(Eigen3 REQUIRED)

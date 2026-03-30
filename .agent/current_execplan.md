@@ -1,5 +1,69 @@
 # ExecPlan
 
+## ExecPlan Addendum: Fit And Channel Safety Corrections
+
+### 1. Objective
+Correct the fit/channel issues found in review: inconsistent reported fit
+points, silent zero-data fits, weak channel compatibility checks, and
+over-correlated unlabeled detector templates.
+
+### 2. Constraints
+- Preserve the current `SignalStrengthFit` and `mk_*` surfaces as much as
+  possible.
+- Keep the corrections inside the existing fit/channel workflow instead of
+  adding new persistence layers or abstractions.
+- Leave unrelated worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- keep module boundaries sharp
+- prefer plain data and namespace functions
+
+That favors fixing the existing fit/channel seams directly rather than adding a
+second safety wrapper layer.
+
+### 4. System map
+- `fit/SignalStrengthFit.cc`
+- `app/mk_channel.cc`
+- `app/mk_xsec_fit.cc`
+- `io/macro/write_channel.C`
+- `USAGE`
+- `COMMANDS`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- verification:
+  - `git diff --check -- fit/SignalStrengthFit.cc app/mk_channel.cc app/mk_xsec_fit.cc io/macro/write_channel.C USAGE COMMANDS`
+  - Docker focused smoke for zero-data guards, selection mismatch rejection,
+    unlabeled detector-template naming, and fit report consistency
+
+### 5. Milestone
+- status: done
+- hypothesis: if the CLI requires explicit zero-data intent, channel assembly
+  verifies selection compatibility, unlabeled detector templates stay
+  process-local, and the fitter reports one self-consistent optimum, then the
+  current fit workflow becomes materially safer without broad redesign
+- files / symbols touched:
+  - `fit/SignalStrengthFit.cc`
+  - `app/mk_channel.cc`
+  - `app/mk_xsec_fit.cc`
+  - `io/macro/write_channel.C`
+  - `USAGE`
+  - `COMMANDS`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- verification results:
+  - `git diff --check` passed for the touched files
+  - Docker smoke passed:
+    - `mk_channel` now rejects missing observed bins unless `--allow-zero-data`
+      is passed
+    - `mk_xsec_fit` now rejects all-zero observed spectra unless
+      `--allow-zero-data` is passed
+    - selection mismatches are rejected during channel assembly
+    - unlabeled detector templates stay process-local in nuisance naming
+    - nuisance and parameter reports now agree at the best-fit point
+
 ## ExecPlan Addendum: Systematics Source Split By Type
 
 ### 1. Objective
@@ -41,29 +105,37 @@ than introducing new public classes.
   - `cmake --build build --target Syst mk_eventlist --parallel`
 
 ### 5. Milestone
-- status: blocked
+- status: done
 - hypothesis: if detector-specific and universe-family-specific code live in
   separate translation units behind one private helper surface, then `syst/`
   becomes easier to navigate and review without changing behavior
 - files / symbols touched:
   - `syst/Systematics.cc`
-  - `syst/Systematics.hh`
   - `syst/CMakeLists.txt`
-  - new internal `syst/` files
+  - `syst/SystematicsSupport.cc`
+  - `syst/SystematicsDetector.cc`
+  - `syst/SystematicsUniverseFill.cc`
+  - `syst/SystematicsUniverseSummary.cc`
+  - `syst/bits/SystematicsInternal.hh`
   - `.agent/current_execplan.md`
   - `docs/minimality-log.md`
 - expected behavior risk: low to moderate
 - verification commands:
   - `git diff --check -- syst/CMakeLists.txt syst/Systematics.hh syst/Systematics.cc syst/bits/* .agent/current_execplan.md docs/minimality-log.md`
   - `cmake --build build --target Syst mk_eventlist --parallel`
+  - `docker build -t amarantin-dev .`
+  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B /tmp/amarantin-syst-check -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/amarantin-syst-check --target Syst --parallel'`
 - acceptance criteria:
   - detector and universe-family handling are no longer co-located in one
     source file
   - the public `syst/` API remains unchanged
   - the focused build passes
-- blocked note:
-  - deferred while higher-priority sample-workflow work proceeded; no
-    additional `syst/` edits were made in this pass
+- verification results:
+  - `git diff --check` passed for the touched tracking and `syst/` files
+  - the source split itself is implemented
+  - Docker focused build passed for `Syst`
+  - the default host `build/` tree remains unreliable in this checkout, so the
+    focused verification ran in a clean temporary Docker build tree instead
 
 ## ExecPlan Addendum: Fit Detector-Envelope Follow-up
 

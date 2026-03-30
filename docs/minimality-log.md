@@ -1,18 +1,77 @@
 # Minimality Log
 
 ## Current milestone
-- status: blocked
+- status: done
+- subsystem: `fit/` + `app/`
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep module
+  boundaries sharp, and prefer fixing the direct seam over adding wrappers
+
+## What changed
+- removed the extra fixed-`mu` re-minimization from the reported fit result so
+  nuisance values, parameter values, covariance, status, and predictions all
+  come from one optimum
+- made `mk_channel` require explicit observed bins unless
+  `--allow-zero-data` is passed
+- made `mk_xsec_fit` reject all-zero observed spectra unless
+  `--allow-zero-data` is passed
+- tightened channel assembly so signal and background caches must share
+  `selection_expr`
+- changed unlabeled detector-template nuisance fallback names to stay
+  process-local instead of correlating `template0`, `template1`, and so on
+  across every process
+
+## Why this is simpler
+- the fit report no longer mixes two nearby but distinct optima
+- zero-observation fits are now explicit intent instead of a missing-input
+  accident
+- channel metadata now has to match the actual cached distributions it
+  assembles
+- missing detector labels degrade to local nuisances rather than silently
+  inventing global correlations
+
+## Verification
+- `git diff --check -- fit/SignalStrengthFit.cc app/mk_channel.cc app/mk_xsec_fit.cc io/macro/write_channel.C USAGE COMMANDS`
+- Docker focused smoke:
+  - build `IO`, `Fit`, `mk_channel`, and `mk_xsec_fit`
+  - verify `mk_channel` fails without data unless `--allow-zero-data` is set
+  - verify `mk_xsec_fit` fails on all-zero observed bins unless
+    `--allow-zero-data` is set
+  - verify selection mismatches are rejected
+  - verify unlabeled detector templates are named
+    `detector:<process>:templateN`
+  - verify nuisance lines match the corresponding parameter lines in the fit
+    report
+- results:
+  - `git diff --check` passed
+  - Docker smoke passed with `fit_channel_corrections_smoke=ok`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - removed the extra result-repackaging step that mixed two fit points in one
+    report
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta: modest additive safety checks in the existing
+  fit/channel surface
+
+## Current milestone
+- status: done
 - subsystem: `syst/`
 - design rule from `DESIGN.md`: keep module boundaries sharp, keep module
   layout flat, and add abstractions only when they delete complexity
 
 ## What changed
-- started a `syst/` refactor to split detector handling and universe-family
-  handling out of the monolithic `Systematics.cc`
-- chosen implementation direction:
-  - keep `Systematics.hh` as the one public header
-  - move shared private declarations into a small internal helper surface
-  - keep top-level evaluate / cache orchestration in `Systematics.cc`
+- split detector handling and universe-family handling out of the monolithic
+  `Systematics.cc`
+- added:
+  - `syst/SystematicsSupport.cc`
+  - `syst/SystematicsDetector.cc`
+  - `syst/SystematicsUniverseFill.cc`
+  - `syst/SystematicsUniverseSummary.cc`
+  - `syst/bits/SystematicsInternal.hh`
+- kept `Systematics.hh` as the one public header and left top-level evaluate /
+  cache orchestration in `Systematics.cc`
 
 ## Why this is simpler
 - review and maintenance no longer require paging through detector and
@@ -22,22 +81,30 @@
   implementation detail
 
 ## Verification
-- configure/build commands: pending
+- configure/build commands:
+  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
 - target-only commands:
   - `cmake --build build --target Syst mk_eventlist --parallel`
+  - `docker build -t amarantin-dev .`
+  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B /tmp/amarantin-syst-check -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/amarantin-syst-check --target Syst --parallel'`
 - shell checks:
   - `git diff --check -- syst/CMakeLists.txt syst/Systematics.hh syst/Systematics.cc syst/bits/* .agent/current_execplan.md docs/minimality-log.md`
 - smoke checks: pending
-- results: pending
-  - deferred without new code changes while higher-priority sample-workflow
-    work proceeded
+- results:
+  - `git diff --check` passed
+  - Docker focused build passed for `Syst`
+  - the default host `build/` tree is still unreliable in this checkout, so
+    the focused verification ran in a clean temporary Docker build tree
 
 ## Reduction ledger
-- files deleted: pending
-- wrappers removed: pending
+- files deleted: 0
+- wrappers removed:
+  - removed the monolithic co-location of detector and universe-family
+    implementation inside one `syst/Systematics.cc`
 - shell branches removed: 0
 - docs/build artifacts removed: 0
-- approximate LOC delta: pending
+- approximate LOC delta: net additive private implementation split with a much
+  smaller public-orchestration file
 
 ## Decisions
 - split by systematic responsibility, not by adding one file per public API
@@ -47,6 +114,8 @@
 ## Remaining hotspots
 - decide after the split whether cache-key, rebin, and memory-cache helpers
   should stay in `Systematics.cc` or move again
+- restore a valid local host configure/build environment so future checks do
+  not have to rely on Docker
 
 ## Current milestone
 - status: done

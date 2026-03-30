@@ -37,6 +37,7 @@ public:
         std::vector<double> covariance;
         std::vector<double> eigenvalues;
         std::vector<double> eigenmodes;
+        std::vector<double> universe_histograms;
 
         bool empty() const
         {
@@ -44,7 +45,8 @@ public:
                    sigma.empty() &&
                    covariance.empty() &&
                    eigenvalues.empty() &&
-                   eigenmodes.empty();
+                   eigenmodes.empty() &&
+                   universe_histograms.empty();
         }
     };
 

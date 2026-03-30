@@ -1,0 +1,71 @@
+Plot
+====
+
+Overview
+--------
+plot/ contains rendering code only.
+It reads already-persisted analysis outputs and turns them into canvases,
+histograms, and image files. It should not own selection logic, persistence
+schema, or systematic evaluation.
+
+The main surfaces are:
+
+  EventListIO      --reads--> event displays and row-wise plots
+  DistributionIO   --reads--> cached histogram payloads
+  Plotter          --renders-> stacked and unstacked channel views
+  EfficiencyPlot   --renders-> denominator / numerator + efficiency overlays
+
+Public surface
+--------------
+EventDisplay.hh
+  EventDisplay plus draw_event_display(...) helpers for detector and semantic
+  image views from EventListIO selected trees.
+
+EventListPlotting.hh
+  Small helpers for one-off selected-tree histograms and for rebuilding a
+  TH1D from one DistributionIO entry.
+
+EfficiencyPlot.hh
+  plot_utils::EfficiencyPlot for denominator / passed histograms with a
+  right-axis efficiency overlay and optional weighted-event mode.
+
+PlotDescriptors.hh
+  Shared plain-data descriptors for plot specifications, per-sample entries,
+  options, cuts, and histogram models.
+
+Plotter.hh
+  Thin orchestration class for the main stacked and unstacked plot paths.
+
+StackedHist.hh
+  Concrete stacked MC + data renderer with optional ratio panel and
+  uncertainty band.
+
+UnstackedHist.hh
+  Concrete overlay-style renderer for channel-separated views.
+
+PlotChannels.hh
+  Central mapping from analysis-channel codes to names, labels, and colours.
+
+PlottingHelper.hh
+  Small helper functions used by the renderers to build entries, combine
+  selections, and fill TH1D objects.
+
+Rendering notes
+---------------
+The preferred downstream path is to read EventListIO directly for most plots.
+The plotting layer can also consume DistributionIO payloads when a persisted
+bin-wise product already exists.
+
+The stack / unstack path assumes the usual EventListIO-derived columns such as
+__analysis_channel__ and __w__.
+
+Boundary notes
+--------------
+plot/ should stay a narrow rendering module:
+
+  persisted rows or bins
+      ->
+  ROOT histograms / canvases / image files
+
+If code starts deciding physics selections, building caches, or reshaping
+persistent schemas, it belongs in ana/, syst/, or io/ instead.

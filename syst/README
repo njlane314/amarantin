@@ -1,0 +1,288 @@
+Syst
+====
+
+Overview
+--------
+syst/ turns selected EventListIO rows into bin-wise uncertainty summaries.
+
+It does not decide the event selection that created the event list, and it
+does not render plots. Its job is:
+
+  selected rows
+      ->
+  nominal histogram + systematic variations
+      ->
+  per-bin summaries
+      ->
+  optional DistributionIO cache
+
+The main entrypoints are:
+
+  HistogramSpec            --describes-> one observable + binning + selection
+  SystematicsOptions       --selects--> which systematic families to compute
+  evaluate(...)            --returns--> one SystematicsResult
+  cache_key(...)           --names----> one cacheable request
+  build_systematics_cache  --writes--> many cached DistributionIO entries
+
+End-to-end flow
+---------------
+For one `(sample_key, HistogramSpec)` request, syst/ does the following:
+
+1. Read the selected `TTree` for the nominal sample from `EventListIO`.
+2. Fill the nominal histogram from:
+   - `HistogramSpec::branch_expr`
+   - `HistogramSpec::selection_expr`
+   - the central event weight branch `__w__`
+3. Optionally evaluate enabled systematic families.
+4. Combine the family summaries into one `SystematicsResult`.
+5. Optionally store or load the fine-binned result through `DistributionIO`.
+
+The result returned to callers is always a `SystematicsResult` with:
+
+- `nominal`
+- optional detector envelope
+- optional `genie`, `flux`, and `reint` family summaries
+- combined `total_down` / `total_up`
+
+Two-lane view
+-------------
+The clearest way to read syst/ is as two separate lanes that are built
+independently and then merged into one final result:
+
+  lane A: detector variations from separate EventListIO samples
+      +
+  lane B: reweightable universes from branches on the nominal sample
+      ->
+  one merged SystematicsResult
+
+This is the important conceptual split:
+
+- detector systematics are alternate selected samples
+- GENIE / flux / reinteraction systematics are alternate weights on the
+  nominal selected sample
+
+Systematic lanes
+----------------
+The library currently handles those two kinds of systematic inputs.
+
+### 1. Detector systematics
+
+Detector systematics come from separate selected samples in `EventListIO`.
+
+The usual shape is:
+
+  nominal sample key
+      +
+  detector-variation sample keys
+      ->
+  one nominal histogram + many detector variation histograms
+      ->
+  per-bin detector envelope
+
+The detector variation keys can be supplied explicitly through
+`SystematicsOptions::detector_sample_keys` or inferred from
+`EventListIO::detector_mates(...)` during cache building.
+
+For detector systematics, syst/:
+
+- fills one histogram for the nominal sample
+- fills one histogram for each detector variation sample
+- stores the detector templates in the cache when building a persistent entry
+- reduces those templates to a simple per-bin envelope:
+  - `detector.down`
+  - `detector.up`
+
+### 2. Reweightable universe families
+
+GENIE, flux, and reinteraction systematics come from weight branches on the
+nominal selected tree itself.
+
+The current branch mapping is:
+
+- GENIE: `weightsGenie`
+- flux: `weightsPPFX`
+- reinteraction: `weightsReint`
+
+For each enabled family, syst/:
+
+- reads the branch of packed universe weights from the nominal tree
+- fills one histogram per universe using the central weight `__w__` multiplied
+  by the decoded universe weight
+- builds a covariance matrix from the universe histograms
+- derives:
+  - per-bin `sigma`
+  - optional full covariance payload
+  - optional eigenmode compression
+  - a derived envelope built from `nominal +/- sigma`
+
+So detector systematics come from separate event-list samples, while the
+reweightable families come from alternate weights on the nominal sample.
+
+Lane-by-lane breakdown
+----------------------
+For one request, the implementation is easiest to follow in this order.
+
+### A. Nominal histogram
+
+Everything starts from the nominal selected tree:
+
+- read the nominal `EventListIO` tree for `sample_key`
+- apply `HistogramSpec::selection_expr` if present
+- evaluate `HistogramSpec::branch_expr`
+- fill the nominal binned spectrum with `__w__`
+
+This nominal histogram is the reference for all later comparisons.
+
+### B. Detector lane
+
+If detector systematics are enabled:
+
+- collect the detector variation sample keys
+- open each detector variation tree from `EventListIO`
+- fill the same histogram for each detector variation sample
+- compare those histograms to the nominal histogram bin-by-bin
+- build:
+  - detector templates for persistent cache storage
+  - detector envelope `down` / `up` for the returned result
+
+This lane answers:
+
+  "How much do the binned yields move if I switch to detector-variation
+  samples?"
+
+### C. Reweighting lane
+
+If `genie`, `flux`, or `reint` are enabled:
+
+- stay on the nominal tree
+- read the corresponding multi-universe weight branch
+- refill the same binned observable once per universe
+- convert the universe set into covariance-like summaries
+- derive:
+  - per-bin `sigma`
+  - optional covariance
+  - optional eigenmode compression
+  - a simple envelope from `nominal +/- sigma`
+
+This lane answers:
+
+  "How much do the binned yields move if I keep the same selected events but
+  vary the event weights?"
+
+How totals are formed
+---------------------
+After the detector lane and reweighting lane are built, syst/ combines them into
+`total_down` and `total_up`.
+
+The current combination is bin-by-bin:
+
+- take the detector shift from the detector envelope, if present
+- take the per-bin `sigma` from each enabled universe family
+- add those contributions in quadrature
+- apply the final downward or upward shift to the nominal bin
+
+This gives one simple merged envelope for downstream plotting or channel
+assembly.
+
+Cache behavior
+--------------
+There are two evaluation modes.
+
+### Memory-only evaluation
+
+`evaluate(eventlist, sample_key, spec, options)` works directly from
+`EventListIO` and can use only the in-process memory cache.
+
+### Persistent cache evaluation
+
+`evaluate(eventlist, distfile, sample_key, spec, options)` can:
+
+- load from `DistributionIO`
+- compute and write missing entries
+- rebuild entries
+
+depending on `SystematicsOptions::persistent_cache`:
+
+- `kMemoryOnly`
+- `kLoadOnly`
+- `kComputeIfMissing`
+- `kRebuild`
+
+When a persistent cache is built, the stored entry is the fine-binned cache
+surface. A later read can rebin that cached payload back to the requested
+`HistogramSpec`.
+
+The cached `DistributionIO::Entry` holds:
+
+- nominal bins
+- `sumw2`
+- detector sample keys
+- detector templates and detector envelope
+- family `sigma`
+- optional family covariance
+- optional family eigenvalues and eigenmodes
+- combined `total_down` / `total_up`
+
+What lives where
+----------------
+Keep the responsibilities sharp:
+
+- `EventListIO`
+  owns the selected rows and sample metadata
+- `syst/`
+  decides how to turn those rows into bin-wise systematic summaries
+- `DistributionIO`
+  owns the on-disk cache format for those summaries
+- downstream `plot/` and `fit/`
+  consume the summaries, but should not recompute the systematics policy here
+
+Public surface
+--------------
+Systematics.hh
+  Defines the full syst/ interface:
+
+  HistogramSpec
+    One branch expression, one binning, one selection.
+
+  SystematicsOptions
+    Controls cache policy, enabled families, detector sample keys, covariance
+    retention, and eigenmode compression.
+
+  SystematicsResult
+    Holds nominal bins, detector envelope, optional universe-family payloads
+    for `genie`, `flux`, and `reint`, and combined `total_up` /
+    `total_down` summaries.
+
+  CacheBuildOptions and CacheRequest
+    Describe one or more persisted cache builds.
+
+  evaluate(...)
+    Compute one systematic result, either directly from EventListIO or with a
+    DistributionIO persistent cache surface.
+
+  build_systematics_cache(...)
+    Batch-build persisted DistributionIO cache entries.
+
+  make_histogram(...)
+    Convenience helper for converting a result payload back into TH1D form.
+
+Notes
+-----
+Eigen is required for this library.
+
+Persistent cache policy lives here, but persistence ownership still belongs to
+io/. syst/ chooses what to compute; DistributionIO owns how those payloads are
+stored on disk.
+
+Boundary notes
+--------------
+syst/ should stay focused on:
+
+  EventListIO rows
+      ->
+  nominal + systematic bin summaries
+      ->
+  DistributionIO cache payloads or in-memory fit / plot inputs
+
+It should not absorb selection-building logic from ana/ or rendering logic
+from plot/.

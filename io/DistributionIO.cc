@@ -183,6 +183,7 @@ DistributionIO::Entry DistributionIO::read(const std::string &sample_key,
     std::vector<double> *genie_covariance = nullptr;
     std::vector<double> *genie_eigenvalues = nullptr;
     std::vector<double> *genie_eigenmodes = nullptr;
+    std::vector<double> *genie_universe_histograms = nullptr;
 
     std::string *flux_branch_name = nullptr;
     long long flux_n_variations = 0;
@@ -191,6 +192,7 @@ DistributionIO::Entry DistributionIO::read(const std::string &sample_key,
     std::vector<double> *flux_covariance = nullptr;
     std::vector<double> *flux_eigenvalues = nullptr;
     std::vector<double> *flux_eigenmodes = nullptr;
+    std::vector<double> *flux_universe_histograms = nullptr;
 
     std::string *reint_branch_name = nullptr;
     long long reint_n_variations = 0;
@@ -199,6 +201,7 @@ DistributionIO::Entry DistributionIO::read(const std::string &sample_key,
     std::vector<double> *reint_covariance = nullptr;
     std::vector<double> *reint_eigenvalues = nullptr;
     std::vector<double> *reint_eigenmodes = nullptr;
+    std::vector<double> *reint_universe_histograms = nullptr;
 
     payload->SetBranchAddress("nominal", &nominal);
     payload->SetBranchAddress("sumw2", &sumw2);
@@ -217,6 +220,8 @@ DistributionIO::Entry DistributionIO::read(const std::string &sample_key,
     payload->SetBranchAddress("genie_covariance", &genie_covariance);
     payload->SetBranchAddress("genie_eigenvalues", &genie_eigenvalues);
     payload->SetBranchAddress("genie_eigenmodes", &genie_eigenmodes);
+    if (payload->GetBranch("genie_universe_histograms"))
+        payload->SetBranchAddress("genie_universe_histograms", &genie_universe_histograms);
 
     payload->SetBranchAddress("flux_branch_name", &flux_branch_name);
     payload->SetBranchAddress("flux_n_variations", &flux_n_variations);
@@ -225,6 +230,8 @@ DistributionIO::Entry DistributionIO::read(const std::string &sample_key,
     payload->SetBranchAddress("flux_covariance", &flux_covariance);
     payload->SetBranchAddress("flux_eigenvalues", &flux_eigenvalues);
     payload->SetBranchAddress("flux_eigenmodes", &flux_eigenmodes);
+    if (payload->GetBranch("flux_universe_histograms"))
+        payload->SetBranchAddress("flux_universe_histograms", &flux_universe_histograms);
 
     payload->SetBranchAddress("reint_branch_name", &reint_branch_name);
     payload->SetBranchAddress("reint_n_variations", &reint_n_variations);
@@ -233,6 +240,8 @@ DistributionIO::Entry DistributionIO::read(const std::string &sample_key,
     payload->SetBranchAddress("reint_covariance", &reint_covariance);
     payload->SetBranchAddress("reint_eigenvalues", &reint_eigenvalues);
     payload->SetBranchAddress("reint_eigenmodes", &reint_eigenmodes);
+    if (payload->GetBranch("reint_universe_histograms"))
+        payload->SetBranchAddress("reint_universe_histograms", &reint_universe_histograms);
 
     if (payload->GetEntries() <= 0)
         throw std::runtime_error("DistributionIO: empty payload for sample/cache: " +
@@ -256,6 +265,7 @@ DistributionIO::Entry DistributionIO::read(const std::string &sample_key,
     entry.genie.covariance = genie_covariance ? *genie_covariance : std::vector<double>{};
     entry.genie.eigenvalues = genie_eigenvalues ? *genie_eigenvalues : std::vector<double>{};
     entry.genie.eigenmodes = genie_eigenmodes ? *genie_eigenmodes : std::vector<double>{};
+    entry.genie.universe_histograms = genie_universe_histograms ? *genie_universe_histograms : std::vector<double>{};
 
     entry.flux.branch_name = flux_branch_name ? *flux_branch_name : std::string();
     entry.flux.n_variations = flux_n_variations;
@@ -264,6 +274,7 @@ DistributionIO::Entry DistributionIO::read(const std::string &sample_key,
     entry.flux.covariance = flux_covariance ? *flux_covariance : std::vector<double>{};
     entry.flux.eigenvalues = flux_eigenvalues ? *flux_eigenvalues : std::vector<double>{};
     entry.flux.eigenmodes = flux_eigenmodes ? *flux_eigenmodes : std::vector<double>{};
+    entry.flux.universe_histograms = flux_universe_histograms ? *flux_universe_histograms : std::vector<double>{};
 
     entry.reint.branch_name = reint_branch_name ? *reint_branch_name : std::string();
     entry.reint.n_variations = reint_n_variations;
@@ -272,6 +283,7 @@ DistributionIO::Entry DistributionIO::read(const std::string &sample_key,
     entry.reint.covariance = reint_covariance ? *reint_covariance : std::vector<double>{};
     entry.reint.eigenvalues = reint_eigenvalues ? *reint_eigenvalues : std::vector<double>{};
     entry.reint.eigenmodes = reint_eigenmodes ? *reint_eigenmodes : std::vector<double>{};
+    entry.reint.universe_histograms = reint_universe_histograms ? *reint_universe_histograms : std::vector<double>{};
 
     return entry;
 }
@@ -309,6 +321,7 @@ void DistributionIO::write(const std::string &sample_key,
     std::vector<double> genie_covariance = entry.genie.covariance;
     std::vector<double> genie_eigenvalues = entry.genie.eigenvalues;
     std::vector<double> genie_eigenmodes = entry.genie.eigenmodes;
+    std::vector<double> genie_universe_histograms = entry.genie.universe_histograms;
 
     std::string flux_branch_name = entry.flux.branch_name;
     long long flux_n_variations = entry.flux.n_variations;
@@ -317,6 +330,7 @@ void DistributionIO::write(const std::string &sample_key,
     std::vector<double> flux_covariance = entry.flux.covariance;
     std::vector<double> flux_eigenvalues = entry.flux.eigenvalues;
     std::vector<double> flux_eigenmodes = entry.flux.eigenmodes;
+    std::vector<double> flux_universe_histograms = entry.flux.universe_histograms;
 
     std::string reint_branch_name = entry.reint.branch_name;
     long long reint_n_variations = entry.reint.n_variations;
@@ -325,6 +339,7 @@ void DistributionIO::write(const std::string &sample_key,
     std::vector<double> reint_covariance = entry.reint.covariance;
     std::vector<double> reint_eigenvalues = entry.reint.eigenvalues;
     std::vector<double> reint_eigenmodes = entry.reint.eigenmodes;
+    std::vector<double> reint_universe_histograms = entry.reint.universe_histograms;
 
     entry_dir->cd();
     TTree payload("payload", "Distribution payload");
@@ -345,6 +360,7 @@ void DistributionIO::write(const std::string &sample_key,
     payload.Branch("genie_covariance", &genie_covariance);
     payload.Branch("genie_eigenvalues", &genie_eigenvalues);
     payload.Branch("genie_eigenmodes", &genie_eigenmodes);
+    payload.Branch("genie_universe_histograms", &genie_universe_histograms);
 
     payload.Branch("flux_branch_name", &flux_branch_name);
     payload.Branch("flux_n_variations", &flux_n_variations);
@@ -353,6 +369,7 @@ void DistributionIO::write(const std::string &sample_key,
     payload.Branch("flux_covariance", &flux_covariance);
     payload.Branch("flux_eigenvalues", &flux_eigenvalues);
     payload.Branch("flux_eigenmodes", &flux_eigenmodes);
+    payload.Branch("flux_universe_histograms", &flux_universe_histograms);
 
     payload.Branch("reint_branch_name", &reint_branch_name);
     payload.Branch("reint_n_variations", &reint_n_variations);
@@ -361,6 +378,7 @@ void DistributionIO::write(const std::string &sample_key,
     payload.Branch("reint_covariance", &reint_covariance);
     payload.Branch("reint_eigenvalues", &reint_eigenvalues);
     payload.Branch("reint_eigenmodes", &reint_eigenmodes);
+    payload.Branch("reint_universe_histograms", &reint_universe_histograms);
 
     payload.Fill();
     payload.Write("payload", TObject::kOverwrite);

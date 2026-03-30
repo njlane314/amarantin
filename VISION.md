@@ -1,4 +1,4 @@
-# TARGET
+# VISION
 
 This file describes the intended end state for `amarantin`.
 
@@ -24,6 +24,16 @@ The core path should stay easy to explain:
 The project should optimize for clear data flow, small public surfaces, and
 grep-friendly implementation, not for maximum abstraction.
 
+The target downstream ladder should be explicit:
+
+- `EventListIO` is the row-wise build/debug surface
+- `DistributionIO` is the default persisted fine-bin cache surface
+- `ChannelIO` is the default final plotting and fitting surface
+
+Final or publication-style downstream work should not normally plot from
+`EventListIO` directly. Direct `EventListIO` plotting is for exploration,
+inspection, and debugging.
+
 ## Target Workflow
 
 The preferred user-facing workflow is:
@@ -33,14 +43,78 @@ The preferred user-facing workflow is:
 3. `mk_eventlist` turns `DatasetIO` into selected `EventListIO` content
 4. `syst/` or thin apps build optional `DistributionIO` caches from
    `EventListIO`
-5. `mk_channel` or similarly thin app-level code assembles final `ChannelIO`
-6. `plot/` renders persisted outputs and `fit/` profiles persisted channels
+5. native channel-building code assembles final `ChannelIO` regions from many
+   cached processes plus automatic observed-data inputs
+6. `plot/` renders final `ChannelIO` outputs and `fit/` profiles one or more
+   persisted channels
 
 Production shard naming should stay in the sample-build layer. Downstream
 analysis should usually use logical sample keys, not shard keys.
 
 If two adjacent steps can be flattened without hiding the data flow or
 blurring module boundaries, prefer the flatter path.
+
+The target final-region assembly should be reproducible from persisted inputs.
+Manual channel construction or hand-entered observed bins may exist as
+temporary bridges, but they are not the intended steady-state workflow.
+
+## Stable Analysis Surfaces
+
+### `EventListIO`
+
+`EventListIO` should remain the stable row-wise analysis surface produced by
+`ana`.
+
+Its intended role is:
+
+- selected event trees
+- copied sample metadata
+- framework-owned helper columns needed for downstream build steps
+- debug, inspection, and export-oriented row-wise access
+
+It is not the preferred final plotting surface.
+
+### `DistributionIO`
+
+`DistributionIO` should be the stable persisted fine-bin cache surface.
+
+Its intended role is:
+
+- one cached fine-bin observable per logical sample and cache request
+- persisted nominal, statistical, detector, and universe-family payloads
+- deterministic cache identity and reproducible provenance back to
+  `EventListIO`
+
+It is the default downstream cache surface for repeated region building and
+final-channel assembly.
+
+### `ChannelIO`
+
+`ChannelIO` should be the stable final-region surface.
+
+Its intended role is:
+
+- one persisted final region on common binning
+- many named processes, not just one signal plus one background
+- automatic observed-data bins
+- reproducible provenance back to cached inputs and channel-building policy
+
+Final plotting and fitting should usually start from `ChannelIO`.
+
+## Selection Policy
+
+Named cut presets are part of the stable analysis policy.
+
+That means:
+
+- preset names should stay fixed and meaningful over time
+- the selected preset name and resolved selection expression should be
+  persisted with produced outputs
+- downstream code should be able to tell which stable selection policy a file
+  was built with
+
+Thresholds and implementation details may evolve, but that evolution should be
+explicit and reproducible rather than hidden behind ad hoc one-off CLI text.
 
 ## Target Boundaries
 
@@ -90,11 +164,15 @@ from `plot/`.
 
 Its job is:
 
-- read persisted rows, bins, or final channels
+- read persisted bins or final channels
 - build ROOT histograms, canvases, and images
 
 It should not decide physics policy, mutate persistent schemas, or become a
 generic helper layer for unrelated modules.
+
+The target final-plot path is through `ChannelIO`.
+If `plot/` reads `EventListIO` directly, that should be for debug or
+inspection-style views rather than the normal final-region workflow.
 
 ### `fit/`
 
@@ -109,6 +187,16 @@ It should stay small:
 
 If adaptive or final-stage rebinning exists, it should live here or in thin
 app code, not in `io/`.
+
+Its long-term scope includes:
+
+- building final region models from one or more persisted channels
+- combined or multi-region fits
+- shared nuisance handling across regions when the underlying uncertainty is
+  common
+
+Fit-side policy may assemble regions and correlations, but persisted storage
+ownership still belongs to `io/`.
 
 ### `app/`
 
@@ -137,6 +225,57 @@ By default, the repository should preserve a small stable external surface:
 Surface evolution should usually be additive first. Public churn should need an
 explicit reason, not just internal cleanup momentum.
 
+Within that public shape, the intended steady-state native workflow is:
+
+- `mk_sample`
+- `mk_dataset`
+- `mk_eventlist`
+- one or more native cache / channel assembly entry points
+- final plot and fit entry points that consume `ChannelIO`
+
+The repository should converge toward native downstream assembly rather than
+relying on manual macros or hand-entered final-region inputs.
+
+## Binning Model
+
+The intended persisted binning split is:
+
+- `DistributionIO` stores the stable fine-bin cache on simple uniform binning
+- `ChannelIO` may store final adaptive or variable-width binning
+
+Adaptive or variable binning is in scope, but the binning policy should live
+in downstream build code, not in `io/`.
+
+`io/` may store the chosen edges and small reproducibility metadata, but it
+should not own the adaptive-binning algorithm itself.
+
+## Final Region Assembly
+
+Final region assembly should be a first-class native workflow.
+
+That means:
+
+- building channels from many named processes
+- grouping cached inputs into signal and multiple background components
+- filling observed data automatically from persisted inputs
+- recording enough provenance to reproduce the exact assembled region later
+
+The steady-state channel-building surface should be able to express ordinary
+analysis regions without falling back to hand-written CSV bins or
+single-purpose macros.
+
+## Combined Fits
+
+Combined or multi-region fits are in scope for the target end state.
+
+That implies:
+
+- multiple `ChannelIO` regions may contribute to one fit problem
+- nuisance parameters may be shared across regions when they describe a common
+  source
+- combined-fit assembly should stay explicit and grep-friendly rather than
+  turning into a heavy configuration framework
+
 ## What Should Shrink Over Time
 
 The codebase should continue converging toward:
@@ -148,6 +287,8 @@ The codebase should continue converging toward:
 - fewer stale compatibility shims after migrations settle
 - less cross-module helper leakage
 - flatter workflows that a new reader can follow with a few greps
+- less dependence on manual downstream assembly once stable native channel and
+  fit workflows exist
 
 ## Non-Goals
 
@@ -164,7 +305,7 @@ The codebase should continue converging toward:
 ## Relationship To Other Docs
 
 - `DESIGN.md` is the present-tense source of truth for architecture rules
-- `TARGET.md` describes the future end state and convergence direction
+- `VISION.md` describes the future end state and convergence direction
 - `.agent/current_execplan.md` breaks one approved change into milestones
 - `docs/minimality-log.md` records what actually became smaller, flatter, or
   easier to grep

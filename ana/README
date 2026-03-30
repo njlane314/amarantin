@@ -1,0 +1,65 @@
+Ana
+===
+
+Overview
+--------
+ana/ contains build-time analysis transforms and small workflow helpers.
+It reads DatasetIO, writes EventListIO, and provides selection / snapshot
+support around that path.
+
+The main flow is:
+
+  DatasetIO
+      |
+      v
+  ana::build_event_list(...)
+      |
+      v
+  EventListIO
+
+More concretely:
+
+  EventListBuild   --builds--> one EventListIO from one DatasetIO
+  SampleDef        --stamps--> workflow-facing metadata onto DatasetIO::Sample
+  snapshot         --exports-> selected EventListIO content to flat ROOT trees
+  cuts             --defines-> named selection expressions used by build-time code
+  channels         --classifies-> analysis-channel integers for selected events
+
+Public surface
+--------------
+EventListBuild.hh
+  Defines ana::BuildConfig and ana::build_event_list(...), the main
+  DatasetIO -> EventListIO translation entry point.
+
+SampleDef.hh
+  Defines ana::SampleDef plus read_sample_defs(...) and
+  apply_sample_defs(...), used by mk_dataset to stamp workflow metadata.
+
+Snapshot.hh
+  Defines snapshot::Spec plus snapshot::sample(...) and
+  snapshot::merged(...), used for exporting selected columns to simpler ROOT
+  trees for downstream training or inspection.
+
+Local helper headers
+--------------------
+Cuts.hh
+  Named preset selections and expression builders used during event-list
+  construction.
+
+Channels.hh
+  Analysis-channel classification helpers used by downstream plotting and
+  categorisation code.
+
+Boundary notes
+--------------
+ana/ is not persistence and it is not systematics.
+Keep file-format ownership in io/, systematic calculations in syst/, and
+rendering in plot/.
+
+The intended ana/ responsibility is:
+
+  DatasetIO metadata + chained trees
+      ->
+  selection / derived columns / optional snapshots
+      ->
+  EventListIO
