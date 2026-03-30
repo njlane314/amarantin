@@ -32,6 +32,33 @@ The small public surface is:
   - `fit::make_independent_model(...)`
   - `fit::profile_xsec(...)`
 
+CLI workflow:
+
+  build/bin/mk_channel \
+    --selection "__pass_muon__" \
+    --data-bins "12,10,9,7,6,5,4,3,2,1" \
+    build/channels/run1-numi-fhc.root \
+    build/dists/run1-numi-fhc.root \
+    beam-s0 \
+    beam-bkg \
+    muon_region
+
+  build/bin/mk_xsec_fit \
+    --output build/fits/muon_region.fit.txt \
+    build/channels/run1-numi-fhc.root \
+    muon_region
+
+Checked-in ROOT macros:
+
+  bash tools/run-macro fit_channel output.channels.root muon_region signal
+  bash tools/run-macro scan_mu output.channels.root muon_region signal
+  root -l -q 'fit/macro/fit_channel.C("output.channels.root","muon_region","signal")'
+  root -l -q 'fit/macro/scan_mu.C("output.channels.root","muon_region","signal")'
+
+The checked-in macro files are:
+  - fit/macro/fit_channel.C
+  - fit/macro/scan_mu.C
+
 Minimal example:
 
   #include "ChannelIO.hh"

@@ -28,11 +28,14 @@ Libraries
   * Ana
   * Syst
   * Plot
+  * Fit
 
 Executables
   * mk_sample
   * mk_dataset
   * mk_eventlist
+  * mk_channel
+  * mk_xsec_fit
 
 Prerequisites
 -------------
@@ -61,9 +64,12 @@ Build only selected targets
   cmake --build build --target Ana
   cmake --build build --target Syst
   cmake --build build --target Plot
+  cmake --build build --target Fit
   cmake --build build --target mk_sample
   cmake --build build --target mk_dataset
   cmake --build build --target mk_eventlist
+  cmake --build build --target mk_channel
+  cmake --build build --target mk_xsec_fit
 
 Install
 -------
@@ -131,10 +137,13 @@ Typical installed outputs are:
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_sample
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dataset
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_eventlist
+  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_channel
+  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_xsec_fit
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libIO.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libAna.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libSyst.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libPlot.<shared-library>
+  ${prefix}/${CMAKE_INSTALL_LIBDIR}/libFit.<shared-library>
   ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/*.hh
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfig.cmake
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfigVersion.cmake
@@ -151,6 +160,8 @@ Downstream CMake use
   target_link_libraries(your_target PRIVATE amarantin::Syst)
   # or
   target_link_libraries(your_target PRIVATE amarantin::Plot)
+  # or
+  target_link_libraries(your_target PRIVATE amarantin::Fit)
 
 Verification
 ------------
@@ -159,6 +170,8 @@ After a successful build, the build tree should contain:
   build/bin/mk_sample
   build/bin/mk_dataset
   build/bin/mk_eventlist
+  build/bin/mk_channel
+  build/bin/mk_xsec_fit
   build/lib/
 
 A simple smoke test is:

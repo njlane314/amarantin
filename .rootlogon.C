@@ -27,6 +27,10 @@
     macro_dir += "/macro";
     TString plot_dir = root_dir;
     plot_dir += "/plot";
+    TString fit_dir = root_dir;
+    fit_dir += "/fit";
+    TString fit_macro_dir = root_dir;
+    fit_macro_dir += "/fit/macro";
     TString plot_macro_dir = root_dir;
     plot_macro_dir += "/plot/macro";
     TString io_macro_dir = root_dir;
@@ -43,12 +47,16 @@
     plot_lib_path += "/libPlot.so";
     TString syst_lib_path = lib_dir;
     syst_lib_path += "/libSyst.so";
+    TString fit_lib_path = lib_dir;
+    fit_lib_path += "/libFit.so";
 
     gInterpreter->AddIncludePath(io_dir.Data());
     gInterpreter->AddIncludePath(ana_dir.Data());
     gInterpreter->AddIncludePath(ana_macro_dir.Data());
     gInterpreter->AddIncludePath(macro_dir.Data());
     gInterpreter->AddIncludePath(plot_dir.Data());
+    gInterpreter->AddIncludePath(fit_dir.Data());
+    gInterpreter->AddIncludePath(fit_macro_dir.Data());
     gInterpreter->AddIncludePath(plot_macro_dir.Data());
     gInterpreter->AddIncludePath(io_macro_dir.Data());
     gInterpreter->AddIncludePath(syst_dir.Data());
@@ -57,6 +65,7 @@
     gSystem->Load(ana_lib_path.Data());
     gSystem->Load(plot_lib_path.Data());
     gSystem->Load(syst_lib_path.Data());
+    gSystem->Load(fit_lib_path.Data());
 
     gInterpreter->Declare(R"cpp(
         #include <algorithm>
@@ -88,6 +97,7 @@
         #include "Systematics.hh"
         #include "Snapshot.hh"
         #include "UnstackedHist.hh"
+        #include "XsecFit.hh"
 
         namespace macro_utils
         {

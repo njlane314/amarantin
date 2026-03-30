@@ -14,7 +14,9 @@ The usual workflow is:
   3. Run mk_sample to create persistent sample ROOT files
   4. Optionally assemble multiple persistent samples into one DatasetIO file
   5. Build persistent EventListIO files from DatasetIO using event-tree selections
-  6. Optionally drive many sample builds through samples-dag.mk
+  6. Optionally assemble cached signal/background distributions into one ChannelIO file
+  7. Optionally run the native xsec fit on that channel
+  8. Optionally drive many sample builds through samples-dag.mk
 
 Basic build workflow
 --------------------
@@ -96,6 +98,46 @@ Example:
 The mk_eventlist program reads a persistent DatasetIO file, chains the
 underlying per-sample job ROOT files, applies a TTreeFormula selection, and
 writes a persistent EventListIO file with one selected-event tree per sample.
+
+Basic mk_channel usage
+----------------------
+
+General form:
+
+    build/bin/mk_channel [--selection <expr>] [--data-bins <csv>] [--signal-cache <key>] [--background-cache <key>] output.root input.dists.root signal-sample-key background-sample-key channel-key
+
+Example:
+
+    build/bin/mk_channel \
+      --selection "__pass_muon__" \
+      --data-bins "12,10,9,7,6,5,4,3,2,1" \
+      build/channels/run1-numi-fhc.root \
+      build/dists/run1-numi-fhc.root \
+      beam-s0 \
+      beam-bkg \
+      muon_region
+
+The mk_channel program reads cached `DistributionIO` entries, checks that the
+signal and background inputs share common binning, and writes one persistent
+`ChannelIO` object with observed data bins plus per-process systematic payloads.
+
+Basic mk_xsec_fit usage
+-----------------------
+
+General form:
+
+    build/bin/mk_xsec_fit [--signal-process <name>] [--output <path>] [--mu-start <value>] [--mu-lower <value>] [--mu-upper <value>] input.channels.root channel-key
+
+Example:
+
+    build/bin/mk_xsec_fit \
+      --output build/fits/muon_region.fit.txt \
+      build/channels/run1-numi-fhc.root \
+      muon_region
+
+The mk_xsec_fit program reads one persistent `ChannelIO` object, builds the
+default independent-nuisance model from the persisted mode payloads, profiles
+the signal-strength parameter `mu`, and prints or writes a plain-text report.
 
 Creating a sample list
 ----------------------
@@ -180,6 +222,58 @@ The current implementation writes:
     samples/<sample-key>/meta/
     samples/<sample-key>/events/selected
     samples/<sample-key>/subruns/SubRun
+
+Building a persistent channel by hand
+-------------------------------------
+
+Once a cached DistributionIO file already exists, build a persistent ChannelIO
+file:
+
+    build/bin/mk_channel \
+      --selection "__pass_muon__" \
+      --data-bins "12,10,9,7,6,5,4,3,2,1" \
+      build/channels/run1-numi-fhc.root \
+      build/dists/run1-numi-fhc.root \
+      beam-s0 \
+      beam-bkg \
+      muon_region
+
+Reading the arguments from left to right:
+
+  * output channel ROOT file path
+  * input cached distribution ROOT file path
+  * signal sample key
+  * background sample key
+  * channel key inside the ChannelIO file
+
+Optional flags let you override the persisted cache keys, process names,
+selection text, and observed data bin contents.
+
+Running a native xsec fit by hand
+---------------------------------
+
+Once a ChannelIO file already exists, run the native fit:
+
+    build/bin/mk_xsec_fit \
+      --output build/fits/muon_region.fit.txt \
+      build/channels/run1-numi-fhc.root \
+      muon_region
+
+Reading the arguments from left to right:
+
+  * input channel ROOT file path
+  * channel key inside the ChannelIO file
+
+Optional flags let you choose the signal-process name, fit bounds, scan
+density, and whether to compute the stat-only interval.
+
+The plain-text fit report includes:
+
+  * convergence flag
+  * q_min
+  * mu_hat and its total / stat-only intervals
+  * observed, signal, background, and total bin predictions
+  * fitted nuisance values
 
 Common metadata values
 ----------------------
@@ -304,6 +398,28 @@ After a DatasetIO file exists, produce a persistent selected-event container:
 This keeps DatasetIO as the persistent sample-grouping layer and writes an
 EventListIO file that can be loaded in ROOT macros for plotting and printed
 summaries.
+
+Typical channel-and-fit workflow
+--------------------------------
+
+After a DistributionIO cache already exists, build a channel and fit it:
+
+    build/bin/mk_channel \
+      --selection "__pass_muon__" \
+      --data-bins "12,10,9,7,6,5,4,3,2,1" \
+      build/channels/run1-numi-fhc.root \
+      build/dists/run1-numi-fhc.root \
+      beam-s0 \
+      beam-bkg \
+      muon_region
+
+    build/bin/mk_xsec_fit \
+      --output build/fits/muon_region.fit.txt \
+      build/channels/run1-numi-fhc.root \
+      muon_region
+
+This keeps the reusable fit inputs in ChannelIO and writes a separate plain
+text fit summary as the final downstream product.
 
 How the stamp files work
 ------------------------

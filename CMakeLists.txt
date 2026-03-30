@@ -18,7 +18,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
-option(AMARANTIN_BUILD_APP "Build the mk_sample application" ON)
+option(AMARANTIN_BUILD_APP "Build the CLI applications" ON)
 
 find_package(SQLite3 REQUIRED)
 

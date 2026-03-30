@@ -149,9 +149,13 @@ Run one ROOT macro through the common wrapper
   bash tools/run-macro inspect_dist output.dists.root beam-s0
   bash tools/run-macro write_channel output.dists.root output.channels.root beam-s0 beam-bkg muon_region __pass_muon__ "12,10,9,7,6,5,4,3,2,1"
   bash tools/run-macro plot_channel output.channels.root muon_region
+  bash tools/run-macro fit_channel output.channels.root muon_region signal
+  bash tools/run-macro scan_mu output.channels.root muon_region signal
 
 Run a plotting macro directly through ROOT
   root -l -b -q plot/macro/cache_systematics.C
+  root -l -q 'fit/macro/fit_channel.C("output.channels.root","muon_region","signal")'
+  root -l -q 'fit/macro/scan_mu.C("output.channels.root","muon_region","signal")'
 
 Notes
 -----
