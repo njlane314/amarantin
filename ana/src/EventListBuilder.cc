@@ -74,15 +74,15 @@ namespace
     }
 
     std::unique_ptr<TTreeFormula> make_optional_formula(const char *name,
-                                                        EventListSelection::Preset preset,
+                                                        eventlist_selection::Preset preset,
                                                         const DatasetIO::Sample &sample,
                                                         const std::vector<std::string> &columns,
-                                                        const EventListSelection::Config &config,
+                                                        const eventlist_selection::Config &config,
                                                         TChain &chain)
     {
         try
         {
-            const std::string expr = EventListSelection::expression(preset, sample, columns, config);
+            const std::string expr = eventlist_selection::expression(preset, sample, columns, config);
             if (expr.empty())
                 return nullptr;
             return std::unique_ptr<TTreeFormula>(new TTreeFormula(name, expr.c_str(), &chain));
@@ -245,28 +245,28 @@ namespace
         const std::vector<std::string> columns = branch_names(first_tree);
         std::unique_ptr<TTreeFormula> pass_trigger_formula =
             make_optional_formula("eventlist_pass_trigger",
-                                  EventListSelection::Preset::kTrigger,
+                                  eventlist_selection::Preset::kTrigger,
                                   sample,
                                   columns,
                                   selection_config,
                                   chain);
         std::unique_ptr<TTreeFormula> pass_slice_formula =
             make_optional_formula("eventlist_pass_slice",
-                                  EventListSelection::Preset::kSlice,
+                                  eventlist_selection::Preset::kSlice,
                                   sample,
                                   columns,
                                   selection_config,
                                   chain);
         std::unique_ptr<TTreeFormula> pass_fiducial_formula =
             make_optional_formula("eventlist_pass_fiducial",
-                                  EventListSelection::Preset::kFiducial,
+                                  eventlist_selection::Preset::kFiducial,
                                   sample,
                                   columns,
                                   selection_config,
                                   chain);
         std::unique_ptr<TTreeFormula> pass_muon_formula =
             make_optional_formula("eventlist_pass_muon",
-                                  EventListSelection::Preset::kMuon,
+                                  eventlist_selection::Preset::kMuon,
                                   sample,
                                   columns,
                                   selection_config,
@@ -342,7 +342,7 @@ namespace
         bool pass_slice = false;
         bool pass_fiducial = false;
         bool pass_muon = false;
-        int analysis_channel = AnalysisChannels::to_int(AnalysisChannels::Channel::kUnknown);
+        int analysis_channel = analysis_channels::to_int(analysis_channels::Channel::kUnknown);
         bool is_signal = false;
         selected->Branch(kEventWeightBranch, &event_weight, (std::string(kEventWeightBranch) + "/D").c_str());
         selected->Branch(kEventWeightSquaredBranch,
@@ -354,14 +354,14 @@ namespace
         selected->Branch(kSignalBranch,
                          &is_signal,
                          (std::string(kSignalBranch) + "/O").c_str());
-        selected->Branch(EventListSelection::trigger_branch(), &pass_trigger,
-                         (std::string(EventListSelection::trigger_branch()) + "/O").c_str());
-        selected->Branch(EventListSelection::slice_branch(), &pass_slice,
-                         (std::string(EventListSelection::slice_branch()) + "/O").c_str());
-        selected->Branch(EventListSelection::fiducial_branch(), &pass_fiducial,
-                         (std::string(EventListSelection::fiducial_branch()) + "/O").c_str());
-        selected->Branch(EventListSelection::muon_branch(), &pass_muon,
-                         (std::string(EventListSelection::muon_branch()) + "/O").c_str());
+        selected->Branch(eventlist_selection::trigger_branch(), &pass_trigger,
+                         (std::string(eventlist_selection::trigger_branch()) + "/O").c_str());
+        selected->Branch(eventlist_selection::slice_branch(), &pass_slice,
+                         (std::string(eventlist_selection::slice_branch()) + "/O").c_str());
+        selected->Branch(eventlist_selection::fiducial_branch(), &pass_fiducial,
+                         (std::string(eventlist_selection::fiducial_branch()) + "/O").c_str());
+        selected->Branch(eventlist_selection::muon_branch(), &pass_muon,
+                         (std::string(eventlist_selection::muon_branch()) + "/O").c_str());
 
         int current_tree_number = -1;
         const Long64_t n_entries = chain.GetEntries();
@@ -403,45 +403,45 @@ namespace
 
                 if (is_data_origin(sample))
                 {
-                    analysis_channel = AnalysisChannels::to_int(AnalysisChannels::Channel::kDataInclusive);
+                    analysis_channel = analysis_channels::to_int(analysis_channels::Channel::kDataInclusive);
                     is_signal = false;
                 }
                 else if (is_external_origin(sample))
                 {
-                    analysis_channel = AnalysisChannels::to_int(AnalysisChannels::Channel::kExternal);
+                    analysis_channel = analysis_channels::to_int(analysis_channels::Channel::kExternal);
                     is_signal = false;
                 }
                 else if (is_mc_origin(sample))
                 {
-                    is_signal = AnalysisChannels::is_signal(is_nu_mu_cc,
-                                                            int_ccnc,
-                                                            truth_in_fiducial,
-                                                            lambda_pdg,
-                                                            mu_p,
-                                                            proton_p,
-                                                            pion_p,
-                                                            lambda_decay_sep);
-                    analysis_channel = AnalysisChannels::to_int(
-                        AnalysisChannels::classify(truth_in_fiducial,
-                                                  nu_pdg,
-                                                  int_ccnc,
-                                                  n_protons,
-                                                  n_pi_minus,
-                                                  n_pi_plus,
-                                                  n_pi0,
-                                                  n_gamma,
-                                                  n_k0,
-                                                  n_sigma0,
-                                                  is_nu_mu_cc,
-                                                  lambda_pdg,
-                                                  mu_p,
-                                                  proton_p,
-                                                  pion_p,
-                                                  lambda_decay_sep));
+                    is_signal = analysis_channels::is_signal(is_nu_mu_cc,
+                                                             int_ccnc,
+                                                             truth_in_fiducial,
+                                                             lambda_pdg,
+                                                             mu_p,
+                                                             proton_p,
+                                                             pion_p,
+                                                             lambda_decay_sep);
+                    analysis_channel = analysis_channels::to_int(
+                        analysis_channels::classify(truth_in_fiducial,
+                                                    nu_pdg,
+                                                    int_ccnc,
+                                                    n_protons,
+                                                    n_pi_minus,
+                                                    n_pi_plus,
+                                                    n_pi0,
+                                                    n_gamma,
+                                                    n_k0,
+                                                    n_sigma0,
+                                                    is_nu_mu_cc,
+                                                    lambda_pdg,
+                                                    mu_p,
+                                                    proton_p,
+                                                    pion_p,
+                                                    lambda_decay_sep));
                 }
                 else
                 {
-                    analysis_channel = AnalysisChannels::to_int(AnalysisChannels::Channel::kUnknown);
+                    analysis_channel = analysis_channels::to_int(analysis_channels::Channel::kUnknown);
                     is_signal = false;
                 }
 
@@ -525,8 +525,8 @@ namespace ana
                     preview_chain.LoadTree(0);
                     preview_tree = preview_chain.GetTree();
                 }
-                effective_selection_expr = EventListSelection::expression(
-                    EventListSelection::preset_from_string(config.selection_name),
+                effective_selection_expr = eventlist_selection::expression(
+                    eventlist_selection::preset_from_string(config.selection_name),
                     sample,
                     branch_names(preview_tree),
                     config.selection_config);

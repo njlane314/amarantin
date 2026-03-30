@@ -25,6 +25,8 @@
 
 namespace
 {
+    using SnapshotSpec = snapshot::Spec;
+
     std::string selected_tree_path(const std::string &sample_key)
     {
         return "samples/" + sample_key + "/events/selected";
@@ -147,7 +149,7 @@ namespace
         return options;
     }
 
-    std::vector<std::string> snapshot_columns(const SnapshotService::SnapshotSpec &spec)
+    std::vector<std::string> snapshot_columns(const SnapshotSpec &spec)
     {
         if (spec.columns.empty())
             throw std::runtime_error("SnapshotService: snapshot columns must not be empty");
@@ -168,9 +170,50 @@ namespace
         return (scratch_dir / ("amarantin_snapshot_" + tree_name + "_" + suffix + "_" +
                                std::to_string(::getpid()) + ".root")).string();
     }
+
+    struct ScratchSnapshot
+    {
+        std::string file;
+        unsigned long long count = 0;
+    };
+
+    ScratchSnapshot snapshot_to_scratch(const EventListIO &event_list,
+                                        const std::string &sample_key,
+                                        const std::filesystem::path &scratch_dir,
+                                        const std::string &tree_name,
+                                        const SnapshotSpec &spec,
+                                        std::vector<std::string> columns,
+                                        const int sample_id = -1)
+    {
+        ROOT::RDataFrame df(selected_tree_path(sample_key), event_list.path());
+        ROOT::RDF::RNode node = apply_selection(df, spec.selection);
+
+        if (sample_id >= 0)
+        {
+            node = node.Define("sample_id", [sample_id]() { return sample_id; });
+            if (std::find(columns.begin(), columns.end(), "sample_id") == columns.end())
+                columns.push_back("sample_id");
+        }
+
+        const std::string scratch_file =
+            scratch_file_path(scratch_dir, tree_name, snapshot::sanitise_root_key(sample_key));
+
+        auto count = node.Count();
+        auto snapshot = node.Snapshot(tree_name, scratch_file, columns, snapshot_options());
+        ROOT::RDF::RunGraphs({count, snapshot});
+        (void)snapshot.GetValue();
+
+        return {scratch_file, count.GetValue()};
+    }
+
+    void remove_scratch_file(const std::string &scratch_file)
+    {
+        std::error_code ec;
+        std::filesystem::remove(scratch_file, ec);
+    }
 }
 
-std::string SnapshotService::sanitise_root_key(std::string s)
+std::string snapshot::sanitise_root_key(std::string s)
 {
     for (char &c : s)
     {
@@ -183,42 +226,33 @@ std::string SnapshotService::sanitise_root_key(std::string s)
     return s;
 }
 
-unsigned long long SnapshotService::snapshot_sample(const EventListIO &event_list,
-                                                    const std::string &out_path,
-                                                    const std::string &sample_key,
-                                                    const SnapshotSpec &spec)
+unsigned long long snapshot::snapshot_sample(const EventListIO &event_list,
+                                             const std::string &out_path,
+                                             const std::string &sample_key,
+                                             const Spec &spec)
 {
-    const std::string tree_name =
-        sanitise_root_key(spec.tree_name) + "_" + sanitise_root_key(sample_key);
+    const std::string tree_name = sanitise_root_key(spec.tree_name) + "_" + sanitise_root_key(sample_key);
 
     if (!spec.overwrite_if_exists && tree_exists(out_path, tree_name))
         return 0;
 
-    ROOT::RDataFrame df(selected_tree_path(sample_key), event_list.path());
-    ROOT::RDF::RNode node = apply_selection(df, spec.selection);
     const std::vector<std::string> columns = snapshot_columns(spec);
     const std::filesystem::path scratch_dir = snapshot_scratch_dir();
-    const std::string scratch_file =
-        scratch_file_path(scratch_dir, tree_name, sanitise_root_key(sample_key));
-
-    auto count = node.Count();
-    auto snapshot = node.Snapshot(tree_name, scratch_file, columns, snapshot_options());
-    ROOT::RDF::RunGraphs({count, snapshot});
-    (void)snapshot.GetValue();
+    const ScratchSnapshot snap =
+        snapshot_to_scratch(event_list, sample_key, scratch_dir, tree_name, spec, columns);
 
     if (spec.overwrite_if_exists)
         delete_tree_if_present(out_path, tree_name);
-    write_tree_from_scratch(out_path, scratch_file, tree_name, false);
+    write_tree_from_scratch(out_path, snap.file, tree_name, false);
 
-    std::error_code ec;
-    std::filesystem::remove(scratch_file, ec);
+    remove_scratch_file(snap.file);
 
-    return count.GetValue();
+    return snap.count;
 }
 
-unsigned long long SnapshotService::snapshot_merged(const EventListIO &event_list,
-                                                    const std::string &out_path,
-                                                    const SnapshotSpec &spec)
+unsigned long long snapshot::snapshot_merged(const EventListIO &event_list,
+                                             const std::string &out_path,
+                                             const Spec &spec)
 {
     const auto keys = event_list.sample_keys();
     const std::vector<std::string> base_columns = snapshot_columns(spec);
@@ -235,32 +269,36 @@ unsigned long long SnapshotService::snapshot_merged(const EventListIO &event_lis
     for (size_t i = 0; i < keys.size(); ++i)
     {
         const std::string &sample_key = keys[i];
-        ROOT::RDataFrame df(selected_tree_path(sample_key), event_list.path());
-        ROOT::RDF::RNode node = apply_selection(df, spec.selection);
+        const int sample_id = spec.include_sample_id ? static_cast<int>(i) : -1;
+        const ScratchSnapshot snap =
+            snapshot_to_scratch(event_list, sample_key, scratch_dir, tree_name, spec, base_columns, sample_id);
 
-        std::vector<std::string> columns = base_columns;
-        if (spec.include_sample_id)
-        {
-            node = node.Define("sample_id", [i]() { return static_cast<int>(i); });
-            if (std::find(columns.begin(), columns.end(), "sample_id") == columns.end())
-                columns.push_back("sample_id");
-        }
-
-        const std::string scratch_file =
-            scratch_file_path(scratch_dir, tree_name, sanitise_root_key(sample_key));
-
-        auto count = node.Count();
-        auto snapshot = node.Snapshot(tree_name, scratch_file, columns, snapshot_options());
-        ROOT::RDF::RunGraphs({count, snapshot});
-        (void)snapshot.GetValue();
-
-        write_tree_from_scratch(out_path, scratch_file, tree_name, append);
+        write_tree_from_scratch(out_path, snap.file, tree_name, append);
         append = true;
-        total += count.GetValue();
+        total += snap.count;
 
-        std::error_code ec;
-        std::filesystem::remove(scratch_file, ec);
+        remove_scratch_file(snap.file);
     }
 
     return total;
+}
+
+std::string SnapshotService::sanitise_root_key(std::string s)
+{
+    return snapshot::sanitise_root_key(std::move(s));
+}
+
+unsigned long long SnapshotService::snapshot_sample(const EventListIO &event_list,
+                                                    const std::string &out_path,
+                                                    const std::string &sample_key,
+                                                    const SnapshotSpec &spec)
+{
+    return snapshot::snapshot_sample(event_list, out_path, sample_key, spec);
+}
+
+unsigned long long SnapshotService::snapshot_merged(const EventListIO &event_list,
+                                                    const std::string &out_path,
+                                                    const SnapshotSpec &spec)
+{
+    return snapshot::snapshot_merged(event_list, out_path, spec);
 }

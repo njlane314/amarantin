@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+readonly -a MACRO_DIRS=("io/macro" "plot/macro")
 cd "${ROOT_DIR}"
 
 usage() {
@@ -40,26 +41,23 @@ fi
 macro_name=${1//-/_}
 shift || true
 
-find_macro() {
-  local name=$1
-  local path
-  for path in "io/macro/${name}.C" "plot/macro/${name}.C"; do
-    if [[ -f "${path}" ]]; then
-      printf '%s\n' "${path}"
-      return 0
-    fi
-  done
-  return 1
-}
+macro_path=
+for macro_dir in "${MACRO_DIRS[@]}"; do
+  candidate="${macro_dir}/${macro_name}.C"
+  if [[ -f "${candidate}" ]]; then
+    macro_path=${candidate}
+    break
+  fi
+done
 
-macro_path=$(find_macro "${macro_name}") || {
+if [[ -z "${macro_path}" ]]; then
   {
     echo "tools/run-macro: unknown macro: ${macro_name}"
     echo
     usage
   } >&2
   exit 1
-}
+fi
 
 escape_cpp_string() {
   local s=$1
@@ -90,6 +88,10 @@ extract_signature() {
   ' "${path}"
 }
 
+is_bool_literal() { [[ "$1" == true || "$1" == false ]]; }
+is_int_literal() { [[ "$1" =~ ^[-+]?[0-9]+$ ]]; }
+is_float_literal() { [[ "$1" =~ ^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; }
+
 parameter_kinds() {
   local signature=$1
   local params=${signature#*(}
@@ -114,9 +116,8 @@ parameter_kinds() {
   done
 }
 
-to_cpp_literal() {
+prefixed_literal() {
   local arg=$1
-  local kind=${2:-string}
 
   if [[ "${arg}" == n:null ]]; then
     printf 'nullptr'
@@ -135,21 +136,32 @@ to_cpp_literal() {
     return 0
   fi
 
+  return 1
+}
+
+to_cpp_literal() {
+  local arg=$1
+  local kind=${2:-string}
+
+  if prefixed_literal "${arg}"; then
+    return 0
+  fi
+
   case "${kind}" in
     bool)
-      if [[ "${arg}" =~ ^(true|false)$ ]]; then
+      if is_bool_literal "${arg}"; then
         printf '%s' "${arg}"
         return 0
       fi
       ;;
     int)
-      if [[ "${arg}" =~ ^[-+]?[0-9]+$ ]]; then
+      if is_int_literal "${arg}"; then
         printf '%s' "${arg}"
         return 0
       fi
       ;;
     float)
-      if [[ "${arg}" =~ ^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]; then
+      if is_float_literal "${arg}"; then
         printf '%s' "${arg}"
         return 0
       fi
@@ -166,8 +178,7 @@ to_cpp_literal() {
 build_invocation() {
   local path=$1
   local name=$2
-  shift || true
-  shift || true
+  shift 2
 
   if [[ $# -eq 0 ]]; then
     printf '%s' "${path}"
@@ -176,13 +187,8 @@ build_invocation() {
 
   local signature
   signature=$(extract_signature "${name}" "${path}")
-  local -a kinds
-  local kind_line
-  while IFS= read -r kind_line; do
-    [[ -n "${kind_line}" ]] && kinds+=("${kind_line}")
-  done <<EOF
-$(parameter_kinds "${signature}")
-EOF
+  local -a kinds=()
+  mapfile -t kinds < <(parameter_kinds "${signature}")
 
   local args=()
   local arg

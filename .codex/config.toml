@@ -1,0 +1,18 @@
+# Project-scoped Codex configuration for amarantin work.
+
+model = "gpt-5.4"
+model_provider = "openai"
+model_reasoning_effort = "xhigh"
+plan_mode_reasoning_effort = "xhigh"
+model_verbosity = "low"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false
+
+[agents]
+# Keep parallelism shallow. One writer thread plus read-only help is the intended pattern.
+max_threads = 4
+max_depth = 1
+job_max_runtime_seconds = 21600

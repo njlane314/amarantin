@@ -6,10 +6,9 @@
 
 #include "EventListIO.hh"
 
-class SnapshotService
+namespace snapshot
 {
-public:
-    struct SnapshotSpec
+    struct Spec
     {
         std::string tree_name = "train";
         std::vector<std::string> columns;
@@ -17,6 +16,23 @@ public:
         bool overwrite_if_exists = true;
         bool include_sample_id = true;
     };
+
+    std::string sanitise_root_key(std::string s);
+
+    unsigned long long snapshot_sample(const EventListIO &event_list,
+                                       const std::string &out_path,
+                                       const std::string &sample_key,
+                                       const Spec &spec);
+
+    unsigned long long snapshot_merged(const EventListIO &event_list,
+                                       const std::string &out_path,
+                                       const Spec &spec);
+}
+
+class SnapshotService
+{
+public:
+    using SnapshotSpec = snapshot::Spec;
 
     static std::string sanitise_root_key(std::string s);
 

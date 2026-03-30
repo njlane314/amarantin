@@ -96,7 +96,7 @@ void cache_systematics(const char *read_path = nullptr,
         readback_options.enable_flux = cache_options.enable_flux;
         readback_options.enable_reint = cache_options.enable_reint;
 
-        const auto result = syst::SystematicsEngine::evaluate(eventlist, sample_key, spec, readback_options);
+        const auto result = syst::evaluate(eventlist, sample_key, spec, readback_options);
         std::cout << "cache_key=" << result.cache_key
                   << " cached_nbins=" << result.cached_nbins
                   << " loaded_from_persistent_cache=" << (result.loaded_from_persistent_cache ? 1 : 0)

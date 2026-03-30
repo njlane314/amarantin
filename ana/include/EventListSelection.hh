@@ -6,9 +6,8 @@
 
 #include "DatasetIO.hh"
 
-class EventListSelection
+namespace eventlist_selection
 {
-public:
     enum class Preset
     {
         kRaw,
@@ -25,6 +24,26 @@ public:
         int numi_run_boundary = 16880;
     };
 
+    const char *preset_name(Preset preset);
+    const char *preset_label(Preset preset);
+    Preset preset_from_string(const std::string &name);
+    const char *trigger_branch();
+    const char *slice_branch();
+    const char *fiducial_branch();
+    const char *muon_branch();
+
+    std::string expression(Preset preset,
+                           const DatasetIO::Sample &sample,
+                           const std::vector<std::string> &columns,
+                           const Config &config);
+}
+
+class EventListSelection
+{
+public:
+    using Preset = eventlist_selection::Preset;
+    using Config = eventlist_selection::Config;
+
     static const char *preset_name(Preset preset);
     static const char *preset_label(Preset preset);
     static Preset preset_from_string(const std::string &name);
@@ -32,17 +51,10 @@ public:
     static const char *slice_branch();
     static const char *fiducial_branch();
     static const char *muon_branch();
-
     static std::string expression(Preset preset,
                                   const DatasetIO::Sample &sample,
                                   const std::vector<std::string> &columns,
                                   const Config &config);
-
-private:
-    static bool has_column(const std::vector<std::string> &columns, const std::string &name);
-    static void require_column(const std::vector<std::string> &columns,
-                               const std::string &name,
-                               const char *context);
 };
 
 #endif // EVENTLIST_SELECTION_HH

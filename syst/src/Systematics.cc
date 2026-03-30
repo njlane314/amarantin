@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "SampleDef.hh"
 #include "TH1D.h"
 #include "TTree.h"
 #include "TTreeFormula.h"
@@ -99,7 +100,7 @@ namespace
         std::ostringstream os;
         os << eventlist.path() << "|"
            << sample_key << "|"
-           << syst::SystematicsEngine::cache_key(spec, options) << "|"
+           << syst::cache_key(spec, options) << "|"
            << spec.nbins << "|"
            << std::setprecision(17) << spec.xmin << "|"
            << std::setprecision(17) << spec.xmax << "|"
@@ -177,6 +178,14 @@ namespace
     {
         static std::unordered_map<std::string, syst::SystematicsResult> cache;
         return cache;
+    }
+
+    std::vector<std::string> resolve_detector_sample_keys(EventListIO &eventlist,
+                                                          const syst::CacheRequest &request)
+    {
+        if (!request.detector_sample_keys.empty())
+            return request.detector_sample_keys;
+        return ana::detector_mates(eventlist, request.sample_key);
     }
 
     SampleComputation compute_sample(TTree *tree,
@@ -756,16 +765,16 @@ namespace
 
 namespace syst
 {
-    std::string SystematicsEngine::cache_key(const HistogramSpec &spec,
-                                             const SystematicsOptions &options)
+    std::string cache_key(const HistogramSpec &spec,
+                          const SystematicsOptions &options)
     {
         return stable_hash_hex(encode_options_for_cache(spec, options));
     }
 
-    SystematicsResult SystematicsEngine::evaluate(EventListIO &eventlist,
-                                                  const std::string &sample_key,
-                                                  const HistogramSpec &spec,
-                                                  const SystematicsOptions &options)
+    SystematicsResult evaluate(EventListIO &eventlist,
+                               const std::string &sample_key,
+                               const HistogramSpec &spec,
+                               const SystematicsOptions &options)
     {
         if (sample_key.empty())
             throw std::runtime_error("SystematicsEngine: sample_key is required");
@@ -838,16 +847,16 @@ namespace syst
         return result;
     }
 
-    void SystematicsEngine::clear_cache()
+    void clear_cache()
     {
         std::lock_guard<std::mutex> lock(memory_cache_mutex());
         memory_cache_store().clear();
     }
 
-    std::unique_ptr<TH1D> SystematicsEngine::make_histogram(const HistogramSpec &spec,
-                                                            const std::vector<double> &bins,
-                                                            const char *hist_name,
-                                                            const char *title)
+    std::unique_ptr<TH1D> make_histogram(const HistogramSpec &spec,
+                                         const std::vector<double> &bins,
+                                         const char *hist_name,
+                                         const char *title)
     {
         if (spec.nbins <= 0)
             throw std::runtime_error("SystematicsEngine: nbins must be positive");
@@ -865,5 +874,88 @@ namespace syst
             hist->SetBinContent(static_cast<int>(bin + 1), bins[bin]);
 
         return hist;
+    }
+
+    void build_systematics_cache(EventListIO &eventlist,
+                                 const CacheBuildOptions &options)
+    {
+        if (!options.active())
+            return;
+        if (eventlist.mode() == EventListIO::Mode::kRead)
+            throw std::runtime_error("syst::build_systematics_cache: event list must be writable");
+
+        for (const auto &request : options.requests)
+        {
+            if (request.sample_key.empty())
+                throw std::runtime_error("syst::build_systematics_cache: request sample_key must not be empty");
+            if (request.branch_expr.empty())
+                throw std::runtime_error("syst::build_systematics_cache: request branch_expr must not be empty");
+            if (request.nbins <= 0)
+                throw std::runtime_error("syst::build_systematics_cache: request nbins must be positive");
+            if (!(request.xmax > request.xmin))
+                throw std::runtime_error("syst::build_systematics_cache: request range is invalid");
+
+            HistogramSpec spec;
+            spec.branch_expr = request.branch_expr;
+            spec.nbins = request.nbins;
+            spec.xmin = request.xmin;
+            spec.xmax = request.xmax;
+            spec.selection_expr = request.selection_expr;
+
+            const std::vector<std::string> detector_sample_keys =
+                resolve_detector_sample_keys(eventlist, request);
+
+            SystematicsOptions sysopt;
+            sysopt.enable_memory_cache = false;
+            sysopt.persistent_cache =
+                options.overwrite_existing ? CachePolicy::kRebuild
+                                           : CachePolicy::kComputeIfMissing;
+            sysopt.cache_nbins = std::max(request.nbins, options.cache_nbins);
+            sysopt.enable_detector = !detector_sample_keys.empty();
+            sysopt.detector_sample_keys = detector_sample_keys;
+            sysopt.enable_genie = options.enable_genie;
+            sysopt.enable_flux = options.enable_flux;
+            sysopt.enable_reint = options.enable_reint;
+            sysopt.build_full_covariance = options.build_full_covariance;
+            sysopt.retain_universe_histograms = options.retain_universe_histograms;
+            sysopt.enable_eigenmode_compression = options.enable_eigenmode_compression;
+            sysopt.persist_covariance = options.persist_covariance;
+            sysopt.max_eigenmodes = options.max_eigenmodes;
+            sysopt.eigenmode_fraction = options.eigenmode_fraction;
+
+            (void)evaluate(eventlist,
+                           request.sample_key,
+                           spec,
+                           sysopt);
+        }
+
+        eventlist.flush();
+    }
+
+    SystematicsResult SystematicsEngine::evaluate(EventListIO &eventlist,
+                                                  const std::string &sample_key,
+                                                  const HistogramSpec &spec,
+                                                  const SystematicsOptions &options)
+    {
+        return syst::evaluate(eventlist, sample_key, spec, options);
+    }
+
+    std::string SystematicsEngine::cache_key(const HistogramSpec &spec,
+                                             const SystematicsOptions &options)
+    {
+        return syst::cache_key(spec, options);
+    }
+
+    void SystematicsEngine::clear_cache()
+    {
+        syst::clear_cache();
+    }
+
+    std::unique_ptr<TH1D> SystematicsEngine::make_histogram(const HistogramSpec &spec,
+                                                            const std::vector<double> &bins,
+                                                            const char *hist_name,
+                                                            const char *title)
+    {
+        return syst::make_histogram(spec, bins, hist_name, title);
     }
 }

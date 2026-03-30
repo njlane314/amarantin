@@ -90,11 +90,64 @@ namespace syst
         std::vector<double> total_up;
     };
 
-class SystematicsEngine
-{
-public:
-    static SystematicsResult evaluate(EventListIO &eventlist,
-                                      const std::string &sample_key,
+    struct CacheRequest
+    {
+        std::string sample_key;
+        std::string branch_expr;
+        int nbins = 0;
+        double xmin = 0.0;
+        double xmax = 0.0;
+        std::string selection_expr;
+        std::vector<std::string> detector_sample_keys;
+    };
+
+    struct CacheBuildOptions
+    {
+        bool overwrite_existing = true;
+        int cache_nbins = 0;
+
+        bool enable_genie = false;
+        bool enable_flux = false;
+        bool enable_reint = false;
+
+        bool build_full_covariance = false;
+        bool retain_universe_histograms = false;
+        bool enable_eigenmode_compression = true;
+        bool persist_covariance = true;
+        int max_eigenmodes = 8;
+        double eigenmode_fraction = 0.99;
+
+        std::vector<CacheRequest> requests;
+
+        bool active() const
+        {
+            return !requests.empty();
+        }
+    };
+
+    SystematicsResult evaluate(EventListIO &eventlist,
+                               const std::string &sample_key,
+                               const HistogramSpec &spec,
+                               const SystematicsOptions &options = SystematicsOptions{});
+
+    std::string cache_key(const HistogramSpec &spec,
+                          const SystematicsOptions &options);
+
+    void clear_cache();
+
+    std::unique_ptr<TH1D> make_histogram(const HistogramSpec &spec,
+                                         const std::vector<double> &bins,
+                                         const char *hist_name = "h_systematics",
+                                         const char *title = "");
+
+    void build_systematics_cache(EventListIO &eventlist,
+                                 const CacheBuildOptions &options);
+
+    class SystematicsEngine
+    {
+    public:
+        static SystematicsResult evaluate(EventListIO &eventlist,
+                                          const std::string &sample_key,
                                           const HistogramSpec &spec,
                                           const SystematicsOptions &options = SystematicsOptions{});
 
@@ -107,7 +160,7 @@ public:
                                                     const std::vector<double> &bins,
                                                     const char *hist_name = "h_systematics",
                                                     const char *title = "");
-};
+    };
 }
 
 #endif // SYSTEMATICS_HH

@@ -34,11 +34,11 @@ void mk_snapshot(const char *read_path = nullptr,
         };
 
         EventListIO event_list(read_path, EventListIO::Mode::kRead);
-        SnapshotService::SnapshotSpec spec;
+        snapshot::Spec spec;
         spec.columns = split_csv(columns_csv);
         spec.selection = (selection && *selection) ? selection : "true";
         spec.tree_name = "train";
-        const auto count = SnapshotService::snapshot_merged(event_list, out_path, spec);
+        const auto count = snapshot::snapshot_merged(event_list, out_path, spec);
         std::cout << "snapshot entries=" << count << "\n";
     });
 }

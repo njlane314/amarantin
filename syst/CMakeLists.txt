@@ -1,6 +1,5 @@
 set(AMARANTIN_SYST_SOURCES
   src/Systematics.cc
-  src/SystematicsCacheBuilder.cc
 )
 
 set(AMARANTIN_SYST_PUBLIC_HEADERS

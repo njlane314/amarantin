@@ -1,3 +1,4 @@
 /build/
 /install/
 /cmake-build-*/
+/.codex-run-logs/
