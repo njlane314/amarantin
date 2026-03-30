@@ -43,19 +43,19 @@ namespace
         return sanitise_universe_weight(static_cast<double>(raw_weight) / 1000.0);
     }
 
-    plot_utils::HistogramSpec fine_spec_for(const plot_utils::HistogramSpec &spec,
-                                            const plot_utils::SystematicsOptions &options)
+    syst::HistogramSpec fine_spec_for(const syst::HistogramSpec &spec,
+                                      const syst::SystematicsOptions &options)
     {
-        plot_utils::HistogramSpec out = spec;
+        syst::HistogramSpec out = spec;
         if (options.cache_nbins > out.nbins)
             out.nbins = options.cache_nbins;
         return out;
     }
 
-    std::string encode_options_for_cache(const plot_utils::HistogramSpec &spec,
-                                         const plot_utils::SystematicsOptions &options)
+    std::string encode_options_for_cache(const syst::HistogramSpec &spec,
+                                         const syst::SystematicsOptions &options)
     {
-        const plot_utils::HistogramSpec fine_spec = fine_spec_for(spec, options);
+        const syst::HistogramSpec fine_spec = fine_spec_for(spec, options);
 
         std::ostringstream os;
         os << "v=" << kSystematicsCacheVersion
@@ -93,13 +93,13 @@ namespace
 
     std::string evaluation_cache_key(const EventListIO &eventlist,
                                      const std::string &sample_key,
-                                     const plot_utils::HistogramSpec &spec,
-                                     const plot_utils::SystematicsOptions &options)
+                                     const syst::HistogramSpec &spec,
+                                     const syst::SystematicsOptions &options)
     {
         std::ostringstream os;
         os << eventlist.path() << "|"
            << sample_key << "|"
-           << plot_utils::SystematicsEngine::cache_key(spec, options) << "|"
+           << syst::SystematicsEngine::cache_key(spec, options) << "|"
            << spec.nbins << "|"
            << std::setprecision(17) << spec.xmin << "|"
            << std::setprecision(17) << spec.xmax << "|"
@@ -109,7 +109,7 @@ namespace
         return os.str();
     }
 
-    int find_bin(const plot_utils::HistogramSpec &spec, double value)
+    int find_bin(const syst::HistogramSpec &spec, double value)
     {
         if (!std::isfinite(value))
             return -1;
@@ -173,15 +173,15 @@ namespace
         return mutex;
     }
 
-    std::unordered_map<std::string, plot_utils::SystematicsResult> &memory_cache_store()
+    std::unordered_map<std::string, syst::SystematicsResult> &memory_cache_store()
     {
-        static std::unordered_map<std::string, plot_utils::SystematicsResult> cache;
+        static std::unordered_map<std::string, syst::SystematicsResult> cache;
         return cache;
     }
 
     SampleComputation compute_sample(TTree *tree,
-                                     const plot_utils::HistogramSpec &spec,
-                                     const plot_utils::SystematicsOptions &options)
+                                     const syst::HistogramSpec &spec,
+                                     const syst::SystematicsOptions &options)
     {
         if (!tree)
             throw std::runtime_error("SystematicsEngine: missing selected tree");
@@ -289,7 +289,7 @@ namespace
                                      int source_nbins,
                                      double source_xmin,
                                      double source_xmax,
-                                     const plot_utils::HistogramSpec &target_spec)
+                                     const syst::HistogramSpec &target_spec)
     {
         if (source.empty())
             return std::vector<double>{};
@@ -327,7 +327,7 @@ namespace
     }
 
     std::vector<std::vector<double>> rebin_detector_templates(const CacheEntry &entry,
-                                                              const plot_utils::HistogramSpec &target_spec)
+                                                              const syst::HistogramSpec &target_spec)
     {
         std::vector<std::vector<double>> out;
         if (entry.detector_template_count <= 0 || entry.detector_templates.empty())
@@ -367,10 +367,10 @@ namespace
         return out;
     }
 
-    plot_utils::Envelope detector_envelope(const std::vector<double> &nominal,
-                                           const std::vector<std::vector<double>> &variations)
+    syst::Envelope detector_envelope(const std::vector<double> &nominal,
+                                     const std::vector<std::vector<double>> &variations)
     {
-        plot_utils::Envelope out;
+        syst::Envelope out;
         if (variations.empty())
             return out;
 
@@ -392,7 +392,7 @@ namespace
     FamilyCache build_family_cache(const UniverseAccumulator &family,
                                    const std::vector<double> &nominal,
                                    int nbins,
-                                   const plot_utils::SystematicsOptions &options)
+                                   const syst::SystematicsOptions &options)
     {
         FamilyCache out;
         out.branch_name = family.branch_name;
@@ -480,7 +480,7 @@ namespace
     }
 
     std::vector<double> combine_total_up(const std::vector<double> &nominal,
-                                         const plot_utils::Envelope &detector,
+                                         const syst::Envelope &detector,
                                          const std::vector<double> &genie_sigma,
                                          const std::vector<double> &flux_sigma,
                                          const std::vector<double> &reint_sigma)
@@ -503,7 +503,7 @@ namespace
     }
 
     std::vector<double> combine_total_down(const std::vector<double> &nominal,
-                                           const plot_utils::Envelope &detector,
+                                           const syst::Envelope &detector,
                                            const std::vector<double> &genie_sigma,
                                            const std::vector<double> &flux_sigma,
                                            const std::vector<double> &reint_sigma)
@@ -526,8 +526,8 @@ namespace
     }
 
     CacheEntry build_cache_entry(TTree *nominal_tree,
-                                 const plot_utils::HistogramSpec &fine_spec,
-                                 const plot_utils::SystematicsOptions &options,
+                                 const syst::HistogramSpec &fine_spec,
+                                 const syst::SystematicsOptions &options,
                                  const std::vector<TTree *> &detector_trees)
     {
         const SampleComputation nominal_sample = compute_sample(nominal_tree, fine_spec, options);
@@ -545,7 +545,7 @@ namespace
         detector_histograms.reserve(detector_trees.size());
         for (TTree *tree : detector_trees)
         {
-            const SampleComputation variation = compute_sample(tree, fine_spec, plot_utils::SystematicsOptions{});
+            const SampleComputation variation = compute_sample(tree, fine_spec, syst::SystematicsOptions{});
             detector_histograms.push_back(variation.nominal);
         }
         if (!detector_histograms.empty())
@@ -560,7 +560,7 @@ namespace
                         detector_histograms[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
                 }
             }
-            const plot_utils::Envelope detector = detector_envelope(entry.nominal, detector_histograms);
+            const syst::Envelope detector = detector_envelope(entry.nominal, detector_histograms);
             entry.detector_down = detector.down;
             entry.detector_up = detector.up;
         }
@@ -573,24 +573,24 @@ namespace
             entry.reint = build_family_cache(*nominal_sample.reint, entry.nominal, fine_spec.nbins, options);
 
         entry.total_up = combine_total_up(entry.nominal,
-                                          plot_utils::Envelope{entry.detector_down, entry.detector_up},
+                                          syst::Envelope{entry.detector_down, entry.detector_up},
                                           entry.genie.sigma,
                                           entry.flux.sigma,
                                           entry.reint.sigma);
         entry.total_down = combine_total_down(entry.nominal,
-                                              plot_utils::Envelope{entry.detector_down, entry.detector_up},
+                                              syst::Envelope{entry.detector_down, entry.detector_up},
                                               entry.genie.sigma,
                                               entry.flux.sigma,
                                               entry.reint.sigma);
         return entry;
     }
 
-    plot_utils::UniverseFamilyResult family_result_from_cache(const FamilyCache &family,
-                                                              const CacheEntry &entry,
-                                                              const plot_utils::HistogramSpec &target_spec,
+    syst::UniverseFamilyResult family_result_from_cache(const FamilyCache &family,
+                                                        const CacheEntry &entry,
+                                                        const syst::HistogramSpec &target_spec,
                                                               bool build_full_covariance)
     {
-        plot_utils::UniverseFamilyResult out;
+        syst::UniverseFamilyResult out;
         out.branch_name = family.branch_name;
         out.n_universes = static_cast<std::size_t>(family.n_variations);
         out.eigen_rank = family.eigen_rank;
@@ -696,13 +696,13 @@ namespace
         return out;
     }
 
-    plot_utils::SystematicsResult result_from_cache(const CacheEntry &entry,
-                                                    const std::string &cache_key,
-                                                    const plot_utils::HistogramSpec &target_spec,
-                                                    const plot_utils::SystematicsOptions &options,
+    syst::SystematicsResult result_from_cache(const CacheEntry &entry,
+                                              const std::string &cache_key,
+                                              const syst::HistogramSpec &target_spec,
+                                              const syst::SystematicsOptions &options,
                                                     bool loaded_from_persistent_cache)
     {
-        plot_utils::SystematicsResult result;
+        syst::SystematicsResult result;
         result.cache_key = cache_key;
         result.cached_nbins = entry.nbins;
         result.loaded_from_persistent_cache = loaded_from_persistent_cache;

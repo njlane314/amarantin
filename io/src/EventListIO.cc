@@ -22,6 +22,13 @@ namespace
         utils::write_param<double>(meta_dir, "subrun_pot_sum", sample.subrun_pot_sum);
         utils::write_param<double>(meta_dir, "db_tortgt_pot_sum", sample.db_tortgt_pot_sum);
         utils::write_param<double>(meta_dir, "normalisation", sample.normalisation);
+
+        utils::write_named(meta_dir, "family", sample.family);
+        utils::write_named(meta_dir, "nominal_key", sample.nominal_key);
+        utils::write_named(meta_dir, "variant_name", sample.variant_name);
+        utils::write_named(meta_dir, "workflow_role", sample.workflow_role);
+        utils::write_named(meta_dir, "source_def", sample.source_def);
+        utils::write_named(meta_dir, "campaign", sample.campaign);
     }
 
     TDirectory *sample_dir_for(TFile *file, const std::string &sample_key, bool create)
@@ -164,6 +171,32 @@ std::vector<std::string> EventListIO::sample_keys() const
     require_open_();
     TDirectory *samples = utils::must_dir(file_, "samples", false);
     return utils::list_keys(samples);
+}
+
+DatasetIO::Sample EventListIO::sample(const std::string &sample_key) const
+{
+    require_open_();
+
+    TDirectory *sample_dir = sample_dir_for(file_, sample_key, false);
+    TDirectory *meta_dir = utils::must_dir(sample_dir, "meta", false);
+
+    DatasetIO::Sample sample;
+    sample.origin = DatasetIO::Sample::origin_from(utils::read_named(meta_dir, "origin"));
+    sample.variation = DatasetIO::Sample::variation_from(utils::read_named(meta_dir, "variation"));
+    sample.beam = DatasetIO::Sample::beam_from(utils::read_named(meta_dir, "beam"));
+    sample.polarity = DatasetIO::Sample::polarity_from(utils::read_named(meta_dir, "polarity"));
+    sample.subrun_pot_sum = utils::read_param<double>(meta_dir, "subrun_pot_sum");
+    sample.db_tortgt_pot_sum = utils::read_param<double>(meta_dir, "db_tortgt_pot_sum");
+    sample.normalisation = utils::read_param<double>(meta_dir, "normalisation");
+
+    sample.family = utils::read_named_or(meta_dir, "family");
+    sample.nominal_key = utils::read_named_or(meta_dir, "nominal_key");
+    sample.variant_name = utils::read_named_or(meta_dir, "variant_name");
+    sample.workflow_role = utils::read_named_or(meta_dir, "workflow_role");
+    sample.source_def = utils::read_named_or(meta_dir, "source_def");
+    sample.campaign = utils::read_named_or(meta_dir, "campaign");
+
+    return sample;
 }
 
 TTree *EventListIO::selected_tree(const std::string &sample_key) const

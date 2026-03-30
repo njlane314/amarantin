@@ -57,6 +57,7 @@ namespace plot_utils
 
         EventDisplay(Spec spec, Options opt, DetectorData data, SparseIndex indices = {});
         EventDisplay(Spec spec, Options opt, SemanticData data, SparseIndex indices = {});
+        ~EventDisplay();
 
         void draw(TCanvas &canvas);
 

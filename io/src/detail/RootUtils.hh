@@ -61,6 +61,17 @@ namespace utils
         return std::string(n->GetTitle());
     }
 
+    inline std::string read_named_or(TDirectory *d,
+                                     const char *key,
+                                     const std::string &fallback = std::string())
+    {
+        TObject *obj = d ? d->Get(key) : nullptr;
+        auto *n = dynamic_cast<TNamed *>(obj);
+        if (!n)
+            return fallback;
+        return std::string(n->GetTitle());
+    }
+
     inline void write_named(TDirectory *d, const char *key, const std::string &value)
     {
         if (!d) throw std::runtime_error("RootUtils: null directory in write_named");

@@ -44,6 +44,13 @@ public:
         double db_tortgt_pot_sum = 0.0;
         double normalisation = 1.0;
 
+        std::string family;
+        std::string nominal_key;
+        std::string variant_name;
+        std::string workflow_role;
+        std::string source_def;
+        std::string campaign;
+
         std::vector<std::string> root_files;
 
         void write(TDirectory *d) const;

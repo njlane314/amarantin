@@ -19,6 +19,9 @@ In the current code layout:
   EventListIO
     owns the file format and persistence only
 
+  SampleBook
+    carries workflow-facing sample-family metadata from production manifests
+
   ana::EventListBuilder
     builds selected event lists and helper columns into EventListIO
 
@@ -67,6 +70,33 @@ Per-sample metadata written in samples/<sample-key>/meta/:
   subrun_pot_sum
   db_tortgt_pot_sum
   normalisation
+  family
+  nominal_key
+  variant_name
+  workflow_role
+  source_def
+  campaign
+
+These fields are intended to preserve production-level workflow semantics from
+an external sample-book manifest, for example:
+
+  family
+    logical detector-family or workflow group
+
+  nominal_key
+    the nominal sibling to which a detector variation belongs
+
+  variant_name
+    human-readable detector or workflow variation label
+
+  workflow_role
+    training / plotting / nominal / validation style role tags
+
+  source_def
+    production-level source definition or other external dataset handle
+
+  campaign
+    production campaign label
 
 Selected event tree
 -------------------
@@ -329,6 +359,10 @@ These caches can be built either:
     syst::SystematicsCacheBuilder
   * later on an existing file by reopening EventListIO in update mode and
     calling syst::SystematicsCacheBuilder
+
+When detector sample keys are not given explicitly, SystematicsCacheBuilder can
+recover detector siblings from the persisted sample-book metadata in
+samples/<sample-key>/meta/.
 
 Detector-systematic caching stores per-variation fine templates so envelopes
 can be rebuilt after rebinning.

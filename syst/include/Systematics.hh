@@ -90,11 +90,11 @@ namespace syst
         std::vector<double> total_up;
     };
 
-    class SystematicsEngine
-    {
-    public:
-        static SystematicsResult evaluate(EventListIO &eventlist,
-                                          const std::string &sample_key,
+class SystematicsEngine
+{
+public:
+    static SystematicsResult evaluate(EventListIO &eventlist,
+                                      const std::string &sample_key,
                                           const HistogramSpec &spec,
                                           const SystematicsOptions &options = SystematicsOptions{});
 
@@ -107,9 +107,7 @@ namespace syst
                                                     const std::vector<double> &bins,
                                                     const char *hist_name = "h_systematics",
                                                     const char *title = "");
-    };
+};
 }
-
-namespace plot_utils = syst;
 
 #endif // SYSTEMATICS_HH

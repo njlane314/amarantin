@@ -89,6 +89,7 @@ public:
     void flush();
 
     std::vector<std::string> sample_keys() const;
+    DatasetIO::Sample sample(const std::string &sample_key) const;
     TTree *selected_tree(const std::string &sample_key) const;
     TTree *subrun_tree(const std::string &sample_key) const;
     std::vector<std::string> systematics_cache_keys(const std::string &sample_key) const;

@@ -22,6 +22,12 @@
  *     subrun_pot_sum         TParameter<double>
  *     db_tortgt_pot_sum      TParameter<double>
  *     normalisation          TParameter<double>
+ *     family                 TNamed
+ *     nominal_key            TNamed
+ *     variant_name           TNamed
+ *     workflow_role          TNamed
+ *     source_def             TNamed
+ *     campaign               TNamed
  *     root_files             TTree(root_file)
  *     prov/pNNNN/            TDirectory
  *       scale                TParameter<double>
@@ -228,6 +234,13 @@ void DatasetIO::Sample::write(TDirectory *d) const
     TParameter<double>("db_tortgt_pot_sum", db_tortgt_pot_sum).Write("db_tortgt_pot_sum", TObject::kOverwrite);
     TParameter<double>("normalisation", normalisation).Write("normalisation", TObject::kOverwrite);
 
+    TNamed("family", family.c_str()).Write("family", TObject::kOverwrite);
+    TNamed("nominal_key", nominal_key.c_str()).Write("nominal_key", TObject::kOverwrite);
+    TNamed("variant_name", variant_name.c_str()).Write("variant_name", TObject::kOverwrite);
+    TNamed("workflow_role", workflow_role.c_str()).Write("workflow_role", TObject::kOverwrite);
+    TNamed("source_def", source_def.c_str()).Write("source_def", TObject::kOverwrite);
+    TNamed("campaign", campaign.c_str()).Write("campaign", TObject::kOverwrite);
+
     {
         TTree files_t("root_files", "");
         std::string root_file;
@@ -269,6 +282,12 @@ DatasetIO::Sample DatasetIO::Sample::read(TDirectory *d)
     s.subrun_pot_sum = utils::read_param<double>(d, "subrun_pot_sum");
     s.db_tortgt_pot_sum = utils::read_param<double>(d, "db_tortgt_pot_sum");
     s.normalisation = utils::read_param<double>(d, "normalisation");
+    s.family = utils::read_named_or(d, "family");
+    s.nominal_key = utils::read_named_or(d, "nominal_key");
+    s.variant_name = utils::read_named_or(d, "variant_name");
+    s.workflow_role = utils::read_named_or(d, "workflow_role");
+    s.source_def = utils::read_named_or(d, "source_def");
+    s.campaign = utils::read_named_or(d, "campaign");
 
     {
         auto *t = dynamic_cast<TTree *>(d->Get("root_files"));

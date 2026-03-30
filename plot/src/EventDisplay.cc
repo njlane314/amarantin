@@ -29,6 +29,8 @@ namespace plot_utils
     {
     }
 
+    EventDisplay::~EventDisplay() = default;
+
     void EventDisplay::draw(TCanvas &canvas)
     {
         setup_canvas(canvas);

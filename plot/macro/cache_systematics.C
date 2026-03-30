@@ -79,16 +79,16 @@ void cache_systematics(const char *read_path = nullptr,
 
         syst::SystematicsCacheBuilder::build(eventlist, cache_options);
 
-        plot_utils::HistogramSpec spec;
+        syst::HistogramSpec spec;
         spec.branch_expr = request.branch_expr;
         spec.nbins = request.nbins;
         spec.xmin = request.xmin;
         spec.xmax = request.xmax;
         spec.selection_expr = request.selection_expr;
 
-        plot_utils::SystematicsOptions readback_options;
+        syst::SystematicsOptions readback_options;
         readback_options.enable_memory_cache = false;
-        readback_options.persistent_cache = plot_utils::CachePolicy::kLoadOnly;
+        readback_options.persistent_cache = syst::CachePolicy::kLoadOnly;
         readback_options.cache_nbins = cache_options.cache_nbins;
         readback_options.enable_detector = !request.detector_sample_keys.empty();
         readback_options.detector_sample_keys = request.detector_sample_keys;
@@ -96,7 +96,7 @@ void cache_systematics(const char *read_path = nullptr,
         readback_options.enable_flux = cache_options.enable_flux;
         readback_options.enable_reint = cache_options.enable_reint;
 
-        const auto result = plot_utils::SystematicsEngine::evaluate(eventlist, sample_key, spec, readback_options);
+        const auto result = syst::SystematicsEngine::evaluate(eventlist, sample_key, spec, readback_options);
         std::cout << "cache_key=" << result.cache_key
                   << " cached_nbins=" << result.cached_nbins
                   << " loaded_from_persistent_cache=" << (result.loaded_from_persistent_cache ? 1 : 0)

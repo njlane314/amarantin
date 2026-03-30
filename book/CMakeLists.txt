@@ -1,44 +1,41 @@
-set(AMARANTIN_SYST_SOURCES
-  src/Systematics.cc
-  src/SystematicsCacheBuilder.cc
+set(AMARANTIN_BOOK_SOURCES
+  src/SampleBook.cc
 )
 
-set(AMARANTIN_SYST_PUBLIC_HEADERS
-  include/Systematics.hh
-  include/SystematicsCacheBuilder.hh
+set(AMARANTIN_BOOK_PUBLIC_HEADERS
+  include/SampleBook.hh
+  include/SampleCard.hh
 )
 
-add_library(Syst SHARED
-  ${AMARANTIN_SYST_SOURCES}
-  ${AMARANTIN_SYST_PUBLIC_HEADERS}
+add_library(Book SHARED
+  ${AMARANTIN_BOOK_SOURCES}
+  ${AMARANTIN_BOOK_PUBLIC_HEADERS}
 )
 
-find_package(Eigen3 QUIET)
+target_compile_features(Book PUBLIC cxx_std_17)
 
-target_compile_features(Syst PUBLIC cxx_std_17)
-
-target_include_directories(Syst
+target_include_directories(Book
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/amarantin>
 )
 
-target_link_libraries(Syst
+target_link_libraries(Book
   PUBLIC
     IO
     amarantin_root_deps
   PRIVATE
-    Book
     amarantin_build_options
 )
 
-if(Eigen3_FOUND)
-  target_link_libraries(Syst PRIVATE Eigen3::Eigen)
-  target_compile_definitions(Syst PRIVATE AMARANTIN_HAVE_EIGEN=1)
+if(nlohmann_json_FOUND)
+  target_link_libraries(Book PRIVATE nlohmann_json::nlohmann_json)
+elseif(NLOHMANN_JSON_INC)
+  target_include_directories(Book PRIVATE "${NLOHMANN_JSON_INC}")
 endif()
 
-set_target_properties(Syst PROPERTIES
-  OUTPUT_NAME Syst
+set_target_properties(Book PROPERTIES
+  OUTPUT_NAME Book
   VERSION ${PROJECT_VERSION}
   SOVERSION ${PROJECT_VERSION_MAJOR}
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
@@ -46,7 +43,7 @@ set_target_properties(Syst PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
-install(TARGETS Syst
+install(TARGETS Book
   EXPORT amarantinTargets
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -54,6 +51,6 @@ install(TARGETS Syst
   INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amarantin"
 )
 
-install(FILES ${AMARANTIN_SYST_PUBLIC_HEADERS}
+install(FILES ${AMARANTIN_BOOK_PUBLIC_HEADERS}
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amarantin"
 )
