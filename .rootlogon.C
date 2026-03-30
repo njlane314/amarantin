@@ -97,7 +97,7 @@
         #include "Systematics.hh"
         #include "Snapshot.hh"
         #include "UnstackedHist.hh"
-        #include "XsecFit.hh"
+        #include "SignalStrengthFit.hh"
 
         namespace macro_utils
         {

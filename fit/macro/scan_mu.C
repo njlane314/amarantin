@@ -1,7 +1,7 @@
 #include <vector>
 
 #include "ChannelIO.hh"
-#include "XsecFit.hh"
+#include "SignalStrengthFit.hh"
 
 #include "TCanvas.h"
 #include "TGraph.h"
@@ -14,8 +14,8 @@ void scan_mu(const char *path = "output.channels.root",
         ChannelIO chio(path, ChannelIO::Mode::kRead);
         ChannelIO::Channel channel = chio.read(channel_key);
 
-        fit::Model model = fit::make_independent_model(channel, signal_process);
-        std::vector<double> theta(model.nuisances.size(), 0.0);
+        fit::Problem problem = fit::make_independent_problem(channel, signal_process);
+        std::vector<double> theta(problem.nuisances.size(), 0.0);
 
         const int n = 41;
         double x[n];
@@ -23,7 +23,7 @@ void scan_mu(const char *path = "output.channels.root",
         for (int i = 0; i < n; ++i)
         {
             x[i] = 0.05 * i;
-            y[i] = fit::objective(model, x[i], theta);
+            y[i] = fit::objective(problem, x[i], theta);
         }
 
         TCanvas c("c_scan", "c_scan", 800, 600);

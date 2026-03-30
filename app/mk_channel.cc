@@ -99,6 +99,7 @@ namespace
         process.name = name;
         process.kind = kind;
         process.source_keys = {entry.spec.sample_key};
+        process.detector_sample_keys = entry.detector_sample_keys;
         process.nominal = entry.nominal;
         process.sumw2 = entry.sumw2;
         process.detector_down = entry.detector_down;

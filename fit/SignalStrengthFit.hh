@@ -1,0 +1,113 @@
+#ifndef SIGNAL_STRENGTH_FIT_HH
+#define SIGNAL_STRENGTH_FIT_HH
+
+#include <limits>
+#include <string>
+#include <vector>
+
+#include "ChannelIO.hh"
+
+namespace fit
+{
+    enum class SourceKind
+    {
+        kGenieMode,
+        kFluxMode,
+        kReintMode,
+        kDetectorTemplate,
+        kDetectorEnvelope,
+        kStatBin,
+        kTotalEnvelope
+    };
+
+    struct ShiftTerm
+    {
+        std::string process_name;
+        SourceKind source = SourceKind::kGenieMode;
+        int index = 0;
+        double coefficient = 1.0;
+    };
+
+    struct Nuisance
+    {
+        std::string name;
+        double start_value = 0.0;
+        double step = 0.1;
+        double lower = -5.0;
+        double upper = 5.0;
+        bool constrained = true;
+        double prior_center = 0.0;
+        double prior_sigma = 1.0;
+        bool fixed = false;
+        std::vector<ShiftTerm> terms;
+    };
+
+    struct Problem
+    {
+        const ChannelIO::Channel *channel = nullptr;
+        std::string signal_process;
+        double mu_start = 1.0;
+        double mu_lower = 0.0;
+        double mu_upper = 5.0;
+        std::vector<Nuisance> nuisances;
+    };
+
+    struct FitOptions
+    {
+        int max_iterations = 10000;
+        int max_function_calls = 100000;
+        int scan_points = 48;
+        int strategy = 1;
+        int print_level = -1;
+        double tolerance = 1e-4;
+        bool compute_stat_only_interval = true;
+        bool run_hesse = true;
+    };
+
+    struct Result
+    {
+        bool converged = false;
+        int minimizer_status = -1;
+        double edm = 0.0;
+        double objective = 0.0;
+        double mu_hat = 1.0;
+        double mu_err_total_up = std::numeric_limits<double>::quiet_NaN();
+        double mu_err_total_down = std::numeric_limits<double>::quiet_NaN();
+        double mu_err_stat_up = std::numeric_limits<double>::quiet_NaN();
+        double mu_err_stat_down = std::numeric_limits<double>::quiet_NaN();
+        bool mu_err_total_up_found = false;
+        bool mu_err_total_down_found = false;
+        bool mu_err_stat_up_found = false;
+        bool mu_err_stat_down_found = false;
+        std::vector<std::string> nuisance_names;
+        std::vector<double> nuisance_values;
+        std::vector<std::string> parameter_names;
+        std::vector<double> parameter_values;
+        std::vector<double> covariance;
+        std::vector<double> predicted_signal;
+        std::vector<double> predicted_background;
+        std::vector<double> predicted_total;
+    };
+
+    // Build the default signal-strength problem from persisted mode, detector,
+    // and statistical payloads on ChannelIO.
+    Problem make_independent_problem(const ChannelIO::Channel &channel,
+                                     const std::string &signal_process,
+                                     double mu_start = 1.0,
+                                     double mu_upper = 5.0);
+
+    const char *source_kind_name(SourceKind source);
+
+    std::vector<double> predict_bins(const Problem &problem,
+                                     double mu,
+                                     const std::vector<double> &nuisance_values);
+
+    double objective(const Problem &problem,
+                     double mu,
+                     const std::vector<double> &nuisance_values);
+
+    Result profile_signal_strength(const Problem &problem,
+                                   const FitOptions &options = FitOptions{});
+}
+
+#endif // SIGNAL_STRENGTH_FIT_HH

@@ -7,24 +7,32 @@ Native fit library
 `ChannelIO`-based signal-strength fits.
 
 The small public surface is:
-  - `fit::Model`
+  - `fit::Problem`
   - `fit::FitOptions`
   - `fit::Result`
-  - `fit::make_independent_model(...)`
-  - `fit::profile_xsec(...)`
+  - `fit::make_independent_problem(...)`
+  - `fit::profile_signal_strength(...)`
 
 Minimal example:
 
   #include "ChannelIO.hh"
-  #include "XsecFit.hh"
+  #include "SignalStrengthFit.hh"
 
   ChannelIO chio("final.channels.root");
   ChannelIO::Channel ch = chio.read("numu_signal_region");
 
-  fit::Model model = fit::make_independent_model(ch, "lambda_signal");
-  fit::Result result = fit::profile_xsec(model);
+  fit::Problem problem = fit::make_independent_problem(ch, "lambda_signal");
+  fit::Result result = fit::profile_signal_strength(problem);
 
   // Fitted cross section = result.mu_hat * nominal_input_cross_section
+
+The default problem builder now shares family nuisances across processes,
+includes detector/statistical payloads from `ChannelIO`, and only falls back to
+`total_down` / `total_up` when a process lacks the more detailed component
+payloads.
+When only `detector_down` / `detector_up` survive, the default builder groups
+processes by `detector_sample_keys` and morphs through down / nominal / up
+instead of treating the envelope as an independent per-process linear shift.
 
 A native fitter would minimize q(mu) = -2 ln L(mu, theta_hat_mu). Here is a
 toy three-bin scan:

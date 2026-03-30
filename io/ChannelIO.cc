@@ -110,6 +110,7 @@ namespace
     void write_process_payload(TDirectory *proc_dir, const Process &entry)
     {
         std::vector<std::string> source_keys = entry.source_keys;
+        std::vector<std::string> detector_sample_keys = entry.detector_sample_keys;
         std::vector<double> nominal = entry.nominal;
         std::vector<double> sumw2 = entry.sumw2;
         std::vector<double> detector_down = entry.detector_down;
@@ -146,6 +147,7 @@ namespace
         proc_dir->cd();
         TTree payload("payload", "Channel process payload");
         payload.Branch("source_keys", &source_keys);
+        payload.Branch("detector_sample_keys", &detector_sample_keys);
         payload.Branch("nominal", &nominal);
         payload.Branch("sumw2", &sumw2);
         payload.Branch("detector_template_count", &detector_template_count);
@@ -199,6 +201,7 @@ namespace
         process.kind = ChannelIO::process_kind_from(utils::read_named(meta_dir, "kind"));
 
         std::vector<std::string> *source_keys = nullptr;
+        std::vector<std::string> *detector_sample_keys = nullptr;
         std::vector<double> *nominal = nullptr;
         std::vector<double> *sumw2 = nullptr;
         std::vector<double> *detector_down = nullptr;
@@ -233,6 +236,8 @@ namespace
         std::vector<double> *reint_eigenmodes = nullptr;
 
         payload->SetBranchAddress("source_keys", &source_keys);
+        if (payload->GetBranch("detector_sample_keys"))
+            payload->SetBranchAddress("detector_sample_keys", &detector_sample_keys);
         payload->SetBranchAddress("nominal", &nominal);
         payload->SetBranchAddress("sumw2", &sumw2);
         payload->SetBranchAddress("detector_template_count", &detector_template_count);
@@ -275,6 +280,8 @@ namespace
         payload->GetEntry(0);
 
         process.source_keys = source_keys ? *source_keys : std::vector<std::string>{};
+        process.detector_sample_keys =
+            detector_sample_keys ? *detector_sample_keys : std::vector<std::string>{};
         process.nominal = nominal ? *nominal : std::vector<double>{};
         process.sumw2 = sumw2 ? *sumw2 : std::vector<double>{};
         process.detector_template_count = detector_template_count;

@@ -60,7 +60,7 @@ Basic mk_dataset usage
 
 General form:
 
-    build/bin/mk_dataset [--defs sample.defs] output.root context sample-key=sample.root [sample-key=sample.root ...]
+    build/bin/mk_dataset [--defs sample.defs] [--manifest dataset.manifest] output.root context sample-key=sample.root [sample-key=sample.root ...]
 
 Example:
 
@@ -72,9 +72,25 @@ Example:
 The mk_dataset program reads one or more persistent SampleIO ROOT files and
 writes a persistent DatasetIO ROOT file containing keyed samples.
 
+If the same sample key appears more than once, mk_dataset merges those shard
+inputs into one logical dataset sample. This can be supplied either through
+repeated positional `key=path` arguments or through `--manifest`.
+
 If --defs is supplied, mk_dataset also stamps workflow-facing sample metadata
 from a plain text sample definition file onto each keyed sample. This metadata is then
 available later in EventListIO and systematics cache building.
+
+A plain text dataset manifest is one row per shard:
+
+    logical-key sample.root
+
+Repeated logical keys are merged. `key=path` rows are also accepted.
+
+Example:
+
+    beam build/samples/run1_fhc/beam-s0.root
+    beam build/samples/run1_fhc/beam-s1.root
+    ext build/samples/run1_fhc/ext-p0.root
 
 The plain text format is:
 
@@ -142,7 +158,7 @@ Example:
       muon_region
 
 The mk_xsec_fit program reads one persistent `ChannelIO` object, builds the
-default independent-nuisance model from the persisted mode payloads, profiles
+default signal-strength problem from the persisted nuisance payloads, profiles
 the signal-strength parameter `mu`, and prints or writes a plain-text report.
 
 Creating a sample list
@@ -319,11 +335,18 @@ list generation and sample ROOT production:
     datasets.mk
     samples-dag.mk
 
+For richer multi-run / multi-variation handling, there is also a flat catalog
+workflow under:
+
+    samples/datasets.tsv
+    samples/catalog.tsv
+    tools/render-sample-catalog.sh
+
 The idea is to treat generated sample ROOT files as persistent build
 artifacts.
 
-Current datasets.mk example
----------------------------
+Current simple datasets.mk example
+----------------------------------
 
 The existing file declares datasets and logical samples:
 
@@ -351,6 +374,26 @@ With that configuration, the generated artifacts are:
 Those sample ROOT files can then be assembled into a persistent DatasetIO file
 with mk_dataset.
 
+Catalog-driven sample workflow
+------------------------------
+
+Render the checked-in flat catalog into generated make and dataset files:
+
+    bash tools/render-sample-catalog.sh
+
+This produces:
+
+    samples/generated/datasets.mk
+    samples/generated/run1_fhc.sample.defs
+    samples/generated/run1_fhc.dataset.manifest
+
+The generated `datasets.mk` keeps shard-level sample builds, including
+per-artifact origin / variation / beam / polarity metadata.
+
+The generated manifest keeps repeated logical keys so dataset assembly can
+merge shard outputs into stable downstream sample keys such as `beam`, `dirt`,
+`ext`, and `signal`.
+
 Running the sample DAG
 ----------------------
 
@@ -361,6 +404,10 @@ Build all declared sample lists:
 Build all declared sample ROOT files:
 
     make -f samples-dag.mk samples
+
+Build all declared sample ROOT files from the generated catalog:
+
+    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
 
 Print the sample outputs that would be managed:
 
@@ -388,6 +435,25 @@ One common sequence is:
 
 This keeps the per-sample SampleIO ROOT files as persistent intermediate
 artifacts and writes a separate DatasetIO file for downstream analysis.
+
+Typical logical-sample dataset workflow
+---------------------------------------
+
+When shard-level artifacts should merge into logical keys:
+
+    bash tools/render-sample-catalog.sh
+
+    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
+
+    build/bin/mk_dataset \
+      --defs samples/generated/run1_fhc.sample.defs \
+      --manifest samples/generated/run1_fhc.dataset.manifest \
+      build/datasets/run1_fhc.root \
+      numi_fhc_run1
+
+This keeps shard-level `SampleIO` files in the build layer, but exposes
+logical dataset keys to downstream EventListIO, systematics, plotting, and
+fitting code.
 
 Typical event-list workflow
 ---------------------------
@@ -450,6 +516,9 @@ Example:
     sample=beam-s0
     sample_subdir=beam/s0/out
 
+If a generated catalog is used, the stamp also records the per-artifact
+origin / variation / beam / polarity selected for that shard.
+
 If the current computed stamp matches the existing one, samples-dag.mk keeps
 the existing .root file and does not rerun mk_sample.
 
@@ -497,8 +566,9 @@ Then build and run:
 
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     cmake --build build --parallel
-    make -f samples-dag.mk samples
-    build/bin/mk_dataset build/datasets/run1-numi-fhc.root run1-numi-fhc beam-s0=build/samples/run1/beam-s0.root
+    bash tools/render-sample-catalog.sh
+    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
+    build/bin/mk_dataset --defs samples/generated/run1_fhc.sample.defs --manifest samples/generated/run1_fhc.dataset.manifest build/datasets/run1_fhc.root numi_fhc_run1
     build/bin/mk_eventlist build/eventlists/run1-numi-fhc.root build/datasets/run1-numi-fhc.root EventSelectionFilter SubRun "selected != 0"
 
 Troubleshooting
@@ -513,8 +583,8 @@ If samples-dag.mk does not rebuild when expected, inspect the corresponding
 .root.stamp file and compare it against the current list contents and binary.
 
 If mk_dataset fails, check that each keyed sample argument is of the form
-key=path and that each referenced sample ROOT file is a valid persistent
-SampleIO object.
+key=path or that each manifest row has exactly two fields, and that each
+referenced sample ROOT file is a valid persistent SampleIO object.
 
 If mk_eventlist fails, check that the dataset sample ROOT files actually
 contain the named event and subrun trees and that the TTreeFormula selection

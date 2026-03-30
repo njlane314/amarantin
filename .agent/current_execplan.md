@@ -1,5 +1,190 @@
 # ExecPlan
 
+## ExecPlan Addendum: Fit Detector-Envelope Follow-up
+
+### 1. Objective
+Close the remaining fit-library rough edge for channels that retain only
+`detector_down` / `detector_up` payloads and no detector templates, while
+documenting the verification boundary on the host setup path.
+
+### 2. Constraints
+- Preserve the current `SignalStrengthFit` public surface.
+- Keep the change inside `fit/` and tracking/docs unless a persisted schema bug
+  is discovered.
+- Leave unrelated worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep module boundaries sharp
+- prefer plain data and namespace functions
+- do a small deletion or simplification pass after each feature pass
+
+That favors tightening the existing fallback logic instead of introducing a new
+detector-abstraction layer.
+
+### 4. System map
+- `fit/SignalStrengthFit.cc`
+- `fit/README`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- verification:
+  - `git diff --check -- fit/SignalStrengthFit.cc fit/README docs/minimality-log.md .agent/current_execplan.md`
+  - Docker synthetic smoke for an envelope-only `ChannelIO` channel
+  - host `source ./.setup.sh` check
+
+### 5. Milestone
+- status: done
+- hypothesis: if detector-envelope-only payloads stay keyed by shared detector
+  identity and are morphed through down / nominal / up directly, then reduced
+  `ChannelIO` channels will still produce a coherent shared detector nuisance
+  without reviving template-only assumptions
+- files / symbols touched:
+  - `fit/SignalStrengthFit.cc`
+  - `fit/README`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- verification results:
+  - `git diff --check` passed for the touched files
+  - Docker envelope-only smoke passed with one shared `detector:detA` nuisance
+  - host setup remained unavailable because `./.setup.sh` requires CVMFS
+    products and Fermilab `setup` tooling that are absent here
+
+## ExecPlan Addendum: Sample Catalog And Logical-Sample Assembly Pass
+
+### 1. Objective
+Make sample handling scale to many run fragments and detector variations by
+introducing a flat sample-catalog workflow and by letting `mk_dataset` assemble
+one logical dataset sample from many concrete `SampleIO` artifact files.
+
+### 2. Constraints
+- Preserve the existing `mk_sample` and positional `mk_dataset key=path`
+  workflows.
+- Keep `io/` persistence-only; do not move catalog parsing or manifest logic
+  into the I/O classes.
+- Keep the first pass additive:
+  - manifest support in `mk_dataset`
+  - per-artifact metadata overrides in `samples-dag.mk`
+  - generated catalog outputs under `samples/`
+- Leave unrelated worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer plain data and namespace functions
+- keep module boundaries sharp
+- add abstractions only when they delete complexity
+
+That favors one flat catalog plus generated plain-text manifests over carrying
+XML-stage names through the whole analysis stack.
+
+### 4. System map
+- `app/mk_dataset.cc`
+- `samples-dag.mk`
+- `COMMANDS`
+- `USAGE`
+- `samples/README`
+- `samples/datasets.tsv`
+- `samples/catalog.tsv`
+- `tools/render-sample-catalog.sh`
+- generated outputs under `samples/generated/`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- verification:
+  - `bash -n tools/render-sample-catalog.sh`
+  - `cmake --build <build> --target mk_dataset --parallel`
+  - focused smoke for manifest-driven merged dataset assembly
+
+### 5. Milestones
+
+### Milestone 1
+- status: done
+- hypothesis: if `mk_dataset` can merge repeated sample keys from a manifest,
+  then production shards can stay shard-level while downstream analysis uses
+  stable logical sample keys
+- files / symbols touched:
+  - `app/mk_dataset.cc`
+- expected behavior risk: moderate
+- verification commands:
+  - Docker `cmake --build /tmp/amarantin-sample-build --target mk_dataset --parallel`
+  - focused smoke creating tiny synthetic `SampleIO` files and merging them via
+    `--manifest`
+- acceptance criteria:
+  - repeated sample keys merge into one dataset sample
+  - old positional `key=path` usage still works
+  - metadata conflicts fail loudly
+
+### Milestone 2
+- status: done
+- hypothesis: per-artifact metadata in the sample build layer removes the
+  current global `origin` / `variation` bottleneck and supports many detector
+  variations cleanly
+- files / symbols touched:
+  - `samples-dag.mk`
+  - generated `samples/generated/datasets.mk`
+- expected behavior risk: low
+- verification commands:
+  - `make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk print-samples`
+- acceptance criteria:
+  - artifact-level metadata overrides are supported with defaults preserved
+
+### Milestone 3
+- status: done
+- hypothesis: one flat checked-in catalog plus a short generator script is
+  easier to maintain than duplicating sample information across XML fragments,
+  `datasets.mk`, and ad hoc `sample.defs`
+- files / symbols touched:
+  - `samples/README`
+  - `samples/datasets.tsv`
+  - `samples/catalog.tsv`
+  - `tools/render-sample-catalog.sh`
+  - `samples/generated/*`
+  - `COMMANDS`
+  - `USAGE`
+- expected behavior risk: low
+- verification commands:
+  - `bash -n tools/render-sample-catalog.sh`
+  - `bash tools/render-sample-catalog.sh`
+- acceptance criteria:
+  - one command regenerates dataset make includes, dataset manifests, and
+    sample defs from the flat catalog
+  - the generated run1 example is usable with the new `mk_dataset --manifest`
+    path
+
+### 6. Public-surface check
+- compatibility impact:
+  - additive `mk_dataset --manifest` support
+  - additive `samples/` catalog workflow
+- migration note:
+  - legacy positional `key=path` dataset assembly remains supported
+  - old `datasets.mk` style remains supported
+- reviewer sign-off:
+  - only needed before making the catalog workflow the default root-level path
+
+### 7. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - removed the assumption that one dataset key must map to exactly one
+    concrete `SampleIO` file at dataset-assembly time
+- shell branches removed: 0
+- stale docs removed: 0
+- targets or dependencies removed: 0
+- approximate LOC delta: about `+450` additive LOC across the new catalog,
+  generator, `mk_dataset` merge path, and docs
+
+### 8. Decision log
+- Keep shard-level provenance in `SampleIO`, but stop exposing shard names as
+  the preferred downstream analysis sample keys.
+- Treat the new catalog as an additive source-of-truth layer; do not replace
+  existing workflows until the manifest path is verified.
+
+### 9. Stop conditions
+- Stop after the additive manifest/catalog workflow is implemented and
+  verified.
+- Stop before changing persisted schemas or making generated catalog outputs the
+  only supported path.
+
 ## ExecPlan Addendum: Plot Stale-State Cleanup Pass
 
 ### 1. Objective
@@ -185,6 +370,149 @@ That means porting the plotting capability, but not the old `SelectionEntry` /
   rather than extending the new `EventListIO`-native layer.
 - Stop if the remaining work is mostly styling or macro sugar rather than core
   plotting capability.
+
+---
+
+# ExecPlan Addendum: Signal-Strength Fit Refactor
+
+## 1. Objective
+Replace the first-pass `fit/` API and optimiser with a smaller but more
+production-leaning signal-strength fit surface that is easier to grep, shares
+global nuisances across processes, and uses the persisted `ChannelIO`
+uncertainty payload more faithfully.
+
+## 2. Constraints
+- Keep `io/` persistence-only even if `ChannelIO` needs a small additive schema
+  extension.
+- Keep the `Fit` target and `mk_xsec_fit` workflow intact.
+- Leave unrelated worktree changes untouched.
+- Treat renames of installed fit headers and symbols as an explicit,
+  user-approved surface change in this pass.
+
+## 3. Design anchor
+From `DESIGN.md`:
+- prefer plain data and namespace functions
+- keep workflows in `app/`
+- keep module boundaries sharp
+- add abstractions only when they delete complexity
+
+That favors one flat signal-strength fit surface with plain structs and free
+functions, not a port of `collie`'s old fitter class graph.
+
+## 4. System map
+- `fit/CMakeLists.txt`
+- `fit/SignalStrengthFit.hh`
+- `fit/SignalStrengthFit.cc`
+- `fit/XsecFit.hh`
+- `app/mk_xsec_fit.cc`
+- `fit/macro/fit_channel.C`
+- `fit/macro/scan_mu.C`
+- `.rootlogon.C`
+- `fit/README`
+- `io/ChannelIO.hh`
+- `io/ChannelIO.cc`
+- `app/mk_channel.cc`
+- `io/macro/write_channel.C`
+- `/Users/user/programs/collie/doc/cross_section_math.md`
+- `/Users/user/programs/collie/limit/src/ProfileLH.cc`
+- `/Users/user/programs/collie/limit/src/CrossSectionCalc.cc`
+- verification:
+  - `cmake --build build --target Fit mk_xsec_fit --parallel`
+  - `bash -n tools/run-macro`
+  - one focused fit smoke in a clean build environment
+
+## 5. Candidate simplifications
+
+### boundary sharpening
+- keep fit semantics in `fit/` while only extending `ChannelIO` with the
+  identity needed to build shared nuisances
+
+### wrapper collapse
+- rename the vague `fit::Model` surface to a direct signal-strength problem API
+- replace the homegrown coordinate-descent loop with one joint minimizer path
+
+### doc / build cleanup
+- switch repo callsites and docs to the renamed signal-strength fit surface
+- keep `XsecFit.hh` only as a small migration shim if needed
+
+### stale scaffolding
+- remove the current per-process nuisance builder shape that encodes broken
+  correlations
+
+## 6. Milestones
+
+### Milestone 1
+- status: done
+- hypothesis: one refactor pass that aligns naming, nuisance bookkeeping, and
+  optimizer behavior will produce a fit surface that is more accurate and less
+  misleading without importing `collie` wholesale
+- files / symbols touched:
+  - `fit/SignalStrengthFit.hh`
+  - `fit/SignalStrengthFit.cc`
+  - `fit/XsecFit.hh`
+  - `fit/CMakeLists.txt`
+  - `io/ChannelIO.hh`
+  - `io/ChannelIO.cc`
+  - `app/mk_channel.cc`
+  - `io/macro/write_channel.C`
+  - `app/mk_xsec_fit.cc`
+  - `fit/macro/fit_channel.C`
+  - `fit/macro/scan_mu.C`
+  - `.rootlogon.C`
+  - `fit/README`
+- expected behavior risk: moderate to high
+- verification commands:
+  - `bash -n tools/run-macro`
+  - `cmake --build <builddir> --target Fit mk_xsec_fit --parallel`
+  - one synthetic channel smoke that exercises shared nuisances and interval
+    reporting
+- verification results:
+  - `git diff --check` passed on the touched files
+  - `bash -n tools/run-macro` passed
+  - Docker build passed in `/tmp/amarantin-fit-refactor-build`:
+    - `Built target Fit`
+    - `Built target mk_xsec_fit`
+  - Docker synthetic channel smoke passed:
+    - one shared `flux:weightsPPFX:mode0` nuisance covered three processes
+    - one shared `detector:detA` nuisance covered two processes
+    - total and stat intervals were reported with explicit `*_found: true`
+    - covariance rows were emitted in the fit report
+- acceptance criteria:
+  - shared family nuisances are no longer duplicated per process
+  - detector/stat inputs persisted on `ChannelIO` are reflected in the fit
+    problem builder
+  - failed interval scans are reported explicitly, not as zero
+  - repo callsites use the renamed signal-strength API
+
+## 7. Public-surface check
+- compatibility impact: renames the primary fit header and public type names
+- migration note: `XsecFit.hh` may remain as a thin compatibility include for
+  one pass, but repo callsites should move to `SignalStrengthFit.hh`
+- reviewer sign-off: explicitly approved by the user in this pass
+
+## 8. Reduction ledger
+- files deleted:
+  - `fit/XsecFit.cc`
+- wrappers removed:
+  - removed the old coordinate-descent profiling implementation
+- shell branches removed: 0
+- stale docs removed: 0
+- targets or dependencies removed: 0
+- approximate LOC delta: net additive; the new fit source replaces the old one
+  but also adds covariance/status reporting and the small `ChannelIO` identity
+  extension
+
+## 9. Decision log
+- Prefer a global nuisance book keyed by persisted identity over the current
+  per-process mode builder.
+- Treat `total_down` / `total_up` as a fallback nuisance source to avoid
+  double-counting when component payloads are already present.
+- Prefer a ROOT joint minimizer over expanding the coordinate-descent loop.
+
+## 10. Stop conditions
+- Stop if the remaining work is mostly external compatibility sugar.
+- Stop if making detector correlations fully faithful would require a much
+  larger `ChannelIO` redesign than this pass justifies.
 
 ---
 

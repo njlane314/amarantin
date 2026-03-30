@@ -43,6 +43,7 @@ public:
         std::string name;
         ProcessKind kind = ProcessKind::kBackground;
         std::vector<std::string> source_keys;
+        std::vector<std::string> detector_sample_keys;
 
         std::vector<double> nominal;
         std::vector<double> sumw2;

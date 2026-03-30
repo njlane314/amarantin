@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "ChannelIO.hh"
-#include "XsecFit.hh"
+#include "SignalStrengthFit.hh"
 
 namespace
 {
@@ -21,19 +21,23 @@ namespace
         double mu_start = 1.0;
         double mu_lower = 0.0;
         double mu_upper = 5.0;
-        int max_iterations = 10;
-        int nuisance_passes = 8;
+        int max_iterations = 10000;
+        int max_function_calls = 100000;
         int scan_points = 48;
+        int strategy = 1;
+        int print_level = -1;
         double tolerance = 1e-4;
         bool compute_stat_only_interval = true;
+        bool run_hesse = true;
     };
 
     void print_usage(std::ostream &os)
     {
         os << "usage: mk_xsec_fit [--signal-process <name>] [--output <path>] "
               "[--mu-start <value>] [--mu-lower <value>] [--mu-upper <value>] "
-              "[--max-iterations <n>] [--nuisance-passes <n>] [--scan-points <n>] "
-              "[--tolerance <value>] [--no-stat-interval] "
+              "[--max-iterations <n>] [--max-function-calls <n>] "
+              "[--scan-points <n>] [--strategy <n>] [--print-level <n>] "
+              "[--tolerance <value>] [--no-stat-interval] [--no-hesse] "
               "<input.channels.root> <channel-key>\n";
     }
 
@@ -56,25 +60,36 @@ namespace
         return os.str();
     }
 
+    const char *format_bool(bool value)
+    {
+        return value ? "true" : "false";
+    }
+
     std::string format_report(const std::string &channel_path,
                               const std::string &channel_key,
-                              const fit::Model &model,
+                              const fit::Problem &problem,
                               const fit::Result &result)
     {
         std::ostringstream os;
         os << std::fixed << std::setprecision(6);
         os << "channel_path: " << channel_path << "\n";
         os << "channel_key: " << channel_key << "\n";
-        os << "signal_process: " << model.signal_process << "\n";
-        os << "converged: " << (result.converged ? "true" : "false") << "\n";
+        os << "signal_process: " << problem.signal_process << "\n";
+        os << "converged: " << format_bool(result.converged) << "\n";
+        os << "minimizer_status: " << result.minimizer_status << "\n";
+        os << "edm: " << result.edm << "\n";
         os << "q_min: " << result.objective << "\n";
         os << "mu_hat: " << result.mu_hat << "\n";
+        os << "mu_err_total_down_found: " << format_bool(result.mu_err_total_down_found) << "\n";
         os << "mu_err_total_down: " << result.mu_err_total_down << "\n";
+        os << "mu_err_total_up_found: " << format_bool(result.mu_err_total_up_found) << "\n";
         os << "mu_err_total_up: " << result.mu_err_total_up << "\n";
+        os << "mu_err_stat_down_found: " << format_bool(result.mu_err_stat_down_found) << "\n";
         os << "mu_err_stat_down: " << result.mu_err_stat_down << "\n";
+        os << "mu_err_stat_up_found: " << format_bool(result.mu_err_stat_up_found) << "\n";
         os << "mu_err_stat_up: " << result.mu_err_stat_up << "\n";
         os << "sigma_relation: sigma_fit = mu_hat * sigma_nominal\n";
-        os << "observed_bins: " << format_bins_csv(model.channel->data) << "\n";
+        os << "observed_bins: " << format_bins_csv(problem.channel->data) << "\n";
         os << "predicted_signal_bins: " << format_bins_csv(result.predicted_signal) << "\n";
         os << "predicted_background_bins: " << format_bins_csv(result.predicted_background) << "\n";
         os << "predicted_total_bins: " << format_bins_csv(result.predicted_total) << "\n";
@@ -82,6 +97,25 @@ namespace
         for (std::size_t i = 0; i < result.nuisance_names.size(); ++i)
             os << "nuisance[" << i << "]: " << result.nuisance_names[i]
                << "=" << result.nuisance_values[i] << "\n";
+        os << "parameter_count: " << result.parameter_names.size() << "\n";
+        for (std::size_t i = 0; i < result.parameter_names.size(); ++i)
+            os << "parameter[" << i << "]: " << result.parameter_names[i]
+               << "=" << result.parameter_values[i] << "\n";
+        if (!result.covariance.empty() && !result.parameter_names.empty())
+        {
+            const std::size_t n = result.parameter_names.size();
+            for (std::size_t row = 0; row < n; ++row)
+            {
+                std::vector<double> row_values;
+                row_values.reserve(n);
+                for (std::size_t col = 0; col < n; ++col)
+                {
+                    row_values.push_back(
+                        result.covariance[static_cast<std::size_t>(row * n + col)]);
+                }
+                os << "covariance_row[" << row << "]: " << format_bins_csv(row_values) << "\n";
+            }
+        }
         return os.str();
     }
 
@@ -139,11 +173,11 @@ namespace
                 options.max_iterations = std::stoi(argv[i] ? argv[i] : "");
                 continue;
             }
-            if (arg == "--nuisance-passes")
+            if (arg == "--max-function-calls")
             {
                 if (++i >= argc)
                     print_usage_and_throw();
-                options.nuisance_passes = std::stoi(argv[i] ? argv[i] : "");
+                options.max_function_calls = std::stoi(argv[i] ? argv[i] : "");
                 continue;
             }
             if (arg == "--scan-points")
@@ -151,6 +185,20 @@ namespace
                 if (++i >= argc)
                     print_usage_and_throw();
                 options.scan_points = std::stoi(argv[i] ? argv[i] : "");
+                continue;
+            }
+            if (arg == "--strategy")
+            {
+                if (++i >= argc)
+                    print_usage_and_throw();
+                options.strategy = std::stoi(argv[i] ? argv[i] : "");
+                continue;
+            }
+            if (arg == "--print-level")
+            {
+                if (++i >= argc)
+                    print_usage_and_throw();
+                options.print_level = std::stoi(argv[i] ? argv[i] : "");
                 continue;
             }
             if (arg == "--tolerance")
@@ -163,6 +211,11 @@ namespace
             if (arg == "--no-stat-interval")
             {
                 options.compute_stat_only_interval = false;
+                continue;
+            }
+            if (arg == "--no-hesse")
+            {
+                options.run_hesse = false;
                 continue;
             }
             break;
@@ -189,21 +242,24 @@ int main(int argc, char **argv)
         ChannelIO chio(options.channel_path, ChannelIO::Mode::kRead);
         const ChannelIO::Channel channel = chio.read(options.channel_key);
 
-        fit::Model model =
-            fit::make_independent_model(channel, options.signal_process, options.mu_start, options.mu_upper);
-        model.mu_lower = options.mu_lower;
-        model.mu_upper = options.mu_upper;
+        fit::Problem problem =
+            fit::make_independent_problem(channel, options.signal_process, options.mu_start, options.mu_upper);
+        problem.mu_lower = options.mu_lower;
+        problem.mu_upper = options.mu_upper;
 
         fit::FitOptions fit_options;
         fit_options.max_iterations = options.max_iterations;
-        fit_options.nuisance_passes = options.nuisance_passes;
+        fit_options.max_function_calls = options.max_function_calls;
         fit_options.scan_points = options.scan_points;
+        fit_options.strategy = options.strategy;
+        fit_options.print_level = options.print_level;
         fit_options.tolerance = options.tolerance;
         fit_options.compute_stat_only_interval = options.compute_stat_only_interval;
+        fit_options.run_hesse = options.run_hesse;
 
-        const fit::Result result = fit::profile_xsec(model, fit_options);
+        const fit::Result result = fit::profile_signal_strength(problem, fit_options);
         const std::string report =
-            format_report(options.channel_path, options.channel_key, model, result);
+            format_report(options.channel_path, options.channel_key, problem, result);
 
         if (!options.output_path.empty())
         {

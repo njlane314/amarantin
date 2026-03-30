@@ -1,8 +1,9 @@
 set(AMARANTIN_FIT_SOURCES
-  XsecFit.cc
+  SignalStrengthFit.cc
 )
 
 set(AMARANTIN_FIT_PUBLIC_HEADERS
+  SignalStrengthFit.hh
   XsecFit.hh
 )
 
