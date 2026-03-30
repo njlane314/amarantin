@@ -1,0 +1,2 @@
+dataset_key	context	base_dir	list_dir
+run1_fhc	numi_fhc_run1	/pnfs/uboone/scratch/users/nlane/ntuples/v08_00_00_82/numi_fhc_run1	samplelists/numi_fhc_run1

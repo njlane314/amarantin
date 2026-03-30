@@ -1,13 +1,15 @@
 @startuml
 ' =============================================================================
 ' amarantin internals
-' Data-flow view aligned to the current repo layout and DESIGN.md.
+' Workflow + persistent surfaces
+' Intended to read like the EventSelectionFilter example: portrait, staged,
+' and biased toward a narrow top-to-bottom flow.
 ' =============================================================================
 !pragma layout smetana
 
 top to bottom direction
-' A4 landscape @160dpi ~ 1870x1320px: keep the layout page-shaped, not panoramic.
-scale max 1750*980
+' A4 portrait @160dpi ~ 1320x1870px: bias toward a taller-than-wide layout.
+scale max 980*1750
 
 skinparam defaultFontSize 10
 skinparam wrapWidth 160
@@ -55,6 +57,17 @@ skinparam package<<art>> {
   BorderColor $ART
   FontColor $INK
 }
+skinparam component<<art>> {
+  BackgroundColor #E3EAFD
+  BorderColor $ART
+  FontColor $INK
+}
+
+skinparam package<<tools>> {
+  BackgroundColor #E0F2E9
+  BorderColor $TOOLS
+  FontColor $INK
+}
 skinparam component<<tools>> {
   BackgroundColor #E0F2E9
   BorderColor $TOOLS
@@ -74,125 +87,123 @@ skinparam note {
 }
 
 ' =============================================================================
-' Entry points + config
+' Configuration (minimal)
 ' =============================================================================
-component "mk_sample" as MK_SAMPLE <<cfg>>
-component "mk_dataset" as MK_DATASET <<cfg>>
-component "mk_eventlist" as MK_EVENTLIST <<cfg>>
-artifact "sample defs" as SAMPLE_DEFS <<cfg>>
-artifact "selection preset /\nselection expr" as SELECT_CFG <<cfg>>
+component "Shell / make / scripts\ninvoke mk_* binaries" as USER <<cfg>>
+artifact "Workflow inputs\nsample list\nsample defs\nselection preset /\nselection expr\noptional cache spec" as CFG <<cfg>>
 
 ' =============================================================================
-' Source-side persistence
+' Workflow stages
 ' =============================================================================
-package "Source persistence (io/)" <<art>> {
+package "Workflow stages" <<art>> {
+  component "mk_sample\n(app)" as MK_SAMPLE <<art>>
+  component "mk_dataset\n(app)" as MK_DATASET <<art>>
+  component "mk_eventlist\n(app)" as MK_EVENTLIST <<art>>
+  component "ana::build_event_list(...)" as BUILD_EVENTLIST <<tools>>
+  component "syst::build_systematics_cache(...)" as BUILD_SYST <<tools>>
+
+  MK_SAMPLE -down-> MK_DATASET : workflow
+  MK_DATASET -down-> MK_EVENTLIST : workflow
+
+  MK_EVENTLIST -[hidden]down-> BUILD_EVENTLIST
+  BUILD_EVENTLIST -[hidden]down-> BUILD_SYST
+}
+
+' =============================================================================
+' Persistent products
+' =============================================================================
+package "Persistent products" {
   artifact "InputPartitionIO\nfile list + subrun scan" as INPUT <<data>>
-  artifact "SampleIO\nsample container" as SAMPLE <<data>>
-  artifact "DatasetIO\nsample metadata\n+ provenance" as DATASET <<data>>
+  artifact "SampleIO\nsample ROOT container" as SAMPLE <<data>>
+  artifact "DatasetIO\nkeyed samples\n+ provenance" as DATASET <<data>>
+  artifact "EventListIO\nselected trees\n+ subrun trees\n+ selection metadata" as EVENTLIST <<data>>
+  artifact "DistributionIO\nbin-wise caches\n+ systematics payloads" as DIST <<data>>
+  artifact "ChannelIO\nprocess / channel view" as CHANNEL <<data>>
 
-  INPUT -[hidden]down-> SAMPLE
-  SAMPLE -[hidden]down-> DATASET
+  INPUT -down-> SAMPLE
+  SAMPLE -down-> DATASET
+  DATASET -down-> EVENTLIST
+  EVENTLIST -down-> DIST
+  DIST -down-> CHANNEL
 }
 
 ' =============================================================================
-' Core modules + persisted event-list state
+' Downstream consumers
 ' =============================================================================
-package "ana/" <<art>> {
-  component "ana::build_event_list(...)\nselection + derived columns" as BUILD_EVENTLIST <<tools>>
-}
+package "Downstream consumers" <<art>> {
+  component "snapshot::sample(...)\nsnapshot::merged(...)" as SNAPSHOT <<tools>>
+  component "syst::evaluate(...)" as EVAL_SYST <<tools>>
+  component "plot_utils::make_histogram(...)" as PLOT_HIST <<tools>>
+  component "plot_utils::draw_event_display(...)" as PLOT_DISPLAY <<tools>>
 
-package "Event-list persistence (io/)" <<art>> {
-  artifact "EventListIO\nselected trees + subruns\nselection metadata" as EVENTLIST <<data>>
-  artifact "systematics cache\n(stored inside EventListIO)\nnominal + detector/genie/flux/reint\ncovariance + eigenmodes" as SYSCACHE <<data>>
-
-  EVENTLIST -[hidden]down-> SYSCACHE
-}
-
-package "syst/" <<art>> {
-  component "syst::build_systematics_cache(...)\ncache requests -> evaluate()" as BUILD_SYST <<tools>>
-  component "SystematicsEngine::evaluate(...)\nrow-wise or cache-backed" as EVAL_SYST <<tools>>
-
-  BUILD_SYST -[hidden]down-> EVAL_SYST
-}
-
-package "io/ export" <<art>> {
-  component "SnapshotService::snapshot_sample(...)\nSnapshotService::snapshot_merged(...)" as SNAPSHOT <<tools>>
-}
-
-package "plot/" <<art>> {
-  component "plot_utils::make_histogram(...)\nselected-tree plots" as PLOT_HIST <<tools>>
-  component "plot_utils::draw_event_display(...)\nevent view" as PLOT_DISPLAY <<tools>>
-
+  SNAPSHOT -[hidden]down-> EVAL_SYST
+  EVAL_SYST -[hidden]down-> PLOT_HIST
   PLOT_HIST -[hidden]down-> PLOT_DISPLAY
 }
 
 ' =============================================================================
-' Layout nudges
+' Layout nudges: three clean portrait columns
 ' =============================================================================
-MK_SAMPLE -[hidden]right-> MK_DATASET
-MK_DATASET -[hidden]right-> MK_EVENTLIST
-SAMPLE_DEFS -[hidden]right-> SELECT_CFG
-
-SELECT_CFG -[hidden]down-> INPUT
-INPUT -[hidden]right-> BUILD_EVENTLIST
+USER -down-> CFG : selects\nworkflow
+CFG -[hidden]down-> MK_SAMPLE
+MK_SAMPLE -[hidden]right-> INPUT
+MK_DATASET -[hidden]right-> DATASET
 BUILD_EVENTLIST -[hidden]right-> EVENTLIST
-BUILD_EVENTLIST -[hidden]down-> BUILD_SYST
-EVENTLIST -[hidden]down-> SNAPSHOT
-BUILD_SYST -[hidden]right-> SNAPSHOT
-SNAPSHOT -[hidden]right-> PLOT_HIST
+BUILD_SYST -[hidden]right-> DIST
+EVENTLIST -[hidden]right-> SNAPSHOT
+DIST -[hidden]right-> EVAL_SYST
+CHANNEL -[hidden]right-> PLOT_HIST
+EVENTLIST -[hidden]right-> PLOT_DISPLAY
 
 ' =============================================================================
-' Wiring
+' Wiring: configuration
 ' =============================================================================
-MK_SAMPLE --> SAMPLE : builds / writes
-INPUT --> SAMPLE : partition\nsummaries
-SAMPLE --> DATASET : exports sample\nmetadata
-SAMPLE_DEFS ..> MK_DATASET : optional
+CFG ..> MK_SAMPLE : input list +\nmetadata args
+CFG ..> MK_DATASET : optional defs
+CFG ..> MK_EVENTLIST : selection +\ncache args
+
+' =============================================================================
+' Wiring: production + consumption
+' =============================================================================
+MK_SAMPLE --> INPUT : scans files
+MK_SAMPLE --> SAMPLE : writes
+
+SAMPLE --> MK_DATASET : reads
 MK_DATASET --> DATASET : writes
 
-SELECT_CFG ..> MK_EVENTLIST : configures
-MK_EVENTLIST --> BUILD_EVENTLIST : runs
-MK_EVENTLIST --> BUILD_SYST : optional\ncache pass
+MK_EVENTLIST ..> BUILD_EVENTLIST : runs
 DATASET --> BUILD_EVENTLIST : reads
+BUILD_EVENTLIST --> EVENTLIST : writes\nselected rows
 
-BUILD_EVENTLIST --> EVENTLIST : writes
-BUILD_SYST --> EVAL_SYST : drives
+MK_EVENTLIST ..> BUILD_SYST : optional\ncache pass
+EVENTLIST --> BUILD_SYST : source rows
+BUILD_SYST --> DIST : writes bins\n+ syst cache
+DIST --> CHANNEL : assemble\nprocess view
 
+EVENTLIST --> SNAPSHOT : snapshot export
 EVENTLIST ..> EVAL_SYST : direct row-wise path
-SYSCACHE --> EVAL_SYST : loads
-EVAL_SYST --> SYSCACHE : writes / refreshes
-EVENTLIST --> SNAPSHOT : reads
-EVENTLIST --> PLOT_HIST : reads selected trees
-EVENTLIST --> PLOT_DISPLAY : reads selected trees
+DIST --> EVAL_SYST : persisted cache
+EVENTLIST --> PLOT_HIST : exploratory plots
+DIST --> PLOT_HIST : repeated plots
+EVENTLIST --> PLOT_DISPLAY : event view
 
-note left of INPUT
-  InputPartitionIO scans raw ROOT file lists
-  and subrun summaries before sample assembly.
+note bottom of INPUT
+  InputPartitionIO is the per-partition scan state
+  used during sample building before SampleIO is written.
 end note
 
-note left of BUILD_EVENTLIST
-  ana is still the one-way translation layer:
-  DatasetIO -> EventListIO
-end note
-
-note right of EVENTLIST
-  Selected event trees, subrun trees,
-  and copied sample metadata live here.
-end note
-
-note right of SYSCACHE
-  Cached bin-wise systematics are persisted through
-  EventListIO::read_systematics_cache(...) and
-  EventListIO::write_systematics_cache(...).
-
-  There is no separate DistributionIO or ChannelIO
-  store in the current main branch.
+note bottom of BUILD_EVENTLIST
+  ana is the DatasetIO -> EventListIO translation layer.
+  mk_eventlist can then optionally drive systematic cache
+  construction into DistributionIO.
 end note
 
 note bottom of PLOT_HIST
-  plot/ currently reads EventListIO directly.
-  It does not go through a downstream
-  DistributionIO -> ChannelIO ladder.
+  plot reads EventListIO directly for row-wise views and
+  DistributionIO for cached bin-wise rendering.
+
+  ChannelIO remains the downstream process/channel surface
+  in the preferred EventListIO -> DistributionIO -> ChannelIO ladder.
 end note
 
 @enduml

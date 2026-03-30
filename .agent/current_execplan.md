@@ -1,5 +1,70 @@
 # ExecPlan
 
+## ExecPlan Addendum: Systematics Source Split By Type
+
+### 1. Objective
+Split the monolithic `syst/Systematics.cc` so detector handling and
+universe-family handling live in separate implementation files, while keeping
+`Systematics.hh` as the stable public surface.
+
+### 2. Constraints
+- Preserve the current `syst::evaluate(...)`, `syst::build_systematics_cache`,
+  and `SystematicsEngine` public API.
+- Keep `syst/` focused on systematic evaluation and cache construction; do not
+  push workflow logic into `io/` or `app/`.
+- Keep the split internal: no public-header churn unless the build needs a
+  private helper header under `syst/bits/`.
+- Leave unrelated worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep module boundaries sharp
+- prefer plain data and namespace functions
+- keep module layout flat
+- add abstractions only when they delete complexity
+
+That favors one public header plus a small private helper surface, with the
+detector and universe-family implementations split by responsibility rather
+than introducing new public classes.
+
+### 4. System map
+- `syst/Systematics.hh`
+- `syst/Systematics.cc`
+- new internal `syst/` implementation files for detector and family handling
+- optional private helper header under `syst/bits/`
+- `syst/CMakeLists.txt`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- verification:
+  - `git diff --check -- syst/CMakeLists.txt syst/Systematics.hh syst/Systematics.cc syst/bits/* .agent/current_execplan.md docs/minimality-log.md`
+  - `cmake --build build --target Syst mk_eventlist --parallel`
+
+### 5. Milestone
+- status: blocked
+- hypothesis: if detector-specific and universe-family-specific code live in
+  separate translation units behind one private helper surface, then `syst/`
+  becomes easier to navigate and review without changing behavior
+- files / symbols touched:
+  - `syst/Systematics.cc`
+  - `syst/Systematics.hh`
+  - `syst/CMakeLists.txt`
+  - new internal `syst/` files
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: low to moderate
+- verification commands:
+  - `git diff --check -- syst/CMakeLists.txt syst/Systematics.hh syst/Systematics.cc syst/bits/* .agent/current_execplan.md docs/minimality-log.md`
+  - `cmake --build build --target Syst mk_eventlist --parallel`
+- acceptance criteria:
+  - detector and universe-family handling are no longer co-located in one
+    source file
+  - the public `syst/` API remains unchanged
+  - the focused build passes
+- blocked note:
+  - deferred while higher-priority sample-workflow work proceeded; no
+    additional `syst/` edits were made in this pass
+
 ## ExecPlan Addendum: Fit Detector-Envelope Follow-up
 
 ### 1. Objective
@@ -828,3 +893,128 @@ larger build-management layer.
 - Stop after the helper, ignores, and docs are in place.
 - Stop if the next step would require deleting or relocating user build trees
   without an explicit ask.
+
+## ExecPlan Addendum: Sample Source-Mode And Run-1 Detector Catalog Pass
+
+### 1. Objective
+Make the sample catalog honest enough for many run fragments and detector
+variations by supporting non-directory artifact sources, by filling in real
+Run 1 detector-variation rows from the legacy good-runs definitions, and by
+making logical dataset assembly a first-class generated workflow.
+
+### 2. Constraints
+- Preserve the old `datasets.mk` `artifact:subdir` include shape.
+- Preserve `tools/mklist.sh --dir ... --pat ... --out ...`.
+- Keep catalog parsing and workflow orchestration outside `io/`.
+- Do not invent detector-variation output directories that are not present in
+  local sources.
+- Leave unrelated worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer plain data and namespace functions
+- keep module boundaries sharp
+- add abstractions only when they delete complexity
+
+That favors one richer flat source catalog plus generated plain-text workflow
+files over growing ad hoc special cases in `samples-dag.mk`.
+
+### 4. System map
+- `tools/mklist.sh`
+- `samples-dag.mk`
+- `tools/render-sample-catalog.sh`
+- `samples/README`
+- `samples/catalog.tsv`
+- `samples/datasets.tsv`
+- generated files under `samples/generated/`
+- `COMMANDS`
+- `USAGE`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- legacy reference:
+  - `/Users/user/programs/searchingforstrangeness/xml/numi_fhc_run1.xml`
+  - `/Users/user/programs/searchingforstrangeness/scripts/README.md`
+  - `/Users/user/programs/searchingforstrangeness/scripts/apply_goodruns_run1_fhc.sh`
+
+### 5. Candidate simplifications
+
+### boundary sharpening
+- keep shard provenance in the catalog, but let the sample-build workflow
+  distinguish directory scans from SAM-definition-backed shards explicitly
+
+### wrapper collapse
+- add a generated dataset target in `samples-dag.mk` instead of requiring a
+  manual `mk_dataset --defs --manifest` invocation
+
+### script simplification
+- make `tools/mklist.sh` own the small source-mode branch instead of spreading
+  it across separate shell helpers
+
+### stale scaffolding
+- remove the fake commented detector rows and replace them with real Run 1
+  detector entries backed by local legacy definitions
+
+### 6. Milestone
+- status: done
+- hypothesis: a richer source catalog with explicit source kinds and generated
+  dataset assembly will scale to detector-variation-heavy workflows more
+  cleanly than pretending every artifact is just a subdirectory under one base
+- files / symbols touched:
+  - `tools/mklist.sh`
+  - `samples-dag.mk`
+  - `tools/render-sample-catalog.sh`
+  - `samples/catalog.tsv`
+  - `samples/README`
+  - `COMMANDS`
+  - `USAGE`
+  - generated files under `samples/generated/`
+- expected behavior risk: moderate
+- verification commands:
+  - `bash -n tools/mklist.sh`
+  - `bash -n tools/render-sample-catalog.sh`
+  - `bash tools/render-sample-catalog.sh`
+  - `make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk print-samples`
+  - `make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk -n datasets`
+  - focused `tools/mklist.sh --samdef ...` smoke with a stub `samweb`
+- acceptance criteria:
+  - the generated sample catalog can express both directory-backed and
+    SAM-definition-backed artifacts
+  - Run 1 detector-variation logical keys are rendered without guessed
+    directory paths
+  - dataset assembly from the generated manifest is a first-class make target
+
+### 7. Public-surface check
+- compatibility impact:
+  - additive `tools/mklist.sh --samdef` and `--list` support
+  - additive generated dataset target in `samples-dag.mk`
+- migration note:
+  - legacy `artifact:subdir` includes remain supported
+  - plain `mk_dataset --defs --manifest` remains supported
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the need to hand-write a separate `mk_dataset --defs --manifest`
+    command once generated catalog outputs already exist
+- shell branches removed:
+  - remove the assumption in the generated sample path that every artifact
+    source is a directory scan under one dataset base
+- stale docs removed:
+  - remove the fake commented detector rows from `samples/catalog.tsv`
+- targets or dependencies removed: 0
+- approximate LOC delta: about `+250` additive LOC across the richer source
+  catalog, generator, `mklist.sh`, make target, and docs
+
+### 9. Decision log
+- represent detector-variation sources by real good-runs SAM definitions rather
+  than guessed directory layouts
+- keep the richer source branching in `tools/mklist.sh`, not in `io/` or
+  duplicate wrapper scripts
+
+### 10. Stop conditions
+- stop after Run 1 nominal plus detector-variation source coverage is honest
+  and generated dataset assembly is first class
+- stop before inventing run 2 / run 3 shard metadata not present in local
+  source material

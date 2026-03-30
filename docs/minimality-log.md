@@ -1,6 +1,320 @@
 # Minimality Log
 
 ## Current milestone
+- status: blocked
+- subsystem: `syst/`
+- design rule from `DESIGN.md`: keep module boundaries sharp, keep module
+  layout flat, and add abstractions only when they delete complexity
+
+## What changed
+- started a `syst/` refactor to split detector handling and universe-family
+  handling out of the monolithic `Systematics.cc`
+- chosen implementation direction:
+  - keep `Systematics.hh` as the one public header
+  - move shared private declarations into a small internal helper surface
+  - keep top-level evaluate / cache orchestration in `Systematics.cc`
+
+## Why this is simpler
+- review and maintenance no longer require paging through detector and
+  universe-family logic interleaved in one file
+- the top-level entrypoints can stay focused on cache policy and orchestration
+- the split stays internal, so the public API does not grow just to express
+  implementation detail
+
+## Verification
+- configure/build commands: pending
+- target-only commands:
+  - `cmake --build build --target Syst mk_eventlist --parallel`
+- shell checks:
+  - `git diff --check -- syst/CMakeLists.txt syst/Systematics.hh syst/Systematics.cc syst/bits/* .agent/current_execplan.md docs/minimality-log.md`
+- smoke checks: pending
+- results: pending
+  - deferred without new code changes while higher-priority sample-workflow
+    work proceeded
+
+## Reduction ledger
+- files deleted: pending
+- wrappers removed: pending
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta: pending
+
+## Decisions
+- split by systematic responsibility, not by adding one file per public API
+  wrapper
+- keep the shared helper surface private to `syst/`
+
+## Remaining hotspots
+- decide after the split whether cache-key, rebin, and memory-cache helpers
+  should stay in `Systematics.cc` or move again
+
+## Current milestone
+- status: done
+- subsystem: `tools/` + sample workflow
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep module
+  boundaries sharp, and add abstractions only when they delete complexity
+
+## What changed
+- started a follow-up sample-handling pass to make the flat catalog honest
+  about artifact source kinds instead of pretending every shard is a directory
+  under one common base
+- chosen implementation direction:
+  - extend `tools/mklist.sh` with additive non-directory source support
+  - let generated `samples-dag.mk` metadata describe per-artifact source kinds
+  - replace the fake detector-row comments with real Run 1 detector rows backed
+    by SAM good-runs definitions from the legacy workflow
+  - make logical dataset assembly a first-class generated target
+
+## Why this is simpler
+- detector-variation provenance stays explicit instead of being smuggled into
+  guessed directory names
+- one source catalog can now describe nominal shards and detector shards on the
+  same surface
+- downstream users no longer need to hand-assemble the generated manifest into
+  a separate `mk_dataset` command
+
+## Verification
+- configure/build commands:
+  - none; this pass stayed on shell workflow and generated catalog surfaces
+- target-only commands:
+  - `make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk print-samples`
+  - `make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk print-datasets`
+  - `make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk -n datasets`
+- shell checks:
+  - `bash -n tools/mklist.sh`
+  - `bash -n tools/render-sample-catalog.sh`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md tools/mklist.sh samples-dag.mk tools/render-sample-catalog.sh samples/README samples/catalog.tsv COMMANDS USAGE`
+- smoke checks:
+  - `bash tools/render-sample-catalog.sh`
+  - stubbed `samweb` smoke for `tools/mklist.sh --samdef`
+  - `tools/mklist.sh --list` normalization smoke
+- results:
+  - shell checks passed
+  - generated run-1 outputs now include detector-variation logical samples and
+    make metadata for `dir` plus `samdef` source kinds
+  - `samples-dag.mk` now exposes a first-class `datasets` target that dry-runs
+    to `build/datasets/run1_fhc.root`
+  - `mklist.sh --samdef` resolved stubbed SAM file names into PNFS paths and
+    `--list` normalized/sorted an existing list
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the need to hand-write a separate `mk_dataset --defs --manifest`
+    command once the generated catalog files already exist
+- shell branches removed:
+  - remove the hidden assumption that every generated sample list comes from a
+    directory scan under one dataset base
+- docs/build artifacts removed:
+  - replace the fake detector-row comments with real run-1 detector rows
+- approximate LOC delta: about `+250`
+
+## Decisions
+- use SAM good-runs definition names as catalog source references for detector
+  variations when no honest output directory is available locally
+- preserve the old `artifact:subdir` include shape as a compatibility path
+
+## Remaining hotspots
+- the local source material still does not pin down real run 2 / run 3 shard
+  layouts, so this pass stays focused on Run 1 plus detector machinery
+
+## Current milestone
+- status: done
+- subsystem: `app/` + sample workflow
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep module
+  boundaries sharp, and prefer plain data over duplicated config layers
+
+## What changed
+- started a sample-handling pass to separate shard-level `SampleIO` artifacts
+  from logical dataset sample keys
+- chosen implementation direction:
+  - additive `mk_dataset --manifest` support with repeated-key merging
+  - per-artifact metadata overrides in `samples-dag.mk`
+  - one flat sample catalog rendered into plain-text generated outputs
+
+## Why this is simpler
+- shard names like `beam_s0` and `ext_p0` stay where they belong: in the
+  production/build layer
+- downstream analysis can use stable logical keys like `beam`, `ext`, and
+  detector siblings linked through one nominal key
+- a flat catalog is easier to grep and regenerate than spreading sample
+  metadata across XML stages, make variables, and ad hoc defs files
+
+## Verification
+- `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_dataset.cc samples-dag.mk COMMANDS USAGE samples/README samples/datasets.tsv samples/catalog.tsv tools/render-sample-catalog.sh samples/generated/datasets.mk samples/generated/run1_fhc.sample.defs samples/generated/run1_fhc.dataset.manifest`
+- `bash -n tools/render-sample-catalog.sh`
+- `bash tools/render-sample-catalog.sh`
+- `make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk print-samples`
+- Docker configure/build:
+  `cmake -S . -B /tmp/amarantin-sample-build -DCMAKE_BUILD_TYPE=Release`
+- Docker target build:
+  `cmake --build /tmp/amarantin-sample-build --target mk_dataset --parallel`
+- Docker focused smoke:
+  - create two tiny synthetic `SampleIO` files
+  - assemble them through `mk_dataset --defs --manifest`
+  - read the merged `DatasetIO` sample back and verify summed POT,
+    recomputed normalisation, and stamped logical metadata
+- results:
+  - `git diff --check` passed
+  - catalog render script parsed and generated the expected plain-text outputs
+  - generated sample DAG expansion produced the shard-level run1 build paths
+  - Docker `mk_dataset` build passed
+  - focused smoke passed with:
+    `mk_dataset: wrote /tmp/run1_fhc.dataset.root with 1 logical samples from manifest /tmp/run1_fhc.dataset.manifest`
+    `sample_manifest_smoke=ok`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - removed the requirement that one downstream dataset sample key correspond
+    to exactly one shard-level `SampleIO` input
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta: about `+450`
+
+## Decisions
+- keep the first pass additive and compatible with the current `mk_sample` /
+  `mk_dataset` CLI surfaces
+- make logical-sample merging happen at dataset assembly time, not in `io/`
+
+## Remaining hotspots
+- decide later whether the flat sample catalog should become the default root
+  `datasets.mk` path
+- decide later whether `mk_dataset` should gain a first-class logical-sample
+  manifest type instead of the current repeated-key plain-text form
+
+## Current milestone
+- status: done
+- subsystem: `fit/` + `io/`
+- design rule from `DESIGN.md`: prefer plain data plus namespace functions and
+  keep module boundaries sharp
+
+## What changed
+- renamed the primary fit API to `SignalStrengthFit.hh`, `fit::Problem`, and
+  `fit::profile_signal_strength(...)`
+- kept `fit/XsecFit.hh` as a thin migration shim while moving repo callsites to
+  the new names
+- replaced the first-pass coordinate-descent fitter with a ROOT Minuit2 joint
+  minimizer path
+- changed the default problem builder so family nuisances are shared across
+  processes instead of duplicated per process
+- wired detector template identities through `ChannelIO` and used detector,
+  statistical, and total-envelope fallback payloads in the fit problem builder
+- changed interval reporting so missing `Delta q = 1` crossings are explicit via
+  `*_found` flags instead of silently appearing as zero uncertainty
+- added fit status, EDM, parameter list, and covariance reporting to
+  `mk_xsec_fit`
+
+## Why this is simpler
+- the old `fit::Model` / `profile_xsec(...)` names understated what the code
+  actually did
+- one shared nuisance book is easier to reason about than duplicated
+  per-process mode parameters
+- a single joint optimizer path is flatter than the old coarse `mu` scan plus
+  coordinate-minimization loop
+- detector identity now travels with the channel instead of being guessed only
+  from template position
+
+## Verification
+- configure/build commands:
+- Docker configure/build in a clean throwaway directory:
+  `cmake -S . -B /tmp/amarantin-fit-refactor-build -DCMAKE_BUILD_TYPE=Release`
+- target-only commands:
+- Docker target build:
+  `cmake --build /tmp/amarantin-fit-refactor-build --target Fit mk_xsec_fit --parallel`
+- shell checks:
+- `git diff --check -- .agent/current_execplan.md docs/minimality-log.md CMakeLists.txt app/mk_channel.cc app/mk_xsec_fit.cc fit/CMakeLists.txt fit/README fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc fit/XsecFit.hh fit/macro/fit_channel.C fit/macro/scan_mu.C io/ChannelIO.hh io/ChannelIO.cc io/macro/write_channel.C .rootlogon.C USAGE`
+- `bash -n tools/run-macro`
+- smoke checks:
+- Docker synthetic channel smoke:
+  - compile a tiny `ChannelIO` writer against `libIO.so`
+  - write a channel with one signal and two backgrounds sharing the same flux
+    mode and detector key
+  - run `mk_xsec_fit --output /tmp/signal-strength-smoke.fit.txt`
+  - inspect nuisance names, interval flags, and covariance rows in the report
+- results:
+- `git diff --check` passed
+- `bash -n tools/run-macro` passed
+- Docker build passed:
+  - `Built target Fit`
+  - `Built target mk_xsec_fit`
+- synthetic fit smoke passed with:
+  - `converged: true`
+  - `minimizer_status: 0`
+  - one shared `flux:weightsPPFX:mode0` nuisance
+  - one shared `detector:detA` nuisance
+  - `mu_err_total_up_found: true`
+  - covariance rows present in the report
+
+## Reduction ledger
+- files deleted:
+  - `fit/XsecFit.cc`
+- wrappers removed:
+  - removed the old coordinate-descent profiling implementation
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta: net additive; the new fit source replaces the old one
+  but also adds covariance/status reporting and the small `ChannelIO` identity
+  extension
+
+## Decisions
+- rename the primary fit API around signal-strength terminology
+- use `total_down` / `total_up` only as fallback uncertainty inputs to avoid
+  double-counting component systematics
+- when detector templates are missing, keep detector-envelope fallback grouped
+  by shared detector identity instead of splitting it back into one nuisance
+  per process
+- remove the legacy `fit/XsecFit.hh` shim once the repo callsites no longer use
+  it
+
+## Remaining hotspots
+- host-side ROOT verification remains unavailable in this environment because
+  `./.setup.sh` depends on CVMFS products and Fermilab `setup` tooling that are
+  not installed here
+
+## Current milestone
+- status: done
+- subsystem: `fit/`
+- design rule from `DESIGN.md`: keep module boundaries sharp and record
+  verification after each milestone
+
+## What changed
+- relaxed fit validation so detector-only `detector_sample_keys` remain valid
+  even when no detector templates survive into `ChannelIO`
+- changed the detector-envelope-only fallback to share nuisances by detector
+  group key and morph through down / nominal / up rather than using the older
+  one-sided linear envelope interpretation
+
+## Why this is simpler
+- detector identity now stays coherent even in reduced `ChannelIO` payloads
+- the fallback behavior matches the persisted inputs more directly than a
+  per-process linearized envelope shift
+
+## Verification
+- `git diff --check -- fit/SignalStrengthFit.cc fit/README docs/minimality-log.md .agent/current_execplan.md`
+- Docker envelope-only fit smoke:
+  - write a synthetic `ChannelIO` channel with `detector_down` / `detector_up`
+    but no detector templates
+  - run `mk_xsec_fit` on that channel
+  - inspect nuisance names in the text report
+- host setup check:
+  - `source ./.setup.sh`
+- results:
+  - `git diff --check` passed for the touched files
+  - Docker envelope-only smoke passed with one shared `detector:detA` nuisance
+  - host setup failed before ROOT setup because:
+    - `/cvmfs/uboone.opensciencegrid.org/products/setup_uboone_mcc9.sh: No such file or directory`
+    - `/cvmfs/fermilab.opensciencegrid.org/products/common/etc/setups: No such file or directory`
+    - `setup: command not found`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta: small additive follow-up inside the fit fallback path
+
+## Current milestone
 - status: done
 - subsystem: `plot/`
 - design rule from `DESIGN.md`: delete stale scaffolding after feature work and

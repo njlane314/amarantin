@@ -98,8 +98,8 @@ The plain text format is:
 
 Use `-` for an empty field. Example:
 
-    beam-s0 nominal - beam plot prodgenie_numi_uboone_overlay_fhc_mcc9_run1_v28_v2_sample0_goodruns run1_fhc
-    beam-s0-sce detector beam-s0 sce plot prodgenie_numi_nu_overlay_v08_00_00_53_SCE_300k_reco2_run1_reco2 run1_fhc
+    beam nominal - beam beam numi_overlay_run1_fhc run1_fhc
+    beam-sce detector beam sce beam nl_run1_fhc_detvar_sce_goodruns run1_fhc
 
 Basic mk_eventlist usage
 ------------------------
@@ -164,8 +164,11 @@ the signal-strength parameter `mu`, and prints or writes a plain-text report.
 Creating a sample list
 ----------------------
 
-Use tools/mklist.sh to scan a directory and write a sorted list of matching
-ROOT files.
+Use tools/mklist.sh to write a sorted sample list from either:
+
+  * a directory scan
+  * an existing list file
+  * a SAM definition
 
 Example:
 
@@ -179,6 +182,12 @@ The output file is a plain text list, for example:
     /pnfs/uboone/.../file001/nu_selection.root
     /pnfs/uboone/.../file002/nu_selection.root
     /pnfs/uboone/.../file003/nu_selection.root
+
+Detector-variation example from a SAM definition:
+
+    tools/mklist.sh \
+      --samdef nl_run1_fhc_detvar_sce_goodruns \
+      --out samplelists/numi_fhc_run1/beam-sce.list
 
 Building a single sample by hand
 --------------------------------
@@ -388,11 +397,12 @@ This produces:
     samples/generated/run1_fhc.dataset.manifest
 
 The generated `datasets.mk` keeps shard-level sample builds, including
-per-artifact origin / variation / beam / polarity metadata.
+per-artifact source kind / source ref / origin / variation / beam / polarity
+metadata.
 
 The generated manifest keeps repeated logical keys so dataset assembly can
 merge shard outputs into stable downstream sample keys such as `beam`, `dirt`,
-`ext`, and `signal`.
+`ext`, `signal`, and detector siblings such as `beam-sce`.
 
 Running the sample DAG
 ----------------------
@@ -408,6 +418,10 @@ Build all declared sample ROOT files:
 Build all declared sample ROOT files from the generated catalog:
 
     make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
+
+Build all declared logical dataset ROOT files from the generated catalog:
+
+    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
 
 Print the sample outputs that would be managed:
 
@@ -445,11 +459,7 @@ When shard-level artifacts should merge into logical keys:
 
     make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
 
-    build/bin/mk_dataset \
-      --defs samples/generated/run1_fhc.sample.defs \
-      --manifest samples/generated/run1_fhc.dataset.manifest \
-      build/datasets/run1_fhc.root \
-      numi_fhc_run1
+    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
 
 This keeps shard-level `SampleIO` files in the build layer, but exposes
 logical dataset keys to downstream EventListIO, systematics, plotting, and
@@ -568,7 +578,7 @@ Then build and run:
     cmake --build build --parallel
     bash tools/render-sample-catalog.sh
     make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
-    build/bin/mk_dataset --defs samples/generated/run1_fhc.sample.defs --manifest samples/generated/run1_fhc.dataset.manifest build/datasets/run1_fhc.root numi_fhc_run1
+    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
     build/bin/mk_eventlist build/eventlists/run1-numi-fhc.root build/datasets/run1-numi-fhc.root EventSelectionFilter SubRun "selected != 0"
 
 Troubleshooting

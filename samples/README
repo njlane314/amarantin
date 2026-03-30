@@ -1,0 +1,134 @@
+Samples
+
+Overview
+--------
+This directory separates three different things that used to get mixed
+together:
+
+  production shards
+      ->
+  logical analysis samples
+      ->
+  per-run dataset assembly
+
+The XML stages from the legacy production workflow are production shards.
+They should stay here, not leak into downstream analysis sample keys.
+
+Files
+-----
+datasets.tsv
+  One row per dataset context.
+  Fields:
+    dataset_key  context  base_dir  list_dir
+
+catalog.tsv
+  One row per concrete shard-level `SampleIO` artifact.
+  Fields:
+    dataset_key  artifact_key  logical_key  source_kind  source_ref
+    origin  variation  nominal  tag  role  defname  campaign  beam  polarity
+
+  Meanings:
+    dataset_key
+      Dataset alias used by `samples-dag.mk` and the generated manifests.
+
+    artifact_key
+      One concrete shard-level sample build output.
+      Examples: `beam-s0`, `ext-p1`, `beam-s0-sce`.
+
+    logical_key
+      The logical downstream sample key to build in `DatasetIO`.
+      Repeated logical keys are merged by `mk_dataset --manifest`.
+
+    source_kind
+      Where the shard file list comes from.
+      Supported values:
+        `dir`
+          Scan `base_dir/source_ref` with `tools/mklist.sh --dir`.
+        `list`
+          Reuse and normalise an existing list file with
+          `tools/mklist.sh --list`.
+        `samdef`
+          Resolve a SAM definition to concrete PNFS file paths with
+          `tools/mklist.sh --samdef`.
+
+    source_ref
+      Source-specific reference used by `source_kind`.
+      Examples:
+        `beam/s0/out`
+        `samplelists/run1/beam-s0.list`
+        `nl_run1_fhc_detvar_sce_goodruns`
+
+    origin / variation / beam / polarity
+      Shard-level `mk_sample` metadata.
+
+    nominal / tag / role / defname / campaign
+      Logical-sample metadata later stamped through `mk_dataset --defs`.
+
+Generated outputs
+-----------------
+Run:
+
+  bash tools/render-sample-catalog.sh
+
+That writes plain-text generated files under `samples/generated/`:
+
+  datasets.mk
+    Richer include for `samples-dag.mk` with per-artifact source and metadata
+    overrides.
+
+  <dataset>.sample.defs
+    Logical-sample metadata for `mk_dataset --defs`.
+
+  <dataset>.dataset.manifest
+    Repeated-key manifest for `mk_dataset --manifest`.
+
+Example workflow
+----------------
+Generate the derived files:
+
+  bash tools/render-sample-catalog.sh
+
+Build shard-level `SampleIO` files:
+
+  make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
+
+Assemble all logical datasets described by the generated manifests:
+
+  make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
+
+Or assemble one logical dataset directly:
+
+  build/bin/mk_dataset \
+    --defs samples/generated/run1_fhc.sample.defs \
+    --manifest samples/generated/run1_fhc.dataset.manifest \
+    build/datasets/run1_fhc.root \
+    numi_fhc_run1
+
+Notes
+-----
+`mk_dataset --manifest` is additive. The older positional
+`sample-key=sample.root` workflow still works.
+
+`samples-dag.mk`
+  Still accepts the old `artifact:subdir` include shape from `datasets.mk`.
+  The richer generated path now emits explicit `sample_source_kind.*` and
+  `sample_source_ref.*` variables instead.
+
+`tools/mklist.sh --samdef`
+  Requires `samweb` on `PATH`. This is the intended honest path for detector
+  variations when the local source material only pins down a SAM definition and
+  not a produced ntuple output directory.
+
+The intended downstream keys are logical keys like:
+
+  beam
+  dirt
+  ext
+  signal
+  beam-sce
+
+not shard keys like:
+
+  beam-s0
+  beam-s1
+  ext-p0
