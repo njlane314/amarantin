@@ -1,0 +1,129 @@
+@startuml
+title amarantin internals\nrow store -> bin store -> channel store
+
+top to bottom direction
+scale max 900 width
+
+skinparam backgroundColor #FCFCFA
+skinparam shadowing false
+skinparam roundCorner 10
+skinparam packageStyle rectangle
+skinparam defaultTextAlignment center
+skinparam ArrowThickness 1.3
+skinparam ArrowColor #475569
+skinparam ArrowFontColor #334155
+skinparam linetype ortho
+
+skinparam packageBorderColor #64748B
+skinparam packageFontColor #0F172A
+
+skinparam classBackgroundColor #FFFFFF
+skinparam classBorderColor #334155
+skinparam classFontColor #0F172A
+skinparam classStereotypeFontColor #475569
+
+skinparam noteBackgroundColor #FFF8D6
+skinparam noteBorderColor #C9A227
+skinparam noteFontColor #3F3F46
+
+package "app /\nentry points" #E5E7EB {
+  class mk_sample #FFFFFF
+  class mk_dataset #FFFFFF
+  class mk_eventlist #FFFFFF
+}
+
+package "io /\npersistence" #E0F2FE {
+  class InputPartitionIO #FFFFFF
+  class SampleIO #FFFFFF
+  class DatasetIO #FFFFFF
+  class EventListIO <<row store>> #FFFFFF
+  class DistributionIO <<bin store>> #FFFFFF
+  class ChannelIO <<channel store>> #FFFFFF
+  note bottom of DistributionIO
+    nominal bins
+    sumw2
+    detector payloads
+    universe covariance / eigenmodes
+  end note
+  note bottom of ChannelIO
+    named processes
+    common binning
+    data + per-process payloads
+  end note
+}
+
+package "ana /\ntransforms" #DCFCE7 {
+  class "ana::build_event_list(...)" as BuildEventList <<function>> #FFFFFF
+  class "snapshot::sample(...)" as SnapshotSample <<function>> #FFFFFF
+  class "snapshot::merged(...)" as SnapshotMerged <<function>> #FFFFFF
+}
+
+package "syst /\nuncertainty" #FEF3C7 {
+  class "syst::evaluate(...)" as SystEval <<function>> #FFFFFF
+  class "syst::build_systematics_cache(...)" as SystBuild <<function>> #FFFFFF
+}
+
+package "plot /\nrendering" #FCE7F3 {
+  class "plot_utils::make_histogram(...)" as PlotHist <<function>> #FFFFFF
+  class "plot_utils::draw_event_display(...)" as PlotDisplay <<function>> #FFFFFF
+}
+
+InputPartitionIO --> SampleIO
+SampleIO --> DatasetIO
+DatasetIO --> BuildEventList
+BuildEventList --> EventListIO
+
+EventListIO --> SnapshotSample
+EventListIO --> SnapshotMerged
+
+EventListIO --> SystEval : exploratory
+EventListIO --> SystBuild : source rows
+SystBuild --> DistributionIO
+DistributionIO --> SystEval : persisted cache
+DistributionIO --> ChannelIO : assembled channels
+
+EventListIO --> PlotHist : exploratory
+DistributionIO --> PlotHist : repeated
+ChannelIO --> PlotHist : final channels
+EventListIO --> PlotDisplay
+
+mk_sample --> SampleIO
+mk_dataset --> DatasetIO
+mk_eventlist --> BuildEventList
+mk_eventlist --> SystBuild
+
+mk_eventlist -[hidden]down-> InputPartitionIO
+ChannelIO -[hidden]down-> PlotHist
+
+note right of EventListIO
+  selected event trees
+  subrun trees
+  sample metadata
+end note
+
+note right of BuildEventList
+  ana produces EventListIO
+end note
+
+note right of SystBuild
+  syst reads EventListIO
+  and writes DistributionIO
+end note
+
+note bottom
+  preferred downstream use:
+  EventListIO for row-wise work
+  DistributionIO for bin-wise work
+  ChannelIO for final region/process views
+end note
+
+legend bottom
+|= colour |= meaning |
+|<#E0F2FE>| persistence / stored objects |
+|<#DCFCE7>| analysis transforms |
+|<#FEF3C7>| systematic derivation |
+|<#FCE7F3>| rendering / presentation |
+|<#E5E7EB>| command-line entry points |
+endlegend
+
+@enduml

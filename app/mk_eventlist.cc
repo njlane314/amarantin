@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "DatasetIO.hh"
+#include "DistributionIO.hh"
 #include "EventListBuild.hh"
 #include "EventListIO.hh"
 #include "Systematics.hh"
@@ -23,6 +24,7 @@ namespace
         bool explicit_selection = false;
 
         bool cache_systematics = false;
+        std::string cache_output_path;
         std::string cache_sample_key;
         std::string cache_branch_expr;
         int cache_nbins = 0;
@@ -60,11 +62,19 @@ namespace
         return out;
     }
 
+    std::string resolved_cache_output_path(const CliOptions &options)
+    {
+        return options.cache_output_path.empty()
+                   ? default_distribution_path(options.output_path)
+                   : options.cache_output_path;
+    }
+
     void print_usage(std::ostream &os)
     {
         os << "usage: mk_eventlist [--preset <name> | --selection <expr>] "
               "[--event-tree <name>] [--subrun-tree <name>] "
               "[--cache-systematics <sample-key> <branch-expr> <nbins> <xmin> <xmax>] "
+              "[--cache-output <path>] "
               "[--cache-selection <expr>] [--cache-detvars <csv>] [--cache-fine-nbins <n>] "
               "[--cache-genie] [--cache-flux] [--cache-reint] [--cache-no-overwrite] "
               "<output.root> <dataset.root>\n";
@@ -123,6 +133,12 @@ namespace
                 options.cache_nbins = std::stoi(argv[++i] ? argv[i] : "");
                 options.cache_xmin = std::stod(argv[++i] ? argv[i] : "");
                 options.cache_xmax = std::stod(argv[++i] ? argv[i] : "");
+                continue;
+            }
+            if (arg == "--cache-output")
+            {
+                if (++i >= argc) print_usage_and_throw();
+                options.cache_output_path = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--cache-selection")
@@ -200,7 +216,9 @@ int main(int argc, char **argv)
 
         if (options.cache_systematics)
         {
-            EventListIO event_list(options.output_path, EventListIO::Mode::kUpdate);
+            EventListIO event_list(options.output_path, EventListIO::Mode::kRead);
+            const std::string cache_output_path = resolved_cache_output_path(options);
+            DistributionIO distfile(cache_output_path, DistributionIO::Mode::kUpdate);
 
             syst::CacheBuildOptions cache_options;
             cache_options.overwrite_existing = options.cache_overwrite;
@@ -219,11 +237,16 @@ int main(int argc, char **argv)
             request.detector_sample_keys = options.cache_detector_sample_keys;
             cache_options.requests.push_back(request);
 
-            syst::build_systematics_cache(event_list, cache_options);
+            syst::build_systematics_cache(event_list, distfile, cache_options);
         }
 
         std::cout << "mk_eventlist: wrote " << options.output_path
-                  << " from dataset " << options.dataset_path << "\n";
+                  << " from dataset " << options.dataset_path;
+        if (options.cache_systematics)
+        {
+            std::cout << " and " << resolved_cache_output_path(options);
+        }
+        std::cout << "\n";
         return 0;
     }
     catch (const std::exception &e)

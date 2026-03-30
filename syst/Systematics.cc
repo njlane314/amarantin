@@ -28,8 +28,8 @@ namespace
     constexpr const char *kCentralWeightBranch = "__w__";
     constexpr int kSystematicsCacheVersion = 1;
 
-    using CacheEntry = EventListIO::SystematicsCacheEntry;
-    using FamilyCache = EventListIO::SystematicsFamilyCache;
+    using CacheEntry = DistributionIO::Entry;
+    using FamilyCache = DistributionIO::Family;
 
     double sanitise_universe_weight(double weight)
     {
@@ -92,12 +92,14 @@ namespace
     }
 
     std::string evaluation_cache_key(const EventListIO &eventlist,
+                                     const DistributionIO *distfile,
                                      const std::string &sample_key,
                                      const syst::HistogramSpec &spec,
                                      const syst::SystematicsOptions &options)
     {
         std::ostringstream os;
         os << eventlist.path() << "|"
+           << (distfile ? distfile->path() : std::string()) << "|"
            << sample_key << "|"
            << syst::cache_key(spec, options) << "|"
            << spec.nbins << "|"
@@ -162,6 +164,7 @@ namespace
     struct SampleComputation
     {
         std::vector<double> nominal;
+        std::vector<double> sumw2;
         std::optional<UniverseAccumulator> genie;
         std::optional<UniverseAccumulator> flux;
         std::optional<UniverseAccumulator> reint;
@@ -202,6 +205,7 @@ namespace
 
         SampleComputation out;
         out.nominal.assign(static_cast<std::size_t>(spec.nbins), 0.0);
+        out.sumw2.assign(static_cast<std::size_t>(spec.nbins), 0.0);
 
         double central_weight = 1.0;
         tree->SetBranchAddress(kCentralWeightBranch, &central_weight);
@@ -247,6 +251,7 @@ namespace
                 continue;
 
             out.nominal[static_cast<std::size_t>(bin)] += central_weight;
+            out.sumw2[static_cast<std::size_t>(bin)] += central_weight * central_weight;
 
             if (out.genie)
                 out.genie->accumulate(bin, spec.nbins, central_weight);
@@ -345,15 +350,15 @@ namespace
                    std::vector<double>(static_cast<std::size_t>(target_spec.nbins), 0.0));
 
 #if defined(AMARANTIN_HAVE_EIGEN)
-        const MatrixRowMajor rebin = build_rebin_matrix(entry.nbins,
-                                                        entry.xmin,
-                                                        entry.xmax,
+        const MatrixRowMajor rebin = build_rebin_matrix(entry.spec.nbins,
+                                                        entry.spec.xmin,
+                                                        entry.spec.xmax,
                                                         target_spec.nbins,
                                                         target_spec.xmin,
                                                         target_spec.xmax);
         const Eigen::Map<const MatrixRowMajor> templates(entry.detector_templates.data(),
                                                          entry.detector_template_count,
-                                                         entry.nbins);
+                                                         entry.spec.nbins);
         const MatrixRowMajor rebinned = templates * rebin.transpose();
         for (int row = 0; row < entry.detector_template_count; ++row)
         {
@@ -363,12 +368,12 @@ namespace
 #else
         for (int row = 0; row < entry.detector_template_count; ++row)
         {
-            const std::vector<double> source(entry.detector_templates.begin() + row * entry.nbins,
-                                             entry.detector_templates.begin() + (row + 1) * entry.nbins);
+            const std::vector<double> source(entry.detector_templates.begin() + row * entry.spec.nbins,
+                                             entry.detector_templates.begin() + (row + 1) * entry.spec.nbins);
             out[static_cast<std::size_t>(row)] = rebin_vector(source,
-                                                              entry.nbins,
-                                                              entry.xmin,
-                                                              entry.xmax,
+                                                              entry.spec.nbins,
+                                                              entry.spec.xmin,
+                                                              entry.spec.xmax,
                                                               target_spec);
         }
 #endif
@@ -541,13 +546,13 @@ namespace
         const SampleComputation nominal_sample = compute_sample(nominal_tree, fine_spec, options);
 
         CacheEntry entry;
-        entry.version = kSystematicsCacheVersion;
-        entry.branch_expr = fine_spec.branch_expr;
-        entry.selection_expr = fine_spec.selection_expr;
-        entry.nbins = fine_spec.nbins;
-        entry.xmin = fine_spec.xmin;
-        entry.xmax = fine_spec.xmax;
+        entry.spec.branch_expr = fine_spec.branch_expr;
+        entry.spec.selection_expr = fine_spec.selection_expr;
+        entry.spec.nbins = fine_spec.nbins;
+        entry.spec.xmin = fine_spec.xmin;
+        entry.spec.xmax = fine_spec.xmax;
         entry.nominal = nominal_sample.nominal;
+        entry.sumw2 = nominal_sample.sumw2;
 
         std::vector<std::vector<double>> detector_histograms;
         detector_histograms.reserve(detector_trees.size());
@@ -607,22 +612,22 @@ namespace
             return out;
 
         const std::vector<double> nominal = rebin_vector(entry.nominal,
-                                                         entry.nbins,
-                                                         entry.xmin,
-                                                         entry.xmax,
+                                                         entry.spec.nbins,
+                                                         entry.spec.xmin,
+                                                         entry.spec.xmax,
                                                          target_spec);
 
         if (!family.eigenmodes.empty() && family.eigen_rank > 0)
         {
 #if defined(AMARANTIN_HAVE_EIGEN)
-            const MatrixRowMajor rebin = build_rebin_matrix(entry.nbins,
-                                                            entry.xmin,
-                                                            entry.xmax,
+            const MatrixRowMajor rebin = build_rebin_matrix(entry.spec.nbins,
+                                                            entry.spec.xmin,
+                                                            entry.spec.xmax,
                                                             target_spec.nbins,
                                                             target_spec.xmin,
                                                             target_spec.xmax);
             const Eigen::Map<const MatrixRowMajor> modes(family.eigenmodes.data(),
-                                                         entry.nbins,
+                                                         entry.spec.nbins,
                                                          family.eigen_rank);
             const MatrixRowMajor rebinned_modes = rebin * modes;
             out.eigenmodes.resize(static_cast<std::size_t>(target_spec.nbins * family.eigen_rank), 0.0);
@@ -649,27 +654,27 @@ namespace
                 }
             }
 #else
-            out.sigma = rebin_vector(family.sigma, entry.nbins, entry.xmin, entry.xmax, target_spec);
+            out.sigma = rebin_vector(family.sigma, entry.spec.nbins, entry.spec.xmin, entry.spec.xmax, target_spec);
             if (build_full_covariance)
                 out.covariance = rebin_vector(family.covariance,
-                                              entry.nbins * entry.nbins,
+                                              entry.spec.nbins * entry.spec.nbins,
                                               0.0,
-                                              static_cast<double>(entry.nbins * entry.nbins),
+                                              static_cast<double>(entry.spec.nbins * entry.spec.nbins),
                                               target_spec);
 #endif
         }
         else if (!family.covariance.empty())
         {
 #if defined(AMARANTIN_HAVE_EIGEN)
-            const MatrixRowMajor rebin = build_rebin_matrix(entry.nbins,
-                                                            entry.xmin,
-                                                            entry.xmax,
+            const MatrixRowMajor rebin = build_rebin_matrix(entry.spec.nbins,
+                                                            entry.spec.xmin,
+                                                            entry.spec.xmax,
                                                             target_spec.nbins,
                                                             target_spec.xmin,
                                                             target_spec.xmax);
             const Eigen::Map<const MatrixRowMajor> covariance(family.covariance.data(),
-                                                              entry.nbins,
-                                                              entry.nbins);
+                                                              entry.spec.nbins,
+                                                              entry.spec.nbins);
             const Eigen::MatrixXd rebinned = rebin * covariance * rebin.transpose();
             out.covariance.resize(static_cast<std::size_t>(target_spec.nbins * target_spec.nbins), 0.0);
             out.sigma.assign(static_cast<std::size_t>(target_spec.nbins), 0.0);
@@ -680,7 +685,7 @@ namespace
                     out.covariance[static_cast<std::size_t>(row * target_spec.nbins + col)] = rebinned(row, col);
             }
 #else
-            out.sigma = rebin_vector(family.sigma, entry.nbins, entry.xmin, entry.xmax, target_spec);
+            out.sigma = rebin_vector(family.sigma, entry.spec.nbins, entry.spec.xmin, entry.spec.xmax, target_spec);
             if (build_full_covariance)
                 out.covariance = family.covariance;
 #endif
@@ -688,9 +693,9 @@ namespace
         else
         {
             out.sigma = rebin_vector(family.sigma,
-                                     entry.nbins,
-                                     entry.xmin,
-                                     entry.xmax,
+                                     entry.spec.nbins,
+                                     entry.spec.xmin,
+                                     entry.spec.xmax,
                                      target_spec);
         }
 
@@ -712,12 +717,12 @@ namespace
     {
         syst::SystematicsResult result;
         result.cache_key = cache_key;
-        result.cached_nbins = entry.nbins;
+        result.cached_nbins = entry.spec.nbins;
         result.loaded_from_persistent_cache = loaded_from_persistent_cache;
         result.nominal = rebin_vector(entry.nominal,
-                                      entry.nbins,
-                                      entry.xmin,
-                                      entry.xmax,
+                                      entry.spec.nbins,
+                                      entry.spec.xmin,
+                                      entry.spec.xmax,
                                       target_spec);
 
         if (entry.detector_template_count > 0 && !entry.detector_templates.empty())
@@ -729,14 +734,14 @@ namespace
         else if (!entry.detector_down.empty() && !entry.detector_up.empty())
         {
             result.detector.down = rebin_vector(entry.detector_down,
-                                                entry.nbins,
-                                                entry.xmin,
-                                                entry.xmax,
+                                                entry.spec.nbins,
+                                                entry.spec.xmin,
+                                                entry.spec.xmax,
                                                 target_spec);
             result.detector.up = rebin_vector(entry.detector_up,
-                                              entry.nbins,
-                                              entry.xmin,
-                                              entry.xmax,
+                                              entry.spec.nbins,
+                                              entry.spec.xmin,
+                                              entry.spec.xmax,
                                               target_spec);
         }
 
@@ -775,10 +780,67 @@ namespace syst
                                const HistogramSpec &spec,
                                const SystematicsOptions &options)
     {
+        if (options.persistent_cache != CachePolicy::kMemoryOnly)
+        {
+            throw std::runtime_error(
+                "SystematicsEngine: DistributionIO is required for persistent cache policies");
+        }
         if (sample_key.empty())
             throw std::runtime_error("SystematicsEngine: sample_key is required");
 
-        const std::string eval_key = evaluation_cache_key(eventlist, sample_key, spec, options);
+        const std::string eval_key = evaluation_cache_key(eventlist, nullptr, sample_key, spec, options);
+        if (options.enable_memory_cache)
+        {
+            std::lock_guard<std::mutex> lock(memory_cache_mutex());
+            const auto it = memory_cache_store().find(eval_key);
+            if (it != memory_cache_store().end())
+                return it->second;
+        }
+
+        const HistogramSpec fine_spec = fine_spec_for(spec, options);
+        TTree *nominal_tree = eventlist.selected_tree(sample_key);
+        if (!nominal_tree)
+            throw std::runtime_error("SystematicsEngine: missing selected tree for sample " + sample_key);
+
+        std::vector<TTree *> detector_trees;
+        detector_trees.reserve(options.detector_sample_keys.size());
+        for (const auto &detector_sample_key : options.detector_sample_keys)
+        {
+            if (detector_sample_key.empty())
+                continue;
+            detector_trees.push_back(eventlist.selected_tree(detector_sample_key));
+        }
+
+        CacheEntry entry = build_cache_entry(nominal_tree, fine_spec, options, detector_trees);
+        entry.spec.sample_key = sample_key;
+        entry.spec.cache_key = cache_key(spec, options);
+        entry.detector_sample_keys = options.detector_sample_keys;
+
+        SystematicsResult result = result_from_cache(entry,
+                                                     entry.spec.cache_key,
+                                                     spec,
+                                                     options,
+                                                     false);
+
+        if (options.enable_memory_cache)
+        {
+            std::lock_guard<std::mutex> lock(memory_cache_mutex());
+            memory_cache_store()[eval_key] = result;
+        }
+
+        return result;
+    }
+
+    SystematicsResult evaluate(EventListIO &eventlist,
+                               DistributionIO &distfile,
+                               const std::string &sample_key,
+                               const HistogramSpec &spec,
+                               const SystematicsOptions &options)
+    {
+        if (sample_key.empty())
+            throw std::runtime_error("SystematicsEngine: sample_key is required");
+
+        const std::string eval_key = evaluation_cache_key(eventlist, &distfile, sample_key, spec, options);
         if (options.enable_memory_cache)
         {
             std::lock_guard<std::mutex> lock(memory_cache_mutex());
@@ -794,13 +856,21 @@ namespace syst
         CacheEntry entry;
 
         const bool use_persistent_cache = options.persistent_cache != CachePolicy::kMemoryOnly;
-        const bool can_write_persistent_cache = eventlist.mode() != EventListIO::Mode::kRead;
+        const bool can_write_persistent_cache = distfile.mode() != DistributionIO::Mode::kRead;
+
+        if (use_persistent_cache && can_write_persistent_cache)
+        {
+            DistributionIO::Metadata metadata;
+            metadata.eventlist_path = eventlist.path();
+            metadata.build_version = kSystematicsCacheVersion;
+            distfile.write_metadata(metadata);
+        }
 
         if (use_persistent_cache &&
             options.persistent_cache != CachePolicy::kRebuild &&
-            eventlist.has_systematics_cache(sample_key, persistent_key))
+            distfile.has(sample_key, persistent_key))
         {
-            entry = eventlist.read_systematics_cache(sample_key, persistent_key);
+            entry = distfile.read(sample_key, persistent_key);
             loaded_from_persistent_cache = true;
         }
         else
@@ -825,10 +895,15 @@ namespace syst
             }
 
             entry = build_cache_entry(nominal_tree, fine_spec, options, detector_trees);
+            entry.spec.sample_key = sample_key;
+            entry.spec.cache_key = persistent_key;
             entry.detector_sample_keys = options.detector_sample_keys;
 
             if (use_persistent_cache && can_write_persistent_cache)
-                eventlist.write_systematics_cache(sample_key, persistent_key, entry);
+            {
+                distfile.write(sample_key, persistent_key, entry);
+                distfile.flush();
+            }
         }
 
         SystematicsResult result = result_from_cache(entry,
@@ -876,12 +951,18 @@ namespace syst
     }
 
     void build_systematics_cache(EventListIO &eventlist,
+                                 DistributionIO &distfile,
                                  const CacheBuildOptions &options)
     {
         if (!options.active())
             return;
-        if (eventlist.mode() == EventListIO::Mode::kRead)
-            throw std::runtime_error("syst::build_systematics_cache: event list must be writable");
+        if (distfile.mode() == DistributionIO::Mode::kRead)
+            throw std::runtime_error("syst::build_systematics_cache: distribution file must be writable");
+
+        DistributionIO::Metadata metadata;
+        metadata.eventlist_path = eventlist.path();
+        metadata.build_version = kSystematicsCacheVersion;
+        distfile.write_metadata(metadata);
 
         for (const auto &request : options.requests)
         {
@@ -923,12 +1004,13 @@ namespace syst
             sysopt.eigenmode_fraction = options.eigenmode_fraction;
 
             (void)evaluate(eventlist,
+                           distfile,
                            request.sample_key,
                            spec,
                            sysopt);
         }
 
-        eventlist.flush();
+        distfile.flush();
     }
 
     SystematicsResult SystematicsEngine::evaluate(EventListIO &eventlist,
@@ -937,6 +1019,15 @@ namespace syst
                                                   const SystematicsOptions &options)
     {
         return syst::evaluate(eventlist, sample_key, spec, options);
+    }
+
+    SystematicsResult SystematicsEngine::evaluate(EventListIO &eventlist,
+                                                  DistributionIO &distfile,
+                                                  const std::string &sample_key,
+                                                  const HistogramSpec &spec,
+                                                  const SystematicsOptions &options)
+    {
+        return syst::evaluate(eventlist, distfile, sample_key, spec, options);
     }
 
     std::string SystematicsEngine::cache_key(const HistogramSpec &spec,

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "DistributionIO.hh"
 #include "EventListIO.hh"
 
 class TH1D;
@@ -22,6 +23,9 @@ namespace plot_utils
                                          double xmax,
                                          const char *hist_name = "h_eventlist",
                                          const char *sample_key = nullptr);
+
+    std::unique_ptr<TH1D> make_histogram(const DistributionIO::Entry &entry,
+                                         const char *hist_name = "h_distribution");
 
     TCanvas *draw_distribution(const EventListIO &eventlist,
                                const char *branch_expr,

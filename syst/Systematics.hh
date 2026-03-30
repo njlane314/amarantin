@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "DistributionIO.hh"
 #include "EventListIO.hh"
 
 class TH1D;
@@ -130,6 +131,12 @@ namespace syst
                                const HistogramSpec &spec,
                                const SystematicsOptions &options = SystematicsOptions{});
 
+    SystematicsResult evaluate(EventListIO &eventlist,
+                               DistributionIO &distfile,
+                               const std::string &sample_key,
+                               const HistogramSpec &spec,
+                               const SystematicsOptions &options = SystematicsOptions{});
+
     std::string cache_key(const HistogramSpec &spec,
                           const SystematicsOptions &options);
 
@@ -141,12 +148,19 @@ namespace syst
                                          const char *title = "");
 
     void build_systematics_cache(EventListIO &eventlist,
+                                 DistributionIO &distfile,
                                  const CacheBuildOptions &options);
 
     class SystematicsEngine
     {
     public:
         static SystematicsResult evaluate(EventListIO &eventlist,
+                                          const std::string &sample_key,
+                                          const HistogramSpec &spec,
+                                          const SystematicsOptions &options = SystematicsOptions{});
+
+        static SystematicsResult evaluate(EventListIO &eventlist,
+                                          DistributionIO &distfile,
                                           const std::string &sample_key,
                                           const HistogramSpec &spec,
                                           const SystematicsOptions &options = SystematicsOptions{});

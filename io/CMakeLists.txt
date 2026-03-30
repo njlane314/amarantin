@@ -1,13 +1,17 @@
 set(AMARANTIN_IO_SOURCES
+  ChannelIO.cc
   InputPartitionIO.cc
   DatasetIO.cc
+  DistributionIO.cc
   EventListIO.cc
   bits/RunDatabaseService.cc
   SampleIO.cc
 )
 
 set(AMARANTIN_IO_PUBLIC_HEADERS
+  ChannelIO.hh
   InputPartitionIO.hh
+  DistributionIO.hh
   EventListIO.hh
   DatasetIO.hh
   SampleIO.hh

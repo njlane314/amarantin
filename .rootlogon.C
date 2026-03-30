@@ -43,6 +43,7 @@
         #include "SampleIO.hh"
         #include "SampleDef.hh"
         #include "DatasetIO.hh"
+        #include "DistributionIO.hh"
         #include "EventListIO.hh"
         #include "EventListBuild.hh"
         #include "EventDisplay.hh"

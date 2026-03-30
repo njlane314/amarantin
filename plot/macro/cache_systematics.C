@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "DistributionIO.hh"
 #include "EventListIO.hh"
 #include "Systematics.hh"
 
@@ -19,7 +20,8 @@ void cache_systematics(const char *read_path = nullptr,
                        const char *detector_samples_csv = "",
                        bool enable_genie = true,
                        bool enable_flux = false,
-                       bool enable_reint = false)
+                       bool enable_reint = false,
+                       const char *dist_path = nullptr)
 {
     macro_utils::run_macro("cache_systematics", [&]() {
         if (!read_path || !*read_path)
@@ -55,7 +57,11 @@ void cache_systematics(const char *read_path = nullptr,
             return out;
         };
 
-        EventListIO eventlist(read_path, EventListIO::Mode::kUpdate);
+        EventListIO eventlist(read_path, EventListIO::Mode::kRead);
+        const std::string write_path =
+            (dist_path && *dist_path) ? std::string(dist_path)
+                                      : default_distribution_path(read_path);
+        DistributionIO distfile(write_path, DistributionIO::Mode::kUpdate);
 
         syst::CacheBuildOptions cache_options;
         cache_options.overwrite_existing = true;
@@ -76,7 +82,7 @@ void cache_systematics(const char *read_path = nullptr,
                                                             : std::vector<std::string>{};
         cache_options.requests.push_back(request);
 
-        syst::build_systematics_cache(eventlist, cache_options);
+        syst::build_systematics_cache(eventlist, distfile, cache_options);
 
         syst::HistogramSpec spec;
         spec.branch_expr = request.branch_expr;
@@ -95,10 +101,11 @@ void cache_systematics(const char *read_path = nullptr,
         readback_options.enable_flux = cache_options.enable_flux;
         readback_options.enable_reint = cache_options.enable_reint;
 
-        const auto result = syst::evaluate(eventlist, sample_key, spec, readback_options);
+        const auto result = syst::evaluate(eventlist, distfile, sample_key, spec, readback_options);
         std::cout << "cache_key=" << result.cache_key
                   << " cached_nbins=" << result.cached_nbins
                   << " loaded_from_persistent_cache=" << (result.loaded_from_persistent_cache ? 1 : 0)
+                  << " dist_path=" << write_path
                   << "\n";
     });
 }

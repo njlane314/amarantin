@@ -4,6 +4,7 @@ IO
 Overview
 --------
 `io/` contains only persistence classes and low-level private helper code.
+The repo-wide module/data-flow diagram lives at `docs/repo-internals.puml`.
 
 The classes form a simple chain:
 
@@ -21,6 +22,12 @@ DatasetIO
     |
     v
 EventListIO
+    |
+    v
+DistributionIO
+    |
+    v
+ChannelIO
 ```
 
 More concretely:
@@ -30,8 +37,9 @@ InputPartitionIO --scans--> one input file list / partition
 SampleIO         --builds--> one sample container from one or more partitions
 SampleIO         --exports-> DatasetIO::Sample metadata
 DatasetIO        --holds--> many named samples and their metadata
-EventListIO      --writes-> selected event trees, subrun trees, and cache payloads
-EventListIO      --serves-> downstream plotting, systematics, and ad hoc analysis
+EventListIO      --writes-> selected event trees and subrun trees
+DistributionIO   --writes-> binned distributions and persisted systematics payloads
+ChannelIO        --writes-> named channel/process bundles on common binning
 ```
 
 Class notes
@@ -51,8 +59,20 @@ Class notes
 
 `EventListIO`
   Persistent analysis-ready output. It stores copied selected event trees,
-  subrun trees, sample metadata, and persisted systematics cache payloads.
-  Downstream code should usually open `EventListIO` and stay on that surface.
+  subrun trees, and sample metadata.
+  Use it for row-wise analysis, event displays, and exploratory plotting.
+
+`DistributionIO`
+  Persistent bin-wise output. It stores binned distributions, statistical
+  `sumw2`, and persisted systematic summaries derived from `EventListIO`.
+  Use it for repeated plotting and other bin-wise downstream work.
+
+`ChannelIO`
+  Persistent assembled channel output. It stores one analysis region on common
+  binning with many named processes, observed data bins, and per-process
+  systematic payloads.
+  Use it for stacked plots, fit-style exports, and final downstream channel
+  views.
 
 Private material
 ----------------

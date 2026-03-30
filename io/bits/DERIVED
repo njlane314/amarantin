@@ -14,6 +14,10 @@ EventListIO copies selected entries from the upstream event tree and adds a
 small framework-owned set of helper columns. The snapshot helpers in `ana`
 can then produce flat training trees from those selected event lists.
 
+The main bin-wise persistent object is DistributionIO.
+
+The main assembled channel object is ChannelIO.
+
 In the current code layout:
 
   EventListIO
@@ -29,7 +33,11 @@ In the current code layout:
     builds flat export trees from EventListIO selected trees
 
   syst::build_systematics_cache
-    computes and persists rebinnable systematics caches into EventListIO
+    computes and persists rebinnable systematics caches into DistributionIO
+
+  ChannelIO
+    persists channel-level process bundles built from DistributionIO or other
+    bin-wise sources
 
 Framework-owned column naming rule
 ----------------------------------
@@ -50,7 +58,6 @@ An EventListIO ROOT file has the following directory structure:
   samples/<sample-key>/meta/
   samples/<sample-key>/events/selected
   samples/<sample-key>/subruns/<subrun-tree-name>
-  samples/<sample-key>/systematics/<cache-key>/payload
 
 Top-level metadata written in meta/:
 
@@ -302,12 +309,26 @@ If include_sample_id is true, the snapshot helpers define and snapshots:
 where sample_id is the zero-based index of the sample key within the current
 EventListIO sample_keys() ordering.
 
-Persistent systematics cache
-----------------------------
+DistributionIO file layout
+--------------------------
 
-EventListIO can also carry persisted fine-binned systematics summaries under:
+A DistributionIO ROOT file has the following directory structure:
 
-  samples/<sample-key>/systematics/<cache-key>/payload
+  meta/
+  samples/<sample-key>/dists/<cache-key>/meta/
+  samples/<sample-key>/dists/<cache-key>/payload
+
+Top-level metadata written in meta/:
+
+  eventlist_path
+  build_version
+
+Persistent systematics payload
+------------------------------
+
+DistributionIO carries persisted fine-binned systematics summaries under:
+
+  samples/<sample-key>/dists/<cache-key>/payload
 
 where <cache-key> is a stable hash of:
 
@@ -349,15 +370,15 @@ Each family summary can include:
 The intended workflow is:
 
   1. precompute a fine-binned cache once
-  2. persist it into EventListIO
+  2. persist it into DistributionIO
   3. rebin the cached nominal/templates/eigenmodes later during plotting
 
 These caches can be built either:
 
   * as part of the event-list workflow by running ana::build_event_list and then
     syst::build_systematics_cache
-  * later on an existing file by reopening EventListIO in update mode and
-    calling syst::build_systematics_cache
+  * later on an existing EventListIO file by reopening it in read or update
+    mode, opening a DistributionIO file, and calling syst::build_systematics_cache
 
 When detector sample keys are not given explicitly, syst::build_systematics_cache can
 recover detector siblings from the persisted sample metadata in
@@ -394,7 +415,7 @@ branches and selected framework-owned helper columns, especially:
   sample_id
 
 For fast repeated plotting with systematics, treat the persisted
-samples/<sample-key>/systematics/<cache-key>/payload objects as the stable
+samples/<sample-key>/dists/<cache-key>/payload objects as the stable
 cache layer rather than recomputing all universes from the selected tree each
 time.
 

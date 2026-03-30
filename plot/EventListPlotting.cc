@@ -1,5 +1,7 @@
 #include "EventListPlotting.hh"
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -43,6 +45,32 @@ namespace plot_utils
 
             const std::string draw_expr = std::string(branch_expr) + ">>+" + hist_name;
             tree->Draw(draw_expr.c_str(), "", "goff");
+        }
+
+        return hist;
+    }
+
+    std::unique_ptr<TH1D> make_histogram(const DistributionIO::Entry &entry,
+                                         const char *hist_name)
+    {
+        const auto &spec = entry.spec;
+        if (spec.nbins <= 0)
+            throw std::runtime_error("plot_utils::make_histogram: nbins must be positive");
+
+        std::unique_ptr<TH1D> hist(new TH1D(hist_name,
+                                            spec.branch_expr.c_str(),
+                                            spec.nbins,
+                                            spec.xmin,
+                                            spec.xmax));
+        hist->SetDirectory(nullptr);
+        hist->Sumw2();
+
+        const std::size_t nbins = static_cast<std::size_t>(spec.nbins);
+        for (std::size_t bin = 0; bin < nbins && bin < entry.nominal.size(); ++bin)
+        {
+            hist->SetBinContent(static_cast<int>(bin + 1), entry.nominal[bin]);
+            if (bin < entry.sumw2.size())
+                hist->SetBinError(static_cast<int>(bin + 1), std::sqrt(std::max(0.0, entry.sumw2[bin])));
         }
 
         return hist;

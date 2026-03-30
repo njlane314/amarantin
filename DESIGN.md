@@ -5,6 +5,9 @@ This repository should stay small, direct, and easy to grep.
 The goal is not maximum abstraction. The goal is clear data flow and code that
 is cheap to change.
 
+For a compact picture of the current internal boundaries and data flow, see
+`docs/repo-internals.puml`.
+
 ## Core Rules
 
 1. `io/` owns persistence only.
@@ -56,12 +59,15 @@ The preferred flow is:
 1. read source material with `DatasetIO`
 2. build selected event content with `ana`
 3. persist selected content with `EventListIO`
-4. build derived systematic caches with `syst`
-5. load and render with `plot`
+4. build derived bin-wise products with `DistributionIO`
+5. build derived systematic caches with `syst`
+6. load and render with `plot`
 
 Downstream code should usually open `EventListIO` and stay on that surface.
 `ana` produces `EventListIO`; it should not remain on the hot path for normal
 plotting or systematic evaluation.
+
+Use `EventListIO` for row-wise work and `DistributionIO` for bin-wise work.
 
 The file classes should stay usable without pulling in the full analysis stack.
 

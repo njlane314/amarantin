@@ -102,9 +102,10 @@ Build one persistent EventListIO file directly
 Build one persistent EventListIO file with explicit tree names and selection
   build/bin/mk_eventlist output.eventlist.root input.dataset.root EventSelectionFilter SubRun "selected != 0"
 
-Build an EventListIO file and immediately cache one systematic payload
+Build an EventListIO file and immediately write one DistributionIO cache file
   build/bin/mk_eventlist \
     --cache-systematics beam-s0 topological_score 50 0 1 \
+    --cache-output output.dists.root \
     --cache-selection "__pass_muon__" \
     --cache-detvars beam-s0-sce,beam-s0-wiremodx \
     --cache-fine-nbins 400 \

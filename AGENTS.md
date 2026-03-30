@@ -12,7 +12,7 @@ Before editing, read these files in this order:
 
 ## Repository map
 - `io/`
-  - persistence only; ROOT object layout, sample / dataset / event-list I/O
+  - persistence only; ROOT object layout, sample / dataset / event-list / distribution I/O
 - `ana/`
   - event-list construction, selection logic, sample definitions, snapshots
 - `syst/`
