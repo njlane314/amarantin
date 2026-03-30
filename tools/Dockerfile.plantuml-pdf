@@ -1,0 +1,11 @@
+FROM plantuml/plantuml:latest AS plantuml
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends plantuml graphviz \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=plantuml /opt/plantuml.jar /opt/plantuml.jar
+
+ENTRYPOINT ["java", "-cp", "/opt/plantuml.jar:/usr/share/java/*", "net.sourceforge.plantuml.Run"]

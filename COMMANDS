@@ -16,6 +16,7 @@ io/              Core I/O library
 ana/             Analysis-side helpers and event-list construction
 syst/            Systematics cache construction
 plot/            Plotting library
+fit/             Signal-strength fitting library
 app/             Command-line tools
 tools/           Helper scripts
 samples-dag.mk   Higher-level sample workflow
@@ -26,6 +27,8 @@ Primary executables
   * build/bin/mk_sample
   * build/bin/mk_dataset
   * build/bin/mk_eventlist
+  * build/bin/mk_channel
+  * build/bin/mk_xsec_fit
 
 Canonical build path
 --------------------
@@ -57,9 +60,12 @@ Build selected targets
   cmake --build build --target Ana
   cmake --build build --target Syst
   cmake --build build --target Plot
+  cmake --build build --target Fit
   cmake --build build --target mk_sample
   cmake --build build --target mk_dataset
   cmake --build build --target mk_eventlist
+  cmake --build build --target mk_channel
+  cmake --build build --target mk_xsec_fit
 
 Sample workflow
 ---------------
@@ -112,11 +118,37 @@ Build an EventListIO file and immediately write one DistributionIO cache file
     --cache-genie \
     output.eventlist.root input.dataset.root
 
+Channel workflow
+----------------
+Build one persistent ChannelIO file directly from cached signal/background
+distributions
+  build/bin/mk_channel output.channels.root output.dists.root beam-s0 beam-bkg muon_region
+
+Build one ChannelIO file with explicit selection text and observed bins
+  build/bin/mk_channel \
+    --selection "__pass_muon__" \
+    --data-bins "12,10,9,7,6,5,4,3,2,1" \
+    output.channels.root output.dists.root beam-s0 beam-bkg muon_region
+
+Fit workflow
+------------
+Run one native xsec fit directly from ChannelIO and print the fit report
+  build/bin/mk_xsec_fit output.channels.root muon_region
+
+Run one native xsec fit with explicit signal process and write a text report
+  build/bin/mk_xsec_fit \
+    --signal-process signal \
+    --output muon_region.fit.txt \
+    output.channels.root muon_region
+
 Macro runner
 ------------
 Run one ROOT macro through the common wrapper
   bash tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector
   bash tools/run-macro plot_efficiency build/eventlists/run1.root topological_score "selected != 0" "__pass_muon__" 50 0 1 beam-s0
+  bash tools/run-macro inspect_dist output.dists.root beam-s0
+  bash tools/run-macro write_channel output.dists.root output.channels.root beam-s0 beam-bkg muon_region __pass_muon__ "12,10,9,7,6,5,4,3,2,1"
+  bash tools/run-macro plot_channel output.channels.root muon_region
 
 Run a plotting macro directly through ROOT
   root -l -b -q plot/macro/cache_systematics.C

@@ -1,18 +1,48 @@
 {
-    const TString root_dir = gSystem->pwd();
-    const TString io_dir = root_dir + "/io";
-    const TString ana_dir = root_dir + "/ana";
-    const TString ana_macro_dir = root_dir + "/ana/macro";
-    const TString macro_dir = root_dir + "/macro";
-    const TString plot_dir = root_dir + "/plot";
-    const TString plot_macro_dir = root_dir + "/plot/macro";
-    const TString io_macro_dir = root_dir + "/io/macro";
-    const TString syst_dir = root_dir + "/syst";
-    const TString lib_dir = root_dir + "/build/lib";
-    const TString lib_path = lib_dir + "/libIO.so";
-    const TString ana_lib_path = lib_dir + "/libAna.so";
-    const TString plot_lib_path = lib_dir + "/libPlot.so";
-    const TString syst_lib_path = lib_dir + "/libSyst.so";
+    TString root_dir = gSystem->pwd();
+    if (const char *env = gSystem->Getenv("AMARANTIN_ROOT_DIR"))
+    {
+        if (*env)
+            root_dir = env;
+    }
+
+    TString build_dir = root_dir + "/build";
+    if (const char *env = gSystem->Getenv("AMARANTIN_BUILD_DIR"))
+    {
+        if (*env)
+        {
+            build_dir = env;
+            if (!build_dir.BeginsWith("/"))
+                build_dir = root_dir + "/" + build_dir;
+        }
+    }
+
+    TString io_dir = root_dir;
+    io_dir += "/io";
+    TString ana_dir = root_dir;
+    ana_dir += "/ana";
+    TString ana_macro_dir = root_dir;
+    ana_macro_dir += "/ana/macro";
+    TString macro_dir = root_dir;
+    macro_dir += "/macro";
+    TString plot_dir = root_dir;
+    plot_dir += "/plot";
+    TString plot_macro_dir = root_dir;
+    plot_macro_dir += "/plot/macro";
+    TString io_macro_dir = root_dir;
+    io_macro_dir += "/io/macro";
+    TString syst_dir = root_dir;
+    syst_dir += "/syst";
+    TString lib_dir = build_dir;
+    lib_dir += "/lib";
+    TString lib_path = lib_dir;
+    lib_path += "/libIO.so";
+    TString ana_lib_path = lib_dir;
+    ana_lib_path += "/libAna.so";
+    TString plot_lib_path = lib_dir;
+    plot_lib_path += "/libPlot.so";
+    TString syst_lib_path = lib_dir;
+    syst_lib_path += "/libSyst.so";
 
     gInterpreter->AddIncludePath(io_dir.Data());
     gInterpreter->AddIncludePath(ana_dir.Data());
@@ -42,6 +72,7 @@
 
         #include "SampleIO.hh"
         #include "SampleDef.hh"
+        #include "ChannelIO.hh"
         #include "DatasetIO.hh"
         #include "DistributionIO.hh"
         #include "EventListIO.hh"
@@ -49,8 +80,14 @@
         #include "EfficiencyPlot.hh"
         #include "EventDisplay.hh"
         #include "EventListPlotting.hh"
+        #include "PlotChannels.hh"
+        #include "PlotDescriptors.hh"
+        #include "Plotter.hh"
+        #include "PlottingHelper.hh"
+        #include "StackedHist.hh"
         #include "Systematics.hh"
         #include "Snapshot.hh"
+        #include "UnstackedHist.hh"
 
         namespace macro_utils
         {
