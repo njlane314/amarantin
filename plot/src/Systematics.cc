@@ -4,8 +4,10 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iomanip>
 #include <limits>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -18,11 +20,16 @@
 
 #if defined(AMARANTIN_HAVE_EIGEN)
 #include <Eigen/Dense>
+#include <Eigen/Eigenvalues>
 #endif
 
 namespace
 {
     constexpr const char *kCentralWeightBranch = "__w__";
+    constexpr int kSystematicsCacheVersion = 1;
+
+    using CacheEntry = EventListIO::SystematicsCacheEntry;
+    using FamilyCache = EventListIO::SystematicsFamilyCache;
 
     double sanitise_universe_weight(double weight)
     {
@@ -34,6 +41,72 @@ namespace
     double decode_universe_weight(unsigned short raw_weight)
     {
         return sanitise_universe_weight(static_cast<double>(raw_weight) / 1000.0);
+    }
+
+    plot_utils::HistogramSpec fine_spec_for(const plot_utils::HistogramSpec &spec,
+                                            const plot_utils::SystematicsOptions &options)
+    {
+        plot_utils::HistogramSpec out = spec;
+        if (options.cache_nbins > out.nbins)
+            out.nbins = options.cache_nbins;
+        return out;
+    }
+
+    std::string encode_options_for_cache(const plot_utils::HistogramSpec &spec,
+                                         const plot_utils::SystematicsOptions &options)
+    {
+        const plot_utils::HistogramSpec fine_spec = fine_spec_for(spec, options);
+
+        std::ostringstream os;
+        os << "v=" << kSystematicsCacheVersion
+           << ";branch=" << fine_spec.branch_expr
+           << ";selection=" << fine_spec.selection_expr
+           << ";nbins=" << fine_spec.nbins
+           << ";xmin=" << std::setprecision(17) << fine_spec.xmin
+           << ";xmax=" << std::setprecision(17) << fine_spec.xmax
+           << ";det=" << options.enable_detector
+           << ";genie=" << options.enable_genie
+           << ";flux=" << options.enable_flux
+           << ";reint=" << options.enable_reint
+           << ";cov=" << options.persist_covariance
+           << ";modes=" << options.enable_eigenmode_compression
+           << ";maxmodes=" << options.max_eigenmodes
+           << ";frac=" << std::setprecision(17) << options.eigenmode_fraction;
+        for (const auto &sample_key : options.detector_sample_keys)
+            os << ";detkey=" << sample_key;
+        return os.str();
+    }
+
+    std::string stable_hash_hex(const std::string &text)
+    {
+        std::uint64_t hash = 1469598103934665603ULL;
+        for (const unsigned char c : text)
+        {
+            hash ^= static_cast<std::uint64_t>(c);
+            hash *= 1099511628211ULL;
+        }
+
+        std::ostringstream os;
+        os << std::hex << std::setw(16) << std::setfill('0') << hash;
+        return os.str();
+    }
+
+    std::string evaluation_cache_key(const EventListIO &eventlist,
+                                     const std::string &sample_key,
+                                     const plot_utils::HistogramSpec &spec,
+                                     const plot_utils::SystematicsOptions &options)
+    {
+        std::ostringstream os;
+        os << eventlist.path() << "|"
+           << sample_key << "|"
+           << plot_utils::SystematicsEngine::cache_key(spec, options) << "|"
+           << spec.nbins << "|"
+           << std::setprecision(17) << spec.xmin << "|"
+           << std::setprecision(17) << spec.xmax << "|"
+           << spec.selection_expr << "|"
+           << options.build_full_covariance << "|"
+           << options.retain_universe_histograms;
+        return os.str();
     }
 
     int find_bin(const plot_utils::HistogramSpec &spec, double value)
@@ -55,89 +128,17 @@ namespace
         return bin;
     }
 
-    struct CacheKey
-    {
-        std::string path;
-        std::string sample_key;
-        std::string branch_expr;
-        int nbins = 0;
-        double xmin = 0.0;
-        double xmax = 0.0;
-        std::string selection_expr;
-
-        bool enable_detector = false;
-        std::vector<std::string> detector_sample_keys;
-        bool enable_genie = false;
-        bool enable_flux = false;
-        bool enable_reint = false;
-        bool build_full_covariance = false;
-        bool retain_universe_histograms = false;
-
-        bool operator==(const CacheKey &other) const
-        {
-            return path == other.path &&
-                   sample_key == other.sample_key &&
-                   branch_expr == other.branch_expr &&
-                   nbins == other.nbins &&
-                   xmin == other.xmin &&
-                   xmax == other.xmax &&
-                   selection_expr == other.selection_expr &&
-                   enable_detector == other.enable_detector &&
-                   detector_sample_keys == other.detector_sample_keys &&
-                   enable_genie == other.enable_genie &&
-                   enable_flux == other.enable_flux &&
-                   enable_reint == other.enable_reint &&
-                   build_full_covariance == other.build_full_covariance &&
-                   retain_universe_histograms == other.retain_universe_histograms;
-        }
-    };
-
-    struct CacheKeyHash
-    {
-        static void hash_combine(std::size_t &seed, std::size_t value)
-        {
-            seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
-        }
-
-        std::size_t operator()(const CacheKey &key) const
-        {
-            std::size_t seed = 0;
-            hash_combine(seed, std::hash<std::string>{}(key.path));
-            hash_combine(seed, std::hash<std::string>{}(key.sample_key));
-            hash_combine(seed, std::hash<std::string>{}(key.branch_expr));
-            hash_combine(seed, std::hash<int>{}(key.nbins));
-            hash_combine(seed, std::hash<double>{}(key.xmin));
-            hash_combine(seed, std::hash<double>{}(key.xmax));
-            hash_combine(seed, std::hash<std::string>{}(key.selection_expr));
-            hash_combine(seed, std::hash<bool>{}(key.enable_detector));
-            for (const auto &sample_key : key.detector_sample_keys)
-                hash_combine(seed, std::hash<std::string>{}(sample_key));
-            hash_combine(seed, std::hash<bool>{}(key.enable_genie));
-            hash_combine(seed, std::hash<bool>{}(key.enable_flux));
-            hash_combine(seed, std::hash<bool>{}(key.enable_reint));
-            hash_combine(seed, std::hash<bool>{}(key.build_full_covariance));
-            hash_combine(seed, std::hash<bool>{}(key.retain_universe_histograms));
-            return seed;
-        }
-    };
-
     struct UniverseAccumulator
     {
         std::string branch_name;
         std::vector<unsigned short> *raw = nullptr;
         std::size_t n_universes = 0;
-        std::vector<double> histograms;
-
-        bool active() const
-        {
-            return !branch_name.empty() && raw != nullptr;
-        }
+        std::vector<double> histograms; // row-major: bin-major, universe-minor
 
         void ensure_size(int nbins)
         {
             if (!raw)
                 return;
-
             if (n_universes == 0)
             {
                 n_universes = raw->size();
@@ -147,7 +148,6 @@ namespace
 
         void accumulate(int bin, int nbins, double base_weight)
         {
-            (void)nbins;
             ensure_size(nbins);
             if (n_universes == 0 || !raw)
                 return;
@@ -155,10 +155,7 @@ namespace
             const std::size_t offset = static_cast<std::size_t>(bin) * n_universes;
             const std::size_t n = std::min(n_universes, raw->size());
             for (std::size_t universe = 0; universe < n; ++universe)
-            {
-                histograms[offset + universe] +=
-                    base_weight * decode_universe_weight((*raw)[universe]);
-            }
+                histograms[offset + universe] += base_weight * decode_universe_weight((*raw)[universe]);
         }
     };
 
@@ -170,39 +167,16 @@ namespace
         std::optional<UniverseAccumulator> reint;
     };
 
-    std::mutex &cache_mutex()
+    std::mutex &memory_cache_mutex()
     {
         static std::mutex mutex;
         return mutex;
     }
 
-    std::unordered_map<CacheKey, plot_utils::SystematicsResult, CacheKeyHash> &cache_store()
+    std::unordered_map<std::string, plot_utils::SystematicsResult> &memory_cache_store()
     {
-        static std::unordered_map<CacheKey, plot_utils::SystematicsResult, CacheKeyHash> cache;
+        static std::unordered_map<std::string, plot_utils::SystematicsResult> cache;
         return cache;
-    }
-
-    CacheKey make_cache_key(const EventListIO &eventlist,
-                            const std::string &sample_key,
-                            const plot_utils::HistogramSpec &spec,
-                            const plot_utils::SystematicsOptions &options)
-    {
-        CacheKey key;
-        key.path = eventlist.path();
-        key.sample_key = sample_key;
-        key.branch_expr = spec.branch_expr;
-        key.nbins = spec.nbins;
-        key.xmin = spec.xmin;
-        key.xmax = spec.xmax;
-        key.selection_expr = spec.selection_expr;
-        key.enable_detector = options.enable_detector;
-        key.detector_sample_keys = options.detector_sample_keys;
-        key.enable_genie = options.enable_genie;
-        key.enable_flux = options.enable_flux;
-        key.enable_reint = options.enable_reint;
-        key.build_full_covariance = options.build_full_covariance;
-        key.retain_universe_histograms = options.retain_universe_histograms;
-        return key;
     }
 
     SampleComputation compute_sample(TTree *tree,
@@ -277,6 +251,122 @@ namespace
         return out;
     }
 
+#if defined(AMARANTIN_HAVE_EIGEN)
+    using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+
+    MatrixRowMajor build_rebin_matrix(int source_nbins,
+                                      double source_xmin,
+                                      double source_xmax,
+                                      int target_nbins,
+                                      double target_xmin,
+                                      double target_xmax)
+    {
+        MatrixRowMajor rebin = MatrixRowMajor::Zero(target_nbins, source_nbins);
+        const double source_width = (source_xmax - source_xmin) / static_cast<double>(source_nbins);
+        const double target_width = (target_xmax - target_xmin) / static_cast<double>(target_nbins);
+        if (source_width <= 0.0 || target_width <= 0.0)
+            throw std::runtime_error("SystematicsEngine: invalid rebinning range");
+
+        for (int target_bin = 0; target_bin < target_nbins; ++target_bin)
+        {
+            const double target_low = target_xmin + target_width * static_cast<double>(target_bin);
+            const double target_high = target_low + target_width;
+
+            for (int source_bin = 0; source_bin < source_nbins; ++source_bin)
+            {
+                const double source_low = source_xmin + source_width * static_cast<double>(source_bin);
+                const double source_high = source_low + source_width;
+                const double overlap = std::max(0.0, std::min(source_high, target_high) - std::max(source_low, target_low));
+                if (overlap > 0.0)
+                    rebin(target_bin, source_bin) = overlap / source_width;
+            }
+        }
+        return rebin;
+    }
+#endif
+
+    std::vector<double> rebin_vector(const std::vector<double> &source,
+                                     int source_nbins,
+                                     double source_xmin,
+                                     double source_xmax,
+                                     const plot_utils::HistogramSpec &target_spec)
+    {
+        if (source.empty())
+            return std::vector<double>{};
+
+#if defined(AMARANTIN_HAVE_EIGEN)
+        const MatrixRowMajor rebin = build_rebin_matrix(source_nbins,
+                                                        source_xmin,
+                                                        source_xmax,
+                                                        target_spec.nbins,
+                                                        target_spec.xmin,
+                                                        target_spec.xmax);
+        const Eigen::Map<const Eigen::VectorXd> source_vec(source.data(), source_nbins);
+        const Eigen::VectorXd target = rebin * source_vec;
+        return std::vector<double>(target.data(), target.data() + target.size());
+#else
+        std::vector<double> target(static_cast<std::size_t>(target_spec.nbins), 0.0);
+        const double source_width = (source_xmax - source_xmin) / static_cast<double>(source_nbins);
+        const double target_width = (target_spec.xmax - target_spec.xmin) / static_cast<double>(target_spec.nbins);
+        for (int target_bin = 0; target_bin < target_spec.nbins; ++target_bin)
+        {
+            const double target_low = target_spec.xmin + target_width * static_cast<double>(target_bin);
+            const double target_high = target_low + target_width;
+
+            for (int source_bin = 0; source_bin < source_nbins; ++source_bin)
+            {
+                const double source_low = source_xmin + source_width * static_cast<double>(source_bin);
+                const double source_high = source_low + source_width;
+                const double overlap = std::max(0.0, std::min(source_high, target_high) - std::max(source_low, target_low));
+                if (overlap > 0.0)
+                    target[static_cast<std::size_t>(target_bin)] += source[static_cast<std::size_t>(source_bin)] * (overlap / source_width);
+            }
+        }
+        return target;
+#endif
+    }
+
+    std::vector<std::vector<double>> rebin_detector_templates(const CacheEntry &entry,
+                                                              const plot_utils::HistogramSpec &target_spec)
+    {
+        std::vector<std::vector<double>> out;
+        if (entry.detector_template_count <= 0 || entry.detector_templates.empty())
+            return out;
+
+        out.assign(static_cast<std::size_t>(entry.detector_template_count),
+                   std::vector<double>(static_cast<std::size_t>(target_spec.nbins), 0.0));
+
+#if defined(AMARANTIN_HAVE_EIGEN)
+        const MatrixRowMajor rebin = build_rebin_matrix(entry.nbins,
+                                                        entry.xmin,
+                                                        entry.xmax,
+                                                        target_spec.nbins,
+                                                        target_spec.xmin,
+                                                        target_spec.xmax);
+        const Eigen::Map<const MatrixRowMajor> templates(entry.detector_templates.data(),
+                                                         entry.detector_template_count,
+                                                         entry.nbins);
+        const MatrixRowMajor rebinned = templates * rebin.transpose();
+        for (int row = 0; row < entry.detector_template_count; ++row)
+        {
+            for (int col = 0; col < target_spec.nbins; ++col)
+                out[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)] = rebinned(row, col);
+        }
+#else
+        for (int row = 0; row < entry.detector_template_count; ++row)
+        {
+            const std::vector<double> source(entry.detector_templates.begin() + row * entry.nbins,
+                                             entry.detector_templates.begin() + (row + 1) * entry.nbins);
+            out[static_cast<std::size_t>(row)] = rebin_vector(source,
+                                                              entry.nbins,
+                                                              entry.xmin,
+                                                              entry.xmax,
+                                                              target_spec);
+        }
+#endif
+        return out;
+    }
+
     plot_utils::Envelope detector_envelope(const std::vector<double> &nominal,
                                            const std::vector<std::vector<double>> &variations)
     {
@@ -290,7 +380,6 @@ namespace
         {
             if (variation.size() != nominal.size())
                 continue;
-
             for (std::size_t bin = 0; bin < nominal.size(); ++bin)
             {
                 out.down[bin] = std::min(out.down[bin], variation[bin]);
@@ -300,74 +389,84 @@ namespace
         return out;
     }
 
-    plot_utils::UniverseFamilyResult build_universe_result(const UniverseAccumulator &family,
-                                                           const std::vector<double> &nominal,
-                                                           int nbins,
-                                                           bool build_full_covariance,
-                                                           bool retain_universe_histograms)
+    FamilyCache build_family_cache(const UniverseAccumulator &family,
+                                   const std::vector<double> &nominal,
+                                   int nbins,
+                                   const plot_utils::SystematicsOptions &options)
     {
-        plot_utils::UniverseFamilyResult out;
+        FamilyCache out;
         out.branch_name = family.branch_name;
-        out.n_universes = family.n_universes;
+        out.n_variations = static_cast<long long>(family.n_universes);
+        out.sigma.assign(static_cast<std::size_t>(nbins), 0.0);
+
         if (family.n_universes == 0)
             return out;
 
-        out.envelope.down = nominal;
-        out.envelope.up = nominal;
-        out.sigma.assign(static_cast<std::size_t>(nbins), 0.0);
-
-        if (retain_universe_histograms)
-            out.universe_histograms.assign(family.n_universes, std::vector<double>(static_cast<std::size_t>(nbins), 0.0));
-
-        if (build_full_covariance)
-            out.covariance.assign(static_cast<std::size_t>(nbins * nbins), 0.0);
-
-        for (int bin = 0; bin < nbins; ++bin)
-        {
-            const std::size_t row_offset = static_cast<std::size_t>(bin) * family.n_universes;
-            double min_value = nominal[static_cast<std::size_t>(bin)];
-            double max_value = nominal[static_cast<std::size_t>(bin)];
-
-            for (std::size_t universe = 0; universe < family.n_universes; ++universe)
-            {
-                const double value = family.histograms[row_offset + universe];
-                min_value = std::min(min_value, value);
-                max_value = std::max(max_value, value);
-                if (retain_universe_histograms)
-                    out.universe_histograms[universe][static_cast<std::size_t>(bin)] = value;
-            }
-
-            out.envelope.down[static_cast<std::size_t>(bin)] = min_value;
-            out.envelope.up[static_cast<std::size_t>(bin)] = max_value;
-        }
-
 #if defined(AMARANTIN_HAVE_EIGEN)
-        using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
-        const Eigen::Map<const MatrixRowMajor> histograms(family.histograms.data(),
-                                                          nbins,
-                                                          static_cast<Eigen::Index>(family.n_universes));
-        const Eigen::Map<const Eigen::VectorXd> nominal_map(nominal.data(), nbins);
-        const MatrixRowMajor deltas = histograms.colwise() - nominal_map;
+        const Eigen::Map<const MatrixRowMajor> universes(family.histograms.data(),
+                                                         nbins,
+                                                         static_cast<Eigen::Index>(family.n_universes));
+        const Eigen::Map<const Eigen::VectorXd> nominal_vec(nominal.data(), nbins);
+        const MatrixRowMajor deltas = universes.colwise() - nominal_vec;
+        const Eigen::MatrixXd covariance =
+            (deltas * deltas.transpose()) / static_cast<double>(family.n_universes);
         const Eigen::VectorXd sigma =
-            (deltas.array().square().rowwise().mean()).sqrt().matrix();
+            covariance.diagonal().cwiseMax(0.0).cwiseSqrt();
         for (int bin = 0; bin < nbins; ++bin)
             out.sigma[static_cast<std::size_t>(bin)] = sigma(bin);
 
-        if (build_full_covariance)
+        if (options.persist_covariance)
         {
-            const Eigen::MatrixXd covariance =
-                (deltas * deltas.transpose()) / static_cast<double>(family.n_universes);
+            out.covariance.resize(static_cast<std::size_t>(nbins * nbins));
             for (int row = 0; row < nbins; ++row)
             {
                 for (int col = 0; col < nbins; ++col)
                     out.covariance[static_cast<std::size_t>(row * nbins + col)] = covariance(row, col);
             }
         }
+
+        if (options.enable_eigenmode_compression)
+        {
+            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(covariance);
+            if (solver.info() != Eigen::Success)
+                throw std::runtime_error("SystematicsEngine: eigenmode compression failed");
+
+            const Eigen::VectorXd eigenvalues = solver.eigenvalues();
+            const Eigen::MatrixXd eigenvectors = solver.eigenvectors();
+            const double total_variance = std::max(0.0, eigenvalues.cwiseMax(0.0).sum());
+
+            std::vector<int> selected;
+            double captured = 0.0;
+            for (int idx = static_cast<int>(eigenvalues.size()) - 1; idx >= 0; --idx)
+            {
+                const double value = std::max(0.0, eigenvalues(idx));
+                if (value <= 0.0)
+                    continue;
+                selected.push_back(idx);
+                captured += value;
+                if ((options.max_eigenmodes > 0 && static_cast<int>(selected.size()) >= options.max_eigenmodes) ||
+                    (total_variance > 0.0 && captured / total_variance >= options.eigenmode_fraction))
+                    break;
+            }
+
+            out.eigen_rank = static_cast<int>(selected.size());
+            out.eigenvalues.reserve(selected.size());
+            out.eigenmodes.assign(static_cast<std::size_t>(nbins) * selected.size(), 0.0);
+            for (std::size_t col = 0; col < selected.size(); ++col)
+            {
+                const int idx = selected[col];
+                const double value = std::max(0.0, eigenvalues(idx));
+                out.eigenvalues.push_back(value);
+                const Eigen::VectorXd mode = eigenvectors.col(idx) * std::sqrt(value);
+                for (int row = 0; row < nbins; ++row)
+                    out.eigenmodes[static_cast<std::size_t>(row * selected.size() + col)] = mode(row);
+            }
+        }
 #else
         for (int row = 0; row < nbins; ++row)
         {
-            double variance = 0.0;
             const std::size_t row_offset = static_cast<std::size_t>(row) * family.n_universes;
+            double variance = 0.0;
             for (std::size_t universe = 0; universe < family.n_universes; ++universe)
             {
                 const double delta = family.histograms[row_offset + universe] - nominal[static_cast<std::size_t>(row)];
@@ -376,68 +475,294 @@ namespace
             out.sigma[static_cast<std::size_t>(row)] =
                 std::sqrt(variance / static_cast<double>(family.n_universes));
         }
-
-        if (build_full_covariance)
-        {
-            for (int row = 0; row < nbins; ++row)
-            {
-                const std::size_t row_offset = static_cast<std::size_t>(row) * family.n_universes;
-                for (int col = 0; col < nbins; ++col)
-                {
-                    const std::size_t col_offset = static_cast<std::size_t>(col) * family.n_universes;
-                    double covariance = 0.0;
-                    for (std::size_t universe = 0; universe < family.n_universes; ++universe)
-                    {
-                        const double delta_row =
-                            family.histograms[row_offset + universe] - nominal[static_cast<std::size_t>(row)];
-                        const double delta_col =
-                            family.histograms[col_offset + universe] - nominal[static_cast<std::size_t>(col)];
-                        covariance += delta_row * delta_col;
-                    }
-                    out.covariance[static_cast<std::size_t>(row * nbins + col)] =
-                        covariance / static_cast<double>(family.n_universes);
-                }
-            }
-        }
 #endif
-
         return out;
     }
 
-    void accumulate_sigma2(std::vector<double> &buffer, const std::vector<double> &sigma)
+    std::vector<double> combine_total_up(const std::vector<double> &nominal,
+                                         const plot_utils::Envelope &detector,
+                                         const std::vector<double> &genie_sigma,
+                                         const std::vector<double> &flux_sigma,
+                                         const std::vector<double> &reint_sigma)
     {
-        if (buffer.empty())
-            buffer.assign(sigma.size(), 0.0);
-        for (std::size_t i = 0; i < sigma.size(); ++i)
-            buffer[i] += sigma[i] * sigma[i];
-    }
-
-    void accumulate_detector_sigma2(std::vector<double> &up_buffer,
-                                    std::vector<double> &down_buffer,
-                                    const std::vector<double> &nominal,
-                                    const plot_utils::Envelope &detector)
-    {
-        if (detector.empty())
-            return;
-        if (up_buffer.empty())
-        {
-            up_buffer.assign(nominal.size(), 0.0);
-            down_buffer.assign(nominal.size(), 0.0);
-        }
-
+        std::vector<double> out = nominal;
         for (std::size_t bin = 0; bin < nominal.size(); ++bin)
         {
-            const double up_shift = std::max(0.0, detector.up[bin] - nominal[bin]);
-            const double down_shift = std::max(0.0, nominal[bin] - detector.down[bin]);
-            up_buffer[bin] += up_shift * up_shift;
-            down_buffer[bin] += down_shift * down_shift;
+            double variance = 0.0;
+            if (!detector.empty())
+            {
+                const double shift = std::max(0.0, detector.up[bin] - nominal[bin]);
+                variance += shift * shift;
+            }
+            if (bin < genie_sigma.size()) variance += genie_sigma[bin] * genie_sigma[bin];
+            if (bin < flux_sigma.size()) variance += flux_sigma[bin] * flux_sigma[bin];
+            if (bin < reint_sigma.size()) variance += reint_sigma[bin] * reint_sigma[bin];
+            out[bin] = nominal[bin] + std::sqrt(variance);
         }
+        return out;
+    }
+
+    std::vector<double> combine_total_down(const std::vector<double> &nominal,
+                                           const plot_utils::Envelope &detector,
+                                           const std::vector<double> &genie_sigma,
+                                           const std::vector<double> &flux_sigma,
+                                           const std::vector<double> &reint_sigma)
+    {
+        std::vector<double> out = nominal;
+        for (std::size_t bin = 0; bin < nominal.size(); ++bin)
+        {
+            double variance = 0.0;
+            if (!detector.empty())
+            {
+                const double shift = std::max(0.0, nominal[bin] - detector.down[bin]);
+                variance += shift * shift;
+            }
+            if (bin < genie_sigma.size()) variance += genie_sigma[bin] * genie_sigma[bin];
+            if (bin < flux_sigma.size()) variance += flux_sigma[bin] * flux_sigma[bin];
+            if (bin < reint_sigma.size()) variance += reint_sigma[bin] * reint_sigma[bin];
+            out[bin] = std::max(0.0, nominal[bin] - std::sqrt(variance));
+        }
+        return out;
+    }
+
+    CacheEntry build_cache_entry(TTree *nominal_tree,
+                                 const plot_utils::HistogramSpec &fine_spec,
+                                 const plot_utils::SystematicsOptions &options,
+                                 const std::vector<TTree *> &detector_trees)
+    {
+        const SampleComputation nominal_sample = compute_sample(nominal_tree, fine_spec, options);
+
+        CacheEntry entry;
+        entry.version = kSystematicsCacheVersion;
+        entry.branch_expr = fine_spec.branch_expr;
+        entry.selection_expr = fine_spec.selection_expr;
+        entry.nbins = fine_spec.nbins;
+        entry.xmin = fine_spec.xmin;
+        entry.xmax = fine_spec.xmax;
+        entry.nominal = nominal_sample.nominal;
+
+        std::vector<std::vector<double>> detector_histograms;
+        detector_histograms.reserve(detector_trees.size());
+        for (TTree *tree : detector_trees)
+        {
+            const SampleComputation variation = compute_sample(tree, fine_spec, plot_utils::SystematicsOptions{});
+            detector_histograms.push_back(variation.nominal);
+        }
+        if (!detector_histograms.empty())
+        {
+            entry.detector_template_count = static_cast<int>(detector_histograms.size());
+            entry.detector_templates.assign(static_cast<std::size_t>(entry.detector_template_count * fine_spec.nbins), 0.0);
+            for (int row = 0; row < entry.detector_template_count; ++row)
+            {
+                for (int col = 0; col < fine_spec.nbins; ++col)
+                {
+                    entry.detector_templates[static_cast<std::size_t>(row * fine_spec.nbins + col)] =
+                        detector_histograms[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
+                }
+            }
+            const plot_utils::Envelope detector = detector_envelope(entry.nominal, detector_histograms);
+            entry.detector_down = detector.down;
+            entry.detector_up = detector.up;
+        }
+
+        if (nominal_sample.genie)
+            entry.genie = build_family_cache(*nominal_sample.genie, entry.nominal, fine_spec.nbins, options);
+        if (nominal_sample.flux)
+            entry.flux = build_family_cache(*nominal_sample.flux, entry.nominal, fine_spec.nbins, options);
+        if (nominal_sample.reint)
+            entry.reint = build_family_cache(*nominal_sample.reint, entry.nominal, fine_spec.nbins, options);
+
+        entry.total_up = combine_total_up(entry.nominal,
+                                          plot_utils::Envelope{entry.detector_down, entry.detector_up},
+                                          entry.genie.sigma,
+                                          entry.flux.sigma,
+                                          entry.reint.sigma);
+        entry.total_down = combine_total_down(entry.nominal,
+                                              plot_utils::Envelope{entry.detector_down, entry.detector_up},
+                                              entry.genie.sigma,
+                                              entry.flux.sigma,
+                                              entry.reint.sigma);
+        return entry;
+    }
+
+    plot_utils::UniverseFamilyResult family_result_from_cache(const FamilyCache &family,
+                                                              const CacheEntry &entry,
+                                                              const plot_utils::HistogramSpec &target_spec,
+                                                              bool build_full_covariance)
+    {
+        plot_utils::UniverseFamilyResult out;
+        out.branch_name = family.branch_name;
+        out.n_universes = static_cast<std::size_t>(family.n_variations);
+        out.eigen_rank = family.eigen_rank;
+        out.eigenvalues = family.eigenvalues;
+        if (family.empty())
+            return out;
+
+        const std::vector<double> nominal = rebin_vector(entry.nominal,
+                                                         entry.nbins,
+                                                         entry.xmin,
+                                                         entry.xmax,
+                                                         target_spec);
+
+        if (!family.eigenmodes.empty() && family.eigen_rank > 0)
+        {
+#if defined(AMARANTIN_HAVE_EIGEN)
+            const MatrixRowMajor rebin = build_rebin_matrix(entry.nbins,
+                                                            entry.xmin,
+                                                            entry.xmax,
+                                                            target_spec.nbins,
+                                                            target_spec.xmin,
+                                                            target_spec.xmax);
+            const Eigen::Map<const MatrixRowMajor> modes(family.eigenmodes.data(),
+                                                         entry.nbins,
+                                                         family.eigen_rank);
+            const MatrixRowMajor rebinned_modes = rebin * modes;
+            out.eigenmodes.resize(static_cast<std::size_t>(target_spec.nbins * family.eigen_rank), 0.0);
+            out.sigma.assign(static_cast<std::size_t>(target_spec.nbins), 0.0);
+            for (int row = 0; row < target_spec.nbins; ++row)
+            {
+                double variance = 0.0;
+                for (int col = 0; col < family.eigen_rank; ++col)
+                {
+                    const double value = rebinned_modes(row, col);
+                    out.eigenmodes[static_cast<std::size_t>(row * family.eigen_rank + col)] = value;
+                    variance += value * value;
+                }
+                out.sigma[static_cast<std::size_t>(row)] = std::sqrt(std::max(0.0, variance));
+            }
+            if (build_full_covariance)
+            {
+                const Eigen::MatrixXd covariance = rebinned_modes * rebinned_modes.transpose();
+                out.covariance.resize(static_cast<std::size_t>(target_spec.nbins * target_spec.nbins), 0.0);
+                for (int row = 0; row < target_spec.nbins; ++row)
+                {
+                    for (int col = 0; col < target_spec.nbins; ++col)
+                        out.covariance[static_cast<std::size_t>(row * target_spec.nbins + col)] = covariance(row, col);
+                }
+            }
+#else
+            out.sigma = rebin_vector(family.sigma, entry.nbins, entry.xmin, entry.xmax, target_spec);
+            if (build_full_covariance)
+                out.covariance = rebin_vector(family.covariance,
+                                              entry.nbins * entry.nbins,
+                                              0.0,
+                                              static_cast<double>(entry.nbins * entry.nbins),
+                                              target_spec);
+#endif
+        }
+        else if (!family.covariance.empty())
+        {
+#if defined(AMARANTIN_HAVE_EIGEN)
+            const MatrixRowMajor rebin = build_rebin_matrix(entry.nbins,
+                                                            entry.xmin,
+                                                            entry.xmax,
+                                                            target_spec.nbins,
+                                                            target_spec.xmin,
+                                                            target_spec.xmax);
+            const Eigen::Map<const MatrixRowMajor> covariance(family.covariance.data(),
+                                                              entry.nbins,
+                                                              entry.nbins);
+            const Eigen::MatrixXd rebinned = rebin * covariance * rebin.transpose();
+            out.covariance.resize(static_cast<std::size_t>(target_spec.nbins * target_spec.nbins), 0.0);
+            out.sigma.assign(static_cast<std::size_t>(target_spec.nbins), 0.0);
+            for (int row = 0; row < target_spec.nbins; ++row)
+            {
+                out.sigma[static_cast<std::size_t>(row)] = std::sqrt(std::max(0.0, rebinned(row, row)));
+                for (int col = 0; col < target_spec.nbins; ++col)
+                    out.covariance[static_cast<std::size_t>(row * target_spec.nbins + col)] = rebinned(row, col);
+            }
+#else
+            out.sigma = rebin_vector(family.sigma, entry.nbins, entry.xmin, entry.xmax, target_spec);
+            if (build_full_covariance)
+                out.covariance = family.covariance;
+#endif
+        }
+        else
+        {
+            out.sigma = rebin_vector(family.sigma,
+                                     entry.nbins,
+                                     entry.xmin,
+                                     entry.xmax,
+                                     target_spec);
+        }
+
+        out.envelope.down = nominal;
+        out.envelope.up = nominal;
+        for (std::size_t bin = 0; bin < nominal.size() && bin < out.sigma.size(); ++bin)
+        {
+            out.envelope.down[bin] = std::max(0.0, nominal[bin] - out.sigma[bin]);
+            out.envelope.up[bin] = nominal[bin] + out.sigma[bin];
+        }
+        return out;
+    }
+
+    plot_utils::SystematicsResult result_from_cache(const CacheEntry &entry,
+                                                    const std::string &cache_key,
+                                                    const plot_utils::HistogramSpec &target_spec,
+                                                    const plot_utils::SystematicsOptions &options,
+                                                    bool loaded_from_persistent_cache)
+    {
+        plot_utils::SystematicsResult result;
+        result.cache_key = cache_key;
+        result.cached_nbins = entry.nbins;
+        result.loaded_from_persistent_cache = loaded_from_persistent_cache;
+        result.nominal = rebin_vector(entry.nominal,
+                                      entry.nbins,
+                                      entry.xmin,
+                                      entry.xmax,
+                                      target_spec);
+
+        if (entry.detector_template_count > 0 && !entry.detector_templates.empty())
+        {
+            const std::vector<std::vector<double>> detector_histograms =
+                rebin_detector_templates(entry, target_spec);
+            result.detector = detector_envelope(result.nominal, detector_histograms);
+        }
+        else if (!entry.detector_down.empty() && !entry.detector_up.empty())
+        {
+            result.detector.down = rebin_vector(entry.detector_down,
+                                                entry.nbins,
+                                                entry.xmin,
+                                                entry.xmax,
+                                                target_spec);
+            result.detector.up = rebin_vector(entry.detector_up,
+                                              entry.nbins,
+                                              entry.xmin,
+                                              entry.xmax,
+                                              target_spec);
+        }
+
+        if (!entry.genie.empty())
+            result.genie = family_result_from_cache(entry.genie, entry, target_spec, options.build_full_covariance);
+        if (!entry.flux.empty())
+            result.flux = family_result_from_cache(entry.flux, entry, target_spec, options.build_full_covariance);
+        if (!entry.reint.empty())
+            result.reint = family_result_from_cache(entry.reint, entry, target_spec, options.build_full_covariance);
+
+        const std::vector<double> empty;
+        result.total_up = combine_total_up(result.nominal,
+                                           result.detector,
+                                           result.genie ? result.genie->sigma : empty,
+                                           result.flux ? result.flux->sigma : empty,
+                                           result.reint ? result.reint->sigma : empty);
+        result.total_down = combine_total_down(result.nominal,
+                                               result.detector,
+                                               result.genie ? result.genie->sigma : empty,
+                                               result.flux ? result.flux->sigma : empty,
+                                               result.reint ? result.reint->sigma : empty);
+        return result;
     }
 }
 
 namespace plot_utils
 {
-    SystematicsResult SystematicsEngine::evaluate(const EventListIO &eventlist,
+    std::string SystematicsEngine::cache_key(const HistogramSpec &spec,
+                                             const SystematicsOptions &options)
+    {
+        return stable_hash_hex(encode_options_for_cache(spec, options));
+    }
+
+    SystematicsResult SystematicsEngine::evaluate(EventListIO &eventlist,
                                                   const std::string &sample_key,
                                                   const HistogramSpec &spec,
                                                   const SystematicsOptions &options)
@@ -445,94 +770,69 @@ namespace plot_utils
         if (sample_key.empty())
             throw std::runtime_error("SystematicsEngine: sample_key is required");
 
-        const CacheKey key = make_cache_key(eventlist, sample_key, spec, options);
-        if (options.enable_cache)
+        const std::string eval_key = evaluation_cache_key(eventlist, sample_key, spec, options);
+        if (options.enable_memory_cache)
         {
-            std::lock_guard<std::mutex> lock(cache_mutex());
-            const auto it = cache_store().find(key);
-            if (it != cache_store().end())
+            std::lock_guard<std::mutex> lock(memory_cache_mutex());
+            const auto it = memory_cache_store().find(eval_key);
+            if (it != memory_cache_store().end())
                 return it->second;
         }
 
-        TTree *nominal_tree = eventlist.selected_tree(sample_key);
-        if (!nominal_tree)
-            throw std::runtime_error("SystematicsEngine: missing nominal selected tree for sample " + sample_key);
+        const HistogramSpec fine_spec = fine_spec_for(spec, options);
+        const std::string persistent_key = cache_key(spec, options);
 
-        const SampleComputation nominal_sample = compute_sample(nominal_tree, spec, options);
+        bool loaded_from_persistent_cache = false;
+        CacheEntry entry;
 
-        SystematicsResult result;
-        result.nominal = nominal_sample.nominal;
-        result.total_down = nominal_sample.nominal;
-        result.total_up = nominal_sample.nominal;
+        const bool use_persistent_cache = options.persistent_cache != CachePolicy::kMemoryOnly;
+        const bool can_write_persistent_cache = eventlist.mode() != EventListIO::Mode::kRead;
 
-        if (options.enable_detector && !options.detector_sample_keys.empty())
+        if (use_persistent_cache &&
+            options.persistent_cache != CachePolicy::kRebuild &&
+            eventlist.has_systematics_cache(sample_key, persistent_key))
         {
-            std::vector<std::vector<double>> detector_histograms;
-            detector_histograms.reserve(options.detector_sample_keys.size());
+            entry = eventlist.read_systematics_cache(sample_key, persistent_key);
+            loaded_from_persistent_cache = true;
+        }
+        else
+        {
+            if (use_persistent_cache && options.persistent_cache == CachePolicy::kLoadOnly)
+            {
+                throw std::runtime_error("SystematicsEngine: persistent cache miss for sample " +
+                                         sample_key + " key " + persistent_key);
+            }
+
+            TTree *nominal_tree = eventlist.selected_tree(sample_key);
+            if (!nominal_tree)
+                throw std::runtime_error("SystematicsEngine: missing selected tree for sample " + sample_key);
+
+            std::vector<TTree *> detector_trees;
+            detector_trees.reserve(options.detector_sample_keys.size());
             for (const auto &detector_sample_key : options.detector_sample_keys)
             {
-                TTree *tree = eventlist.selected_tree(detector_sample_key);
-                if (!tree)
+                if (detector_sample_key.empty())
                     continue;
-
-                const SampleComputation variation = compute_sample(tree, spec, SystematicsOptions{});
-                detector_histograms.push_back(variation.nominal);
+                detector_trees.push_back(eventlist.selected_tree(detector_sample_key));
             }
-            result.detector = detector_envelope(result.nominal, detector_histograms);
+
+            entry = build_cache_entry(nominal_tree, fine_spec, options, detector_trees);
+            entry.detector_sample_keys = options.detector_sample_keys;
+
+            if (use_persistent_cache && can_write_persistent_cache)
+                eventlist.write_systematics_cache(sample_key, persistent_key, entry);
         }
 
-        if (options.enable_genie && nominal_sample.genie)
-            result.genie = build_universe_result(*nominal_sample.genie,
-                                                 result.nominal,
-                                                 spec.nbins,
-                                                 options.build_full_covariance,
-                                                 options.retain_universe_histograms);
-        if (options.enable_flux && nominal_sample.flux)
-            result.flux = build_universe_result(*nominal_sample.flux,
-                                                result.nominal,
-                                                spec.nbins,
-                                                options.build_full_covariance,
-                                                options.retain_universe_histograms);
-        if (options.enable_reint && nominal_sample.reint)
-            result.reint = build_universe_result(*nominal_sample.reint,
-                                                 result.nominal,
-                                                 spec.nbins,
-                                                 options.build_full_covariance,
-                                                 options.retain_universe_histograms);
+        SystematicsResult result = result_from_cache(entry,
+                                                     persistent_key,
+                                                     spec,
+                                                     options,
+                                                     loaded_from_persistent_cache);
 
-        std::vector<double> total_sigma2;
-        std::vector<double> total_sigma2_down;
-        accumulate_detector_sigma2(total_sigma2, total_sigma2_down, result.nominal, result.detector);
-        if (result.genie)
+        if (options.enable_memory_cache)
         {
-            accumulate_sigma2(total_sigma2, result.genie->sigma);
-            accumulate_sigma2(total_sigma2_down, result.genie->sigma);
-        }
-        if (result.flux)
-        {
-            accumulate_sigma2(total_sigma2, result.flux->sigma);
-            accumulate_sigma2(total_sigma2_down, result.flux->sigma);
-        }
-        if (result.reint)
-        {
-            accumulate_sigma2(total_sigma2, result.reint->sigma);
-            accumulate_sigma2(total_sigma2_down, result.reint->sigma);
-        }
-
-        if (!total_sigma2.empty())
-        {
-            for (std::size_t bin = 0; bin < result.nominal.size(); ++bin)
-            {
-                result.total_up[bin] = result.nominal[bin] + std::sqrt(total_sigma2[bin]);
-                result.total_down[bin] =
-                    std::max(0.0, result.nominal[bin] - std::sqrt(total_sigma2_down[bin]));
-            }
-        }
-
-        if (options.enable_cache)
-        {
-            std::lock_guard<std::mutex> lock(cache_mutex());
-            cache_store()[key] = result;
+            std::lock_guard<std::mutex> lock(memory_cache_mutex());
+            memory_cache_store()[eval_key] = result;
         }
 
         return result;
@@ -540,8 +840,8 @@ namespace plot_utils
 
     void SystematicsEngine::clear_cache()
     {
-        std::lock_guard<std::mutex> lock(cache_mutex());
-        cache_store().clear();
+        std::lock_guard<std::mutex> lock(memory_cache_mutex());
+        memory_cache_store().clear();
     }
 
     std::unique_ptr<TH1D> SystematicsEngine::make_histogram(const HistogramSpec &spec,

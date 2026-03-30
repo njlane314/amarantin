@@ -33,6 +33,7 @@ An EventListIO ROOT file has the following directory structure:
   samples/<sample-key>/meta/
   samples/<sample-key>/events/selected
   samples/<sample-key>/subruns/<subrun-tree-name>
+  samples/<sample-key>/systematics/<cache-key>/payload
 
 Top-level metadata written in meta/:
 
@@ -261,6 +262,63 @@ If include_sample_id is true, SnapshotService defines and snapshots:
 where sample_id is the zero-based index of the sample key within the current
 EventListIO sample_keys() ordering.
 
+Persistent systematics cache
+----------------------------
+
+EventListIO can also carry persisted fine-binned systematics summaries under:
+
+  samples/<sample-key>/systematics/<cache-key>/payload
+
+where <cache-key> is a stable hash of:
+
+  branch_expr
+  selection_expr
+  fine binning
+  enabled detector and weight families
+  detector sample list
+  cache format version
+  eigenmode-compression settings
+
+Each payload stores one fine-binned cache entry containing:
+
+  branch_expr
+  selection_expr
+  nbins
+  xmin
+  xmax
+  nominal
+  detector_down
+  detector_up
+  detector_templates
+  total_down
+  total_up
+
+and per-family summaries for:
+
+  genie
+  flux
+  reint
+
+Each family summary can include:
+
+  sigma
+  covariance
+  eigenvalues
+  eigenmodes
+
+The intended workflow is:
+
+  1. precompute a fine-binned cache once
+  2. persist it into EventListIO
+  3. rebin the cached nominal/templates/eigenmodes later during plotting
+
+Detector-systematic caching stores per-variation fine templates so envelopes
+can be rebuilt after rebinning.
+
+Universe-systematic caching stores covariance and compressed eigenmodes so
+rebinned covariance and per-bin RMS can be reconstructed without revisiting
+the event tree.
+
 Practical guidance
 ------------------
 
@@ -282,6 +340,11 @@ branches and selected framework-owned helper columns, especially:
   __w__
   __w2__
   sample_id
+
+For fast repeated plotting with systematics, treat the persisted
+samples/<sample-key>/systematics/<cache-key>/payload objects as the stable
+cache layer rather than recomputing all universes from the selected tree each
+time.
 
 Notes
 -----
