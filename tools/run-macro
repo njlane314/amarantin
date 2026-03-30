@@ -14,13 +14,21 @@ usage: tools/run-macro <macro-name> [args...]
 
 Runs a ROOT macro by friendly name without exposing the raw ROOT command line.
 
-Argument types are inferred from the macro signature.
+Literal values are inferred directly from the command line.
 Optional prefixes can override inference:
   s:<text>   explicit string
   i:<int>    integer
   f:<float>  floating-point
   b:true     boolean
   n:null     nullptr
+
+Without a prefix:
+  true/false are passed as booleans
+  integer literals are passed as integers
+  floating-point literals are passed as floating-point values
+  everything else is passed as a quoted string
+
+Use s:<text> when a string value would otherwise look numeric.
 
 Examples:
   tools/run-macro print_eventlist build/eventlists/run1.root
@@ -74,26 +82,6 @@ escape_cpp_string() {
   printf '%s' "${s}"
 }
 
-extract_signature() {
-  local name=$1
-  local path=$2
-  awk -v name="${name}" '
-    BEGIN { capture = 0 }
-    {
-      line = $0
-      sub(/\/\/.*/, "", line)
-      if (!capture && line ~ "^[[:space:]]*void[[:space:]]+" name "\\(")
-        capture = 1
-      if (capture)
-      {
-        printf "%s ", line
-        if (line ~ /\)[[:space:]]*\{/ || line ~ /\)[[:space:]]*$/)
-          exit
-      }
-    }
-  ' "${path}"
-}
-
 literal_matches_kind() {
   local kind=$1
   local value=$2
@@ -114,30 +102,6 @@ literal_matches_kind() {
   esac
 }
 
-parameter_kinds() {
-  local signature=$1
-  local params=${signature#*(}
-  params=${params%)*}
-  params=${params%\{}
-
-  IFS=',' read -r -a raw_params <<< "${params}"
-  local raw
-  for raw in "${raw_params[@]}"; do
-    raw=${raw%%=*}
-    raw=$(printf '%s' "${raw}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-    [[ -z "${raw}" ]] && continue
-    if [[ "${raw}" =~ (^|[[:space:]\*&])(bool)([[:space:]\*&]|$) ]]; then
-      printf 'bool\n'
-    elif [[ "${raw}" =~ Long64_t|int|size_t|unsigned[[:space:]]+long|unsigned[[:space:]]+int ]]; then
-      printf 'int\n'
-    elif [[ "${raw}" =~ float|double ]]; then
-      printf 'float\n'
-    else
-      printf 'string\n'
-    fi
-  done
-}
-
 prefixed_literal() {
   local arg=$1
   local kind=
@@ -146,6 +110,10 @@ prefixed_literal() {
   case "${arg}" in
     n:null)
       printf 'nullptr'
+      return 0
+      ;;
+    s:*)
+      printf '"%s"' "$(escape_cpp_string "${arg#s:}")"
       return 0
       ;;
     b:*)
@@ -171,19 +139,16 @@ prefixed_literal() {
 
 to_cpp_literal() {
   local arg=$1
-  local kind=${2:-string}
 
   if prefixed_literal "${arg}"; then
     return 0
   fi
 
-  if literal_matches_kind "${kind}" "${arg}"; then
+  if literal_matches_kind bool "${arg}" ||
+     literal_matches_kind int "${arg}" ||
+     literal_matches_kind float "${arg}"; then
     printf '%s' "${arg}"
     return 0
-  fi
-
-  if [[ "${arg}" == s:* ]]; then
-    arg=${arg#s:}
   fi
 
   printf '"%s"' "$(escape_cpp_string "${arg}")"
@@ -199,23 +164,11 @@ build_invocation() {
     return 0
   fi
 
-  local signature
-  signature=$(extract_signature "${name}" "${path}")
-  local -a kinds=()
-  local kind
-  while IFS= read -r kind; do
-    [[ -n "${kind}" ]] && kinds+=("${kind}")
-  done < <(parameter_kinds "${signature}")
-
   local -a raw_args=("$@")
   local -a args=()
-  local i
-  for i in "${!raw_args[@]}"; do
-    kind=string
-    if [[ ${i} -lt ${#kinds[@]} ]]; then
-      kind=${kinds[$i]}
-    fi
-    args+=("$(to_cpp_literal "${raw_args[$i]}" "${kind}")")
+  local raw_arg
+  for raw_arg in "${raw_args[@]}"; do
+    args+=("$(to_cpp_literal "${raw_arg}")")
   done
 
   local joined=

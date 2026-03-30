@@ -429,7 +429,7 @@ legacy wrapper paths.
     - unrelated plotting and `syst/` worktree changes stayed untouched
 
 #### Milestone 8: Deletion Pass And Compatibility Review
-- status: todo
+- status: done
 - hypothesis: if stale docs, wrapper paths, shell branching, and compatibility
   scaffolding are removed only after the native path is proven, then the final
   cleanup will reduce concepts instead of causing migration churn
@@ -449,6 +449,19 @@ legacy wrapper paths.
   - shell branching is reduced without changing the documented invocation
   - any removal of installed targets or public headers requires separate
     explicit sign-off
+- verification results:
+  - local checks passed:
+    - `git diff --check -- tools/run-macro COMMANDS USAGE INSTALL .agent/current_execplan.md docs/minimality-log.md`
+    - `bash -n tools/run-macro`
+  - implementation notes:
+    - `tools/run-macro` now uses simple literal inference plus explicit
+      prefixes instead of scraping macro signatures at runtime
+    - stale docs that still taught the old keyed `mk_dataset` workflow or the
+      old positional event-list example as the normal path were rewritten or
+      removed
+    - older ROOT helper macros such as `cache_systematics.C` and
+      `write_channel.C` were left in place for ad hoc sessions, but were
+      removed from the documented scripted workflow
 
 ### 7. Public-surface check
 - compatibility impact:

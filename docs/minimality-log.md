@@ -2,6 +2,69 @@
 
 ## Current milestone
 - status: done
+- subsystem: `tools/` + top-level workflow docs
+- design rule from `DESIGN.md`: delete stale scaffolding after feature work,
+  keep workflows direct, and reduce wrapper ceremony when the native path is
+  already proven
+
+## What changed
+- simplified `tools/run-macro`:
+  - removed runtime C++ signature scraping
+  - kept the same invocation shape
+  - kept explicit override prefixes
+  - switched to simple literal inference for bool / int / float / string
+- removed stale workflow teaching from top-level docs:
+  - dropped the old `write_channel` macro example from `COMMANDS`
+  - dropped the old `cache_systematics.C` direct ROOT example from `COMMANDS`
+  - removed the old keyed `mk_dataset` workflow section as a normal
+    “typical” dataset path in `USAGE`
+  - fixed the stale positional `mk_eventlist` hand-build example in `USAGE`
+  - updated Docker workflow docs so the native path reaches `mk_dist`
+- kept older compatibility entrypoints available where they still have
+  migration value, but stopped documenting them as the preferred workflow
+
+## Why this is simpler
+- `tools/run-macro` no longer depends on parsing macro source just to decide
+  how to quote arguments
+- the top-level docs now tell one consistent native workflow instead of mixing
+  the current path with older compatibility examples in the main teaching flow
+- obsolete macro-wrapper examples are no longer competing with the thin CLI
+  entrypoints that replaced them
+
+## Verification
+- local checks:
+  - `git diff --check -- tools/run-macro COMMANDS USAGE INSTALL .agent/current_execplan.md docs/minimality-log.md`
+  - `bash -n tools/run-macro`
+- results:
+  - the macro runner keeps the same documented command shape with less shell
+    branching
+  - stale legacy-first workflow wording was removed from the main docs
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the runtime signature-scraping layer from `tools/run-macro`
+- shell branches removed:
+  - per-parameter kind extraction from macro source in `tools/run-macro`
+- docs/build artifacts removed:
+  - stale keyed-dataset and positional-eventlist examples from the main
+    workflow docs
+  - stale macro-wrapper examples from `COMMANDS`
+- approximate LOC delta: smaller macro wrapper plus doc cleanup
+
+## Decisions
+- keep `cache_systematics.C` and `write_channel.C` for now as ad hoc ROOT
+  helpers, but stop teaching them as the normal scripted path
+- avoid removing any installed targets, public headers, or still-documented
+  compatibility CLIs in this cleanup pass
+
+## Remaining hotspots
+- `mk_eventlist --cache-*` still exists as a documented compatibility bridge
+- `mk_channel` / `ChannelIO` still remain as the current fit bridge on top of
+  `DistributionIO`
+
+## Current milestone
+- status: done
 - subsystem: `plot/` + `fit/` downstream teaching seam
 - design rule from `DESIGN.md`: prefer the flatter persisted downstream
   surface, keep workflows in `app/`, and describe compatibility wrappers as

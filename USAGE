@@ -311,7 +311,7 @@ The manifest rows are:
   * logical sample key
   * logical sample ROOT path
 
-The older keyed context-string path still works:
+The older keyed context-string path still works as a compatibility bridge:
 
     build/bin/mk_dataset \
       build/datasets/run1-numi-fhc.root \
@@ -328,19 +328,17 @@ Building a persistent event list by hand
 Once a DatasetIO file already exists, build a persistent EventListIO file:
 
     build/bin/mk_eventlist \
+      --event-tree EventSelectionFilter \
+      --subrun-tree SubRun \
+      --selection "selected != 0" \
       build/eventlists/run1-numi-fhc.root \
-      build/datasets/run1-numi-fhc.root \
-      EventSelectionFilter \
-      SubRun \
-      "selected != 0"
+      build/datasets/run1-numi-fhc.root
 
-Reading the arguments from left to right:
+Key flags are:
 
-  * output event-list ROOT file path
-  * input dataset ROOT file path
-  * source event tree name
-  * source subrun tree name
-  * TTreeFormula selection expression
+  * `--event-tree` for the source event tree name
+  * `--subrun-tree` for the source subrun tree name
+  * `--selection` for the TTreeFormula selection expression
 
 The current implementation writes:
 
@@ -482,9 +480,11 @@ density, and whether to compute the stat-only interval.
 
 The plain-text fit report includes:
 
+  * source `distribution_path` plus channel build version
   * convergence flag
   * q_min
   * mu_hat and its total / stat-only intervals
+  * observed-data source keys when they were assembled from manifest data rows
   * observed, signal, background, and total bin predictions
   * fitted nuisance values
 
@@ -536,8 +536,8 @@ workflow under:
 The idea is to treat generated sample ROOT files as persistent build
 artifacts.
 
-Current simple datasets.mk example
-----------------------------------
+Minimal datasets.mk example
+---------------------------
 
 The existing file declares datasets and logical samples:
 
@@ -623,23 +623,8 @@ Remove generated sample outputs and sample lists:
 
     make -f samples-dag.mk samples-clean
 
-Typical persistent dataset workflow
------------------------------------
-
-One common sequence is:
-
-    make -f samples-dag.mk samples
-
-    build/bin/mk_dataset \
-      build/datasets/run1-numi-fhc.root \
-      run1-numi-fhc \
-      beam-s0=build/samples/run1/beam-s0.root
-
-This keeps the per-sample SampleIO ROOT files as persistent intermediate
-artifacts and writes a separate DatasetIO file for downstream analysis.
-
-Typical logical-sample dataset workflow
----------------------------------------
+Typical dataset workflow
+------------------------
 
 When shard-level artifacts should merge into logical keys:
 
@@ -797,6 +782,18 @@ Then build and run:
       --selection "selected != 0" \
       build/eventlists/run1-numi-fhc.root \
       build/datasets/run1-numi-fhc.root
+    build/bin/mk_dist \
+      --selection "__pass_muon__" \
+      --detvars beam-s0-sce,beam-s0-wiremodx \
+      --fine-nbins 400 \
+      --genie \
+      --flux \
+      --reint \
+      build/dists/run1-numi-fhc.root \
+      build/eventlists/run1-numi-fhc.root \
+      beam-s0 \
+      topological_score \
+      50 0 1
 
 Troubleshooting
 ---------------
@@ -809,11 +806,12 @@ If mk_sample fails on beam normalization, check AMARANTIN_RUN_DB or pass
 If samples-dag.mk does not rebuild when expected, inspect the corresponding
 .root.stamp file and compare it against the current list contents and binary.
 
-If mk_dataset fails, check that each keyed sample argument is of the form
-key=path or that each manifest row has exactly two fields, that each
-referenced sample ROOT file is a valid persistent SampleIO object, and in the
-native scope mode that each sample root already carries the matching logical
-sample name plus beam / polarity metadata for the requested dataset scope.
+If mk_dataset fails, check that each manifest row has exactly two fields, that
+each referenced sample ROOT file is a valid persistent SampleIO object, and in
+the native scope mode that each sample root already carries the matching
+logical sample name plus beam / polarity metadata for the requested dataset
+scope. In the older compatibility path, each keyed sample argument must be of
+the form key=path.
 
 If mk_eventlist fails, check that the dataset sample ROOT files actually
 contain the named event and subrun trees and that the TTreeFormula selection

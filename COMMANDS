@@ -278,18 +278,21 @@ Run one ROOT macro through the common wrapper
   bash tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector
   bash tools/run-macro plot_efficiency build/eventlists/run1.root topological_score "selected != 0" "__pass_muon__" 50 0 1 beam-s0
   bash tools/run-macro inspect_dist output.dists.root beam-s0
-  bash tools/run-macro write_channel output.dists.root output.channels.root beam-s0 beam-bkg muon_region __pass_muon__ "12,10,9,7,6,5,4,3,2,1"
   bash tools/run-macro plot_channel output.channels.root muon_region
   bash tools/run-macro fit_channel output.channels.root muon_region signal
   bash tools/run-macro scan_mu output.channels.root muon_region signal
 
-Run a plotting macro directly through ROOT
-  root -l -b -q plot/macro/cache_systematics.C
+Run a macro directly through ROOT
   root -l -q 'fit/macro/fit_channel.C("output.channels.root","muon_region","signal")'
   root -l -q 'fit/macro/scan_mu.C("output.channels.root","muon_region","signal")'
 
 Notes
 -----
+`tools/run-macro`
+  Uses simple literal inference with optional prefixes instead of scraping the
+  macro signature at runtime. Use `s:<text>` when a string value would
+  otherwise look numeric.
+
 `mk_sample`
   Accepts an optional `--run-db PATH`. If omitted, it checks
   `AMARANTIN_RUN_DB` and otherwise falls back to:
@@ -320,6 +323,12 @@ Notes
   In the native scope mode, consumes already-logical sample roots and rejects
   duplicate sample rows. The older repeated-key merge behavior remains
   available only through the legacy context-string path.
+
+`mk_dist`, `mk_channel`, `mk_xsec_fit`
+  Are the preferred scripted cache / compatibility-channel / fit entrypoints.
+  Older helper macros such as `cache_systematics.C` and `write_channel.C`
+  remain available for ad hoc ROOT sessions, but they are no longer the
+  documented workflow.
 
 Generated `samples/generated/datasets.mk`
   Also carries `dataset_defs.<dataset>`, `dataset_manifest.<dataset>`,
