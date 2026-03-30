@@ -141,6 +141,63 @@ Current preset resolution rules:
   muon
     prefers __pass_muon__, then sel_muon, then selection_pass > 0
 
+Framework-owned truth-category columns
+--------------------------------------
+
+For MC-like, external, and data samples, EventListIO also writes:
+
+  __analysis_channel__             int
+  __is_signal__                    bool
+
+Meaning:
+
+  __analysis_channel__
+    Canonical framework-owned channel code derived from sample origin and
+    copied truth/event content.
+
+  __is_signal__
+    Lambda-channel signal flag derived from the copied event content.
+
+Current channel codes:
+
+  0   unknown
+  1   external
+  2   out-of-fiducial-volume
+  10  muon-neutrino charged-current, 0 pi, at least 1 proton
+  11  muon-neutrino charged-current, exactly 1 charged pion
+  12  muon-neutrino charged-current, pi0 or gamma activity
+  13  muon-neutrino charged-current, more than 1 charged pion
+  14  neutral current
+  15  Lambda signal
+  16  muon-neutrino charged-current with sigma0
+  17  muon-neutrino charged-current with K0
+  19  electron-neutrino charged-current
+  20  other muon-neutrino charged-current
+  99  inclusive data
+
+Current derivation inputs:
+
+  nu_pdg
+  int_ccnc
+  is_nu_mu_cc
+  nu_vtx_in_fv
+  prim_pdg
+  mu_p
+  g4_lambda_pdg
+  g4_lambda_p_p
+  g4_lambda_pi_p
+  g4_lambda_decay_sep
+
+For data and external samples:
+
+  data
+    __analysis_channel__ = 99
+    __is_signal__ = false
+
+  external
+    __analysis_channel__ = 1
+    __is_signal__ = false
+
 Orthogonal sample filtering
 ---------------------------
 
@@ -216,6 +273,8 @@ columns to treat as stable are:
   __pass_slice__
   __pass_fiducial__
   __pass_muon__
+  __analysis_channel__
+  __is_signal__
 
 For training snapshots, it is reasonable to export both upstream physics
 branches and selected framework-owned helper columns, especially:

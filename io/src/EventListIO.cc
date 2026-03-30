@@ -1,10 +1,13 @@
 #include "EventListIO.hh"
+#include "AnalysisChannels.hh"
 #include "detail/RootUtils.hh"
 
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <TChain.h>
 #include <TDirectory.h>
@@ -18,6 +21,8 @@ namespace
 {
     constexpr const char *kEventWeightBranch = "__w__";
     constexpr const char *kEventWeightSquaredBranch = "__w2__";
+    constexpr const char *kAnalysisChannelBranch = "__analysis_channel__";
+    constexpr const char *kSignalBranch = "__is_signal__";
 
     const char *orthogonal_selection_for_sample(const DatasetIO::Sample &sample)
     {
@@ -154,6 +159,57 @@ namespace
         return out;
     }
 
+    int count_abs_pdg(const std::vector<int> *pdgs, int pdg)
+    {
+        if (!pdgs)
+            return 0;
+
+        int count = 0;
+        for (const int value : *pdgs)
+        {
+            if (std::abs(value) == pdg)
+                ++count;
+        }
+        return count;
+    }
+
+    int count_exact_pdg(const std::vector<int> *pdgs, int pdg)
+    {
+        if (!pdgs)
+            return 0;
+
+        int count = 0;
+        for (const int value : *pdgs)
+        {
+            if (value == pdg)
+                ++count;
+        }
+        return count;
+    }
+
+    int count_k0(const std::vector<int> *pdgs)
+    {
+        if (!pdgs)
+            return 0;
+
+        int count = 0;
+        for (const int value : *pdgs)
+        {
+            const int abs_pdg = std::abs(value);
+            if (abs_pdg == 130 || abs_pdg == 310 || abs_pdg == 311)
+                ++count;
+        }
+        return count;
+    }
+
+    template <class T>
+    T first_or_default(const std::vector<T> *values, T fallback)
+    {
+        if (!values || values->empty())
+            return fallback;
+        return values->front();
+    }
+
     void write_sample_metadata(TDirectory *meta_dir, const DatasetIO::Sample &sample)
     {
         utils::write_named(meta_dir, "origin", DatasetIO::Sample::origin_name(sample.origin));
@@ -235,12 +291,33 @@ namespace
         float weight_spline_times_tune = 1.0f;
         float ppfx_cv = 1.0f;
         double rootino_fix = 1.0;
+        int nu_pdg = 0;
+        int int_ccnc = -1;
+        bool is_nu_mu_cc = false;
+        bool truth_in_fiducial = false;
+        float mu_p = std::numeric_limits<float>::quiet_NaN();
+
+        std::vector<int> *prim_pdg = nullptr;
+        std::vector<int> *g4_lambda_pdg = nullptr;
+        std::vector<float> *g4_lambda_p_p = nullptr;
+        std::vector<float> *g4_lambda_pi_p = nullptr;
+        std::vector<float> *g4_lambda_decay_sep = nullptr;
 
         const bool has_weight_spline = chain.GetBranch("weightSpline") != nullptr;
         const bool has_weight_tune = chain.GetBranch("weightTune") != nullptr;
         const bool has_weight_spline_times_tune = chain.GetBranch("weightSplineTimesTune") != nullptr;
         const bool has_ppfx_cv = chain.GetBranch("ppfx_cv") != nullptr;
         const bool has_rootino_fix = chain.GetBranch("RootinoFix") != nullptr;
+        const bool has_nu_pdg = chain.GetBranch("nu_pdg") != nullptr;
+        const bool has_int_ccnc = chain.GetBranch("int_ccnc") != nullptr;
+        const bool has_is_nu_mu_cc = chain.GetBranch("is_nu_mu_cc") != nullptr;
+        const bool has_truth_in_fiducial = chain.GetBranch("nu_vtx_in_fv") != nullptr;
+        const bool has_mu_p = chain.GetBranch("mu_p") != nullptr;
+        const bool has_prim_pdg = chain.GetBranch("prim_pdg") != nullptr;
+        const bool has_g4_lambda_pdg = chain.GetBranch("g4_lambda_pdg") != nullptr;
+        const bool has_g4_lambda_p_p = chain.GetBranch("g4_lambda_p_p") != nullptr;
+        const bool has_g4_lambda_pi_p = chain.GetBranch("g4_lambda_pi_p") != nullptr;
+        const bool has_g4_lambda_decay_sep = chain.GetBranch("g4_lambda_decay_sep") != nullptr;
 
         if (has_weight_spline)
             chain.SetBranchAddress("weightSpline", &weight_spline);
@@ -252,6 +329,26 @@ namespace
             chain.SetBranchAddress("ppfx_cv", &ppfx_cv);
         if (has_rootino_fix)
             chain.SetBranchAddress("RootinoFix", &rootino_fix);
+        if (has_nu_pdg)
+            chain.SetBranchAddress("nu_pdg", &nu_pdg);
+        if (has_int_ccnc)
+            chain.SetBranchAddress("int_ccnc", &int_ccnc);
+        if (has_is_nu_mu_cc)
+            chain.SetBranchAddress("is_nu_mu_cc", &is_nu_mu_cc);
+        if (has_truth_in_fiducial)
+            chain.SetBranchAddress("nu_vtx_in_fv", &truth_in_fiducial);
+        if (has_mu_p)
+            chain.SetBranchAddress("mu_p", &mu_p);
+        if (has_prim_pdg)
+            chain.SetBranchAddress("prim_pdg", &prim_pdg);
+        if (has_g4_lambda_pdg)
+            chain.SetBranchAddress("g4_lambda_pdg", &g4_lambda_pdg);
+        if (has_g4_lambda_p_p)
+            chain.SetBranchAddress("g4_lambda_p_p", &g4_lambda_p_p);
+        if (has_g4_lambda_pi_p)
+            chain.SetBranchAddress("g4_lambda_pi_p", &g4_lambda_pi_p);
+        if (has_g4_lambda_decay_sep)
+            chain.SetBranchAddress("g4_lambda_decay_sep", &g4_lambda_decay_sep);
 
         double event_weight = 1.0;
         double event_weight_squared = 1.0;
@@ -259,10 +356,18 @@ namespace
         bool pass_slice = false;
         bool pass_fiducial = false;
         bool pass_muon = false;
+        int analysis_channel = AnalysisChannels::to_int(AnalysisChannels::Channel::kUnknown);
+        bool is_signal = false;
         selected->Branch(kEventWeightBranch, &event_weight, (std::string(kEventWeightBranch) + "/D").c_str());
         selected->Branch(kEventWeightSquaredBranch,
                          &event_weight_squared,
                          (std::string(kEventWeightSquaredBranch) + "/D").c_str());
+        selected->Branch(kAnalysisChannelBranch,
+                         &analysis_channel,
+                         (std::string(kAnalysisChannelBranch) + "/I").c_str());
+        selected->Branch(kSignalBranch,
+                         &is_signal,
+                         (std::string(kSignalBranch) + "/O").c_str());
         selected->Branch(EventListSelection::trigger_branch(), &pass_trigger,
                          (std::string(EventListSelection::trigger_branch()) + "/O").c_str());
         selected->Branch(EventListSelection::slice_branch(), &pass_slice,
@@ -297,6 +402,63 @@ namespace
             pass_muon = pass_muon_formula ? (pass_muon_formula->EvalInstance() != 0.0) : false;
             if (selection->EvalInstance() != 0.0)
             {
+                const int n_protons = count_abs_pdg(prim_pdg, 2212);
+                const int n_pi_minus = count_exact_pdg(prim_pdg, -211);
+                const int n_pi_plus = count_exact_pdg(prim_pdg, 211);
+                const int n_pi0 = count_abs_pdg(prim_pdg, 111);
+                const int n_gamma = count_abs_pdg(prim_pdg, 22);
+                const int n_k0 = count_k0(prim_pdg);
+                const int n_sigma0 = count_abs_pdg(prim_pdg, 3212);
+                const int lambda_pdg = first_or_default(g4_lambda_pdg, 0);
+                const float proton_p = first_or_default(g4_lambda_p_p, std::numeric_limits<float>::quiet_NaN());
+                const float pion_p = first_or_default(g4_lambda_pi_p, std::numeric_limits<float>::quiet_NaN());
+                const float lambda_decay_sep =
+                    first_or_default(g4_lambda_decay_sep, std::numeric_limits<float>::quiet_NaN());
+
+                if (is_data_origin(sample))
+                {
+                    analysis_channel = AnalysisChannels::to_int(AnalysisChannels::Channel::kDataInclusive);
+                    is_signal = false;
+                }
+                else if (is_external_origin(sample))
+                {
+                    analysis_channel = AnalysisChannels::to_int(AnalysisChannels::Channel::kExternal);
+                    is_signal = false;
+                }
+                else if (is_mc_origin(sample))
+                {
+                    is_signal = AnalysisChannels::is_signal(is_nu_mu_cc,
+                                                            int_ccnc,
+                                                            truth_in_fiducial,
+                                                            lambda_pdg,
+                                                            mu_p,
+                                                            proton_p,
+                                                            pion_p,
+                                                            lambda_decay_sep);
+                    analysis_channel = AnalysisChannels::to_int(
+                        AnalysisChannels::classify(truth_in_fiducial,
+                                                  nu_pdg,
+                                                  int_ccnc,
+                                                  n_protons,
+                                                  n_pi_minus,
+                                                  n_pi_plus,
+                                                  n_pi0,
+                                                  n_gamma,
+                                                  n_k0,
+                                                  n_sigma0,
+                                                  is_nu_mu_cc,
+                                                  lambda_pdg,
+                                                  mu_p,
+                                                  proton_p,
+                                                  pion_p,
+                                                  lambda_decay_sep));
+                }
+                else
+                {
+                    analysis_channel = AnalysisChannels::to_int(AnalysisChannels::Channel::kUnknown);
+                    is_signal = false;
+                }
+
                 event_weight = compute_nominal_weight(sample,
                                                       has_weight_spline_times_tune,
                                                       weight_spline_times_tune,
