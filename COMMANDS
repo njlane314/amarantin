@@ -106,23 +106,38 @@ Generate one sample list directly
   tools/mklist.sh --list samplelists/existing.list --out samplelists/example.list
   tools/mklist.sh --samdef nl_run1_fhc_detvar_sce_goodruns --out samplelists/run1_fhc/beam-sce.list
 
-Build one sample ROOT file directly
+Build one logical sample ROOT file from an explicit shard manifest
+  build/bin/mk_sample \
+    --sample beam \
+    --manifest beam.sample.manifest \
+    output.root overlay nominal numi fhc
+
+Manifest row format
+  shard sample-list-path
+
+Build one legacy single-list sample ROOT file directly
   build/bin/mk_sample output.root input.list data nominal numi fhc
 
 Dataset workflow
 ----------------
-Build one persistent DatasetIO file directly
+Build one persistent DatasetIO file directly in the legacy keyed mode
   build/bin/mk_dataset output.dataset.root context sample-key=sample.root
 
 Build a DatasetIO file and stamp sample definitions
   build/bin/mk_dataset --defs sample.defs output.dataset.root run1-numi-fhc beam-s0=build/samples/run1/beam-s0.root
 
-Build one logical DatasetIO file from a repeated-key manifest
+Build one logical DatasetIO file from an explicit scope plus manifest
   build/bin/mk_dataset \
     --defs samples/generated/run1_fhc.sample.defs \
+    --campaign run1_fhc_v08_00_00_82 \
+    --run run1 \
+    --beam numi \
+    --polarity fhc \
     --manifest samples/generated/run1_fhc.dataset.manifest \
-    build/datasets/run1_fhc.root \
-    numi_fhc_run1
+    build/datasets/run1_fhc.root
+
+Dataset manifest row format
+  sample sample-root-path
 
 The plain text `sample.defs` format is:
   key variation nominal tag role defname [campaign]
@@ -147,6 +162,27 @@ Build an EventListIO file and immediately write one DistributionIO cache file
     --cache-genie \
     output.eventlist.root input.dataset.root
 
+Build one canonical two-lane systematics cache:
+  detector variations from alternate samples plus reweighting families from the
+  nominal sample
+  build/bin/mk_eventlist \
+    --cache-systematics beam-s0 topological_score 50 0 1 \
+    --cache-output build/dists/run1-numi-fhc.root \
+    --cache-selection "__pass_muon__" \
+    --cache-detvars beam-s0-sce,beam-s0-wiremodx \
+    --cache-fine-nbins 400 \
+    --cache-genie \
+    --cache-flux \
+    --cache-reint \
+    output.eventlist.root input.dataset.root
+
+Notes:
+  `--cache-detvars` drives the detector lane from alternate EventListIO samples.
+  `--cache-genie`, `--cache-flux`, and `--cache-reint` drive the reweighting
+  lane from branches on the nominal sample.
+  `--cache-no-overwrite` keeps existing matching cache entries instead of
+  rebuilding them.
+
 Channel workflow
 ----------------
 Build one persistent ChannelIO file directly from cached signal/background
@@ -160,6 +196,31 @@ Build one ChannelIO file with explicit selection text and observed bins
     --selection "__pass_muon__" \
     --data-bins "12,10,9,7,6,5,4,3,2,1" \
     output.channels.root output.dists.root beam-s0 beam-bkg muon_region
+
+Build one multi-process ChannelIO file from a plain-text manifest with
+automatic observed data
+  cat > muon_region.channel.manifest <<'EOF'
+  signal signal beam-s0
+  beam_bkg background beam-bkg
+  ext background ext
+  dirt background dirt
+  obs data beam-data
+  EOF
+  build/bin/mk_channel \
+    --manifest muon_region.channel.manifest \
+    output.channels.root output.dists.root muon_region
+
+Manifest row format:
+  process-name kind sample-key [cache-key]
+
+Kinds:
+  signal
+  background
+  data
+
+Notes:
+  `data` rows fill `ChannelIO::Channel::data` automatically.
+  The current manifest mode expects unique non-data process names.
 
 Fit workflow
 ------------
@@ -197,24 +258,37 @@ Notes
   Accepts an optional `--run-db PATH`. If omitted, it checks
   `AMARANTIN_RUN_DB` and otherwise falls back to:
     /exp/uboone/data/uboonebeam/beamdb/run.db
+  The native logical-sample form is:
+    `--sample NAME --manifest SAMPLE.manifest output.root ...`
+  The older positional `output.root input.list ...` form is still available as
+  a transitional bridge. If you still need a file containing many list paths,
+  pass it as `@path`.
 
 `samples-dag.mk`
   Uses `build/bin/mk_sample` as its canonical producer and records small stamp
   files to avoid rebuilding unchanged sample outputs. It now also accepts
-  per-artifact source and metadata overrides through generated variables such as
+  generated logical-sample manifests through `logical_samples.<dataset>`,
+  `sample_manifest.<dataset>.<logical>`, and
+  `sample_artifacts.<dataset>.<logical>`.
+  Per-artifact list generation still uses generated variables such as
   `sample_source_kind.<dataset>.<artifact>`,
   `sample_source_ref.<dataset>.<artifact>`,
-  `sample_origin.<dataset>.<artifact>` and
-  `sample_variation.<dataset>.<artifact>`.
+  `sample_origin.<dataset>.<logical>` and
+  `sample_variation.<dataset>.<logical>`.
 
 `mk_dataset --defs`
   Is the preferred place to stamp workflow metadata like `nominal`, `tag`,
   `role`, `defname`, and `campaign`.
 
 `mk_dataset --manifest`
-  Allows repeated sample keys so many shard-level `SampleIO` artifacts can be
-  merged into one logical `DatasetIO` sample.
+  In the native scope mode, consumes already-logical sample roots and rejects
+  duplicate sample rows. The older repeated-key merge behavior remains
+  available only through the legacy context-string path.
 
 Generated `samples/generated/datasets.mk`
-  Also carries `dataset_defs.<dataset>` and `dataset_manifest.<dataset>` so
-  `make -f samples-dag.mk ... datasets` can assemble logical datasets directly.
+  Also carries `dataset_defs.<dataset>`, `dataset_manifest.<dataset>`,
+  `dataset_run.<dataset>`, `dataset_beam.<dataset>`,
+  `dataset_polarity.<dataset>`, optional `dataset_campaign.<dataset>`, and one
+  `sample_manifest.<dataset>.<logical>` entry per logical sample so
+  `make -f samples-dag.mk ... samples` builds logical `SampleIO` roots directly
+  and `... datasets` assembles logical datasets from those roots.

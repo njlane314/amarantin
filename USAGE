@@ -41,14 +41,28 @@ Basic mk_sample usage
 
 General form:
 
+    build/bin/mk_sample [--run-db PATH] --sample sample-key --manifest sample.manifest output.root [origin] [variation] [beam] [polarity]
+
+Legacy transitional form:
+
     build/bin/mk_sample [--run-db PATH] output.root input.list [origin] [variation] [beam] [polarity]
 
 Example:
 
     build/bin/mk_sample \
-      build/samples/run1/beam-s0.root \
-      samplelists/numi_fhc_run1/beam-s0.list \
-      data nominal numi fhc
+      --sample beam \
+      --manifest samples/generated/run1_fhc.beam.sample.manifest \
+      build/samples/run1_fhc/beam.root \
+      overlay nominal numi fhc
+
+Sample manifest rows are:
+
+    shard sample-list-path
+
+For example:
+
+    beam-s0 samplelists/numi_fhc_run1/beam-s0.list
+    beam-s1 samplelists/numi_fhc_run1/beam-s1.list
 
 If --run-db is not given, SampleIO uses:
 
@@ -60,37 +74,46 @@ Basic mk_dataset usage
 
 General form:
 
+    build/bin/mk_dataset [--defs sample.defs] [--campaign name] --run run --beam beam --polarity polarity --manifest dataset.manifest output.root
+
+Legacy transitional form:
+
     build/bin/mk_dataset [--defs sample.defs] [--manifest dataset.manifest] output.root context sample-key=sample.root [sample-key=sample.root ...]
 
 Example:
 
     build/bin/mk_dataset \
-      build/datasets/run1-numi-fhc.root \
-      run1-numi-fhc \
-      beam-s0=build/samples/run1/beam-s0.root
+      --defs samples/generated/run1_fhc.sample.defs \
+      --campaign run1_fhc_v08_00_00_82 \
+      --run run1 \
+      --beam numi \
+      --polarity fhc \
+      --manifest samples/generated/run1_fhc.dataset.manifest \
+      build/datasets/run1_fhc.root
 
 The mk_dataset program reads one or more persistent SampleIO ROOT files and
 writes a persistent DatasetIO ROOT file containing keyed samples.
 
-If the same sample key appears more than once, mk_dataset merges those shard
-inputs into one logical dataset sample. This can be supplied either through
-repeated positional `key=path` arguments or through `--manifest`.
+In the native scope mode, the manifest must list already-logical sample ROOT
+files and each sample row must be unique.
 
 If --defs is supplied, mk_dataset also stamps workflow-facing sample metadata
 from a plain text sample definition file onto each keyed sample. This metadata is then
 available later in EventListIO and systematics cache building.
 
-A plain text dataset manifest is one row per shard:
+A plain text dataset manifest is one row per logical sample:
 
-    logical-key sample.root
-
-Repeated logical keys are merged. `key=path` rows are also accepted.
+    sample sample.root
 
 Example:
 
-    beam build/samples/run1_fhc/beam-s0.root
-    beam build/samples/run1_fhc/beam-s1.root
-    ext build/samples/run1_fhc/ext-p0.root
+    beam build/samples/run1_fhc/beam.root
+    dirt build/samples/run1_fhc/dirt.root
+    ext build/samples/run1_fhc/ext.root
+    signal build/samples/run1_fhc/signal.root
+
+The older context-string path still supports repeated keyed inputs and also
+accepts `key=path` rows in `--manifest`.
 
 The plain text format is:
 
@@ -128,6 +151,10 @@ General form:
 
     build/bin/mk_channel [--selection <expr>] [--data-bins <csv>] [--signal-cache <key>] [--background-cache <key>] [--allow-zero-data] output.root input.dists.root signal-sample-key background-sample-key channel-key
 
+or:
+
+    build/bin/mk_channel [--selection <expr>] [--data-bins <csv>] [--manifest <channel.manifest>] [--allow-zero-data] output.root input.dists.root channel-key
+
 Example:
 
     build/bin/mk_channel \
@@ -139,11 +166,36 @@ Example:
       beam-bkg \
       muon_region
 
+Manifest example:
+
+    build/bin/mk_channel \
+      --manifest muon_region.channel.manifest \
+      build/channels/run1-numi-fhc.root \
+      build/dists/run1-numi-fhc.root \
+      muon_region
+
 The mk_channel program reads cached `DistributionIO` entries, checks that the
-signal and background inputs share common binning plus selection metadata, and
-writes one persistent `ChannelIO` object with observed data bins plus
-per-process systematic payloads. Observed bins are required unless
-`--allow-zero-data` is passed explicitly.
+channel inputs share common binning plus selection metadata, and writes one
+persistent `ChannelIO` object with observed data bins plus per-process
+systematic payloads.
+
+In the legacy positional mode, observed bins are still provided explicitly via
+`--data-bins` unless `--allow-zero-data` is passed.
+
+In the manifest mode, rows with kind `data` fill the observed bins
+automatically.
+
+The plain-text manifest format is one row per channel input:
+
+    process-name kind sample-key [cache-key]
+
+The supported kinds are:
+
+    signal
+    background
+    data
+
+The current manifest mode expects unique non-data process names.
 
 Basic mk_xsec_fit usage
 -----------------------
@@ -199,18 +251,30 @@ Building a single sample by hand
 Once a list exists, build a sample ROOT file directly:
 
     build/bin/mk_sample \
-      build/samples/run1/beam-s0.root \
-      samplelists/numi_fhc_run1/beam-s0.list \
-      data nominal numi fhc
+      --sample beam \
+      --manifest samples/generated/run1_fhc.beam.sample.manifest \
+      build/samples/run1_fhc/beam.root \
+      overlay nominal numi fhc
 
 Reading the arguments from left to right:
 
+  * logical sample key
+  * sample manifest path
   * output ROOT file path
-  * input list path
   * sample origin
   * variation
   * beam
   * polarity
+
+The older single-list form still works:
+
+    build/bin/mk_sample \
+      build/samples/run1/beam-s0.root \
+      samplelists/numi_fhc_run1/beam-s0.list \
+      overlay nominal numi fhc
+
+If you still have a file containing many list paths, pass that bridge input as
+`@path` in the legacy form.
 
 Building a persistent dataset by hand
 -------------------------------------
@@ -218,18 +282,39 @@ Building a persistent dataset by hand
 Once one or more sample ROOT files already exist, build a DatasetIO file:
 
     build/bin/mk_dataset \
+      --defs samples/generated/run1_fhc.sample.defs \
+      --campaign run1_fhc_v08_00_00_82 \
+      --run run1 \
+      --beam numi \
+      --polarity fhc \
+      --manifest samples/generated/run1_fhc.dataset.manifest \
+      build/datasets/run1_fhc.root
+
+Reading the arguments from left to right:
+
+  * optional sample definition file
+  * optional campaign scope
+  * dataset run scope
+  * dataset beam scope
+  * dataset polarity scope
+  * dataset manifest path
+  * output dataset ROOT file path
+
+The manifest rows are:
+
+  * logical sample key
+  * logical sample ROOT path
+
+The older keyed context-string path still works:
+
+    build/bin/mk_dataset \
       build/datasets/run1-numi-fhc.root \
       run1-numi-fhc \
       beam-s0=build/samples/run1/beam-s0.root \
       beam-s1=build/samples/run1/beam-s1.root
 
-Reading the arguments from left to right:
-
-  * output dataset ROOT file path
-  * context string stored in the dataset metadata
-  * one or more keyed sample entries of the form key=path
-
-The key is the persistent sample name inside the DatasetIO container.
+In that compatibility path, the key is the persistent sample name inside the
+DatasetIO container and repeated keys are merged.
 
 Building a persistent event list by hand
 ----------------------------------------
@@ -258,6 +343,59 @@ The current implementation writes:
     samples/<sample-key>/events/selected
     samples/<sample-key>/subruns/SubRun
 
+Building a systematics cache by hand
+------------------------------------
+
+The same `mk_eventlist` invocation can also write a `DistributionIO`
+systematics cache.
+
+Canonical form:
+
+    build/bin/mk_eventlist \
+      --cache-systematics <sample-key> <branch-expr> <nbins> <xmin> <xmax> \
+      [--cache-output <path>] \
+      [--cache-selection <expr>] \
+      [--cache-detvars <csv>] \
+      [--cache-fine-nbins <n>] \
+      [--cache-genie] \
+      [--cache-flux] \
+      [--cache-reint] \
+      [--cache-no-overwrite] \
+      output.eventlist.root \
+      input.dataset.root
+
+Representative detector-plus-reweighting example:
+
+    build/bin/mk_eventlist \
+      --cache-systematics beam-s0 topological_score 50 0 1 \
+      --cache-output build/dists/run1-numi-fhc.root \
+      --cache-selection "__pass_muon__" \
+      --cache-detvars beam-s0-sce,beam-s0-wiremodx \
+      --cache-fine-nbins 400 \
+      --cache-genie \
+      --cache-flux \
+      --cache-reint \
+      build/eventlists/run1-numi-fhc.root \
+      build/datasets/run1-numi-fhc.root
+
+Reading the cache flags from left to right:
+
+  * `--cache-systematics` names the nominal sample and the histogram to cache
+  * `--cache-selection` applies the cache-time selection expression
+  * `--cache-detvars` names detector-variation samples in the event list
+  * `--cache-fine-nbins` chooses the finer on-disk cache binning
+  * `--cache-genie`, `--cache-flux`, and `--cache-reint` enable the
+    reweighting families on the nominal sample
+  * `--cache-output` overrides the default `<eventlist>.dists.root` path
+  * `--cache-no-overwrite` preserves existing matching cache entries
+
+Conceptually this builds two systematic lanes and merges them in one
+`DistributionIO` payload:
+
+  * detector lane: alternate `EventListIO` samples listed in `--cache-detvars`
+  * reweighting lane: alternate weight branches on the nominal sample selected
+    by `--cache-genie`, `--cache-flux`, and `--cache-reint`
+
 Building a persistent channel by hand
 -------------------------------------
 
@@ -283,6 +421,33 @@ Reading the arguments from left to right:
 
 Optional flags let you override the persisted cache keys, process names,
 selection text, and observed data bin contents.
+
+To build one final region from many cached processes with automatic observed
+data, use a manifest instead:
+
+    build/bin/mk_channel \
+      --manifest muon_region.channel.manifest \
+      build/channels/run1-numi-fhc.root \
+      build/dists/run1-numi-fhc.root \
+      muon_region
+
+Representative manifest:
+
+    signal signal beam-s0
+    beam_bkg background beam-bkg
+    ext background ext
+    dirt background dirt
+    obs data beam-data
+
+Reading one manifest row from left to right:
+
+  * process name inside the channel
+  * process kind: signal, background, or data
+  * cached sample key inside DistributionIO
+  * optional explicit cache key; if omitted, mk_channel uses the first cache
+
+Rows with kind `data` are not added as fit processes; they are summed into the
+observed channel bins automatically and recorded as observed-data provenance.
 
 Running a native xsec fit by hand
 ---------------------------------
@@ -397,16 +562,22 @@ Render the checked-in flat catalog into generated make and dataset files:
 This produces:
 
     samples/generated/datasets.mk
+    samples/generated/run1_fhc.beam.sample.manifest
     samples/generated/run1_fhc.sample.defs
     samples/generated/run1_fhc.dataset.manifest
 
-The generated `datasets.mk` keeps shard-level sample builds, including
-per-artifact source kind / source ref / origin / variation / beam / polarity
-metadata.
+The generated `datasets.mk` keeps shard-level `.list` generation and also
+declares one logical-sample manifest plus one logical `SampleIO` output per
+downstream sample key.
 
-The generated manifest keeps repeated logical keys so dataset assembly can
-merge shard outputs into stable downstream sample keys such as `beam`, `dirt`,
-`ext`, `signal`, and detector siblings such as `beam-sce`.
+Each generated `*.sample.manifest` records explicit shard membership:
+
+    beam-s0 samplelists/numi_fhc_run1/beam-s0.list
+    beam-s1 samplelists/numi_fhc_run1/beam-s1.list
+
+The generated dataset manifest then maps logical keys to already-logical sample
+ROOT files such as `beam.root`, `dirt.root`, `ext.root`, `signal.root`, and
+detector siblings such as `beam-sce.root`.
 
 Running the sample DAG
 ----------------------
@@ -466,8 +637,10 @@ When shard-level artifacts should merge into logical keys:
     make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
 
 This keeps shard-level `SampleIO` files in the build layer, but exposes
-logical dataset keys to downstream EventListIO, systematics, plotting, and
-fitting code.
+artifact `.list` files in the build layer and writes one logical `SampleIO`
+ROOT file per downstream sample key before dataset assembly. Downstream
+EventListIO, systematics, plotting, and fitting code then see stable logical
+sample keys directly.
 
 Typical event-list workflow
 ---------------------------
@@ -519,19 +692,21 @@ whether the sample must be rebuilt.
 
 Example:
 
-    list_sha256=...
+    manifest_sha256=...
+    list_sha256[samplelists/numi_fhc_run1/beam-s0.list]=...
+    list_sha256[samplelists/numi_fhc_run1/beam-s1.list]=...
     mk_sample_sha256=...
-    origin=data
+    origin=overlay
     variation=nominal
     beam=numi
     polarity=fhc
     run_db=
-    dataset=run1
-    sample=beam-s0
-    sample_subdir=beam/s0/out
+    dataset=run1_fhc
+    sample=beam
+    manifest=samples/generated/run1_fhc.beam.sample.manifest
 
-If a generated catalog is used, the stamp also records the per-artifact
-origin / variation / beam / polarity selected for that shard.
+In the legacy single-list path, the stamp instead records the source kind /
+source ref / source base that produced that one list file.
 
 If the current computed stamp matches the existing one, samples-dag.mk keeps
 the existing .root file and does not rerun mk_sample.
@@ -546,9 +721,10 @@ At the command line:
 
     build/bin/mk_sample \
       --run-db /path/to/run.db \
-      build/samples/run1/beam-s0.root \
-      samplelists/numi_fhc_run1/beam-s0.list \
-      data nominal numi fhc
+      --sample beam \
+      --manifest samples/generated/run1_fhc.beam.sample.manifest \
+      build/samples/run1_fhc/beam.root \
+      overlay nominal numi fhc
 
 With samples-dag.mk:
 
@@ -597,8 +773,10 @@ If samples-dag.mk does not rebuild when expected, inspect the corresponding
 .root.stamp file and compare it against the current list contents and binary.
 
 If mk_dataset fails, check that each keyed sample argument is of the form
-key=path or that each manifest row has exactly two fields, and that each
-referenced sample ROOT file is a valid persistent SampleIO object.
+key=path or that each manifest row has exactly two fields, that each
+referenced sample ROOT file is a valid persistent SampleIO object, and in the
+native scope mode that each sample root already carries the matching logical
+sample name plus beam / polarity metadata for the requested dataset scope.
 
 If mk_eventlist fails, check that the dataset sample ROOT files actually
 contain the named event and subrun trees and that the TTreeFormula selection

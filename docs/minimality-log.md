@@ -2,6 +2,396 @@
 
 ## Current milestone
 - status: done
+- subsystem: `app/` + generated dataset workflow seam
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep logical sample
+  fan-in out of downstream seams, and make scope inputs explicit instead of
+  implicit string conventions
+
+## What changed
+- added a native scoped `mk_dataset` CLI:
+  - `--run RUN --beam BEAM --polarity POLARITY --manifest DATASET.manifest`
+  - optional `--campaign NAME`
+  - legacy context-string mode kept as a compatibility bridge
+- made the native dataset manifest path logical-only:
+  - one `sample sample-root-path` row per logical sample
+  - duplicate sample rows now fail in the native path
+  - native inputs must already carry the matching persisted logical sample
+    identity
+- added scope validation:
+  - sample ROOT beam / polarity must match the requested dataset scope
+  - optional sample-definition campaign and inferred run hints must not
+    conflict with the requested scope
+- taught `tools/render-sample-catalog.sh` to emit dataset scope variables:
+  - `dataset_run.*`
+  - `dataset_beam.*`
+  - `dataset_polarity.*`
+  - optional `dataset_campaign.*`
+- taught `samples-dag.mk` to call the native `mk_dataset` path whenever those
+  explicit dataset-scope variables are present
+- updated `COMMANDS`, `USAGE`, and `samples/README` so the preferred dataset
+  path matches the generated workflow
+
+## Why this is simpler
+- the preferred dataset path is now honest about its scope inputs instead of
+  hiding them inside one free-form context string
+- `mk_dataset` no longer has to be the first place where shard fan-in becomes
+  logical-sample identity in the native path
+- generated sample workflows now read as three flat stages:
+  - shard list generation
+  - logical sample building
+  - explicit-scope dataset assembly
+- scope checks only apply to the samples actually present, so partial datasets
+  still work without inventing one fixed universal sample set
+
+## Verification
+- shell checks:
+  - `bash -n tools/render-sample-catalog.sh`
+  - `bash tools/render-sample-catalog.sh`
+  - `make -Bn -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets`
+- smoke checks:
+  - Docker rebuild plus focused `mk_dataset` build
+  - native scope success smoke on a synthetic logical sample root
+  - legacy compatibility smoke on the same logical sample root
+  - duplicate dataset manifest failure smoke
+  - run-scope mismatch failure smoke
+  - compiled verifier for the produced dataset ROOT file
+- results:
+  - generated dataset scope variables were refreshed under
+    `samples/generated/datasets.mk`
+  - the generated sample DAG now emits native scoped `mk_dataset` invocations
+  - Docker verification passed with the expected native usage, success-path
+    smokes, and failure-path smokes
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the need for generated workflows to treat repeated-key dataset
+    merging as the preferred path to logical sample assembly
+- shell branches removed: 0
+- docs/build artifacts removed: stale dataset-context-first workflow wording
+- approximate LOC delta: additive scope parsing and validation in exchange for
+  a sharper logical-only dataset path
+
+## Decisions
+- derive the persisted dataset context string from the explicit native dataset
+  scope until a later milestone gives `DatasetIO` a dedicated top-level scope
+  payload
+- keep repeated-key merge behavior only in the legacy context-string bridge
+- validate dataset run hints only when sample definitions expose an obvious
+  run token, so partial datasets are not forced through one universal sample
+  inventory
+
+## Remaining hotspots
+- `DatasetIO` still stores scope indirectly as one context string rather than a
+  dedicated top-level run / beam / polarity / campaign payload
+- `mk_eventlist` still uses the old scalar weighting shortcut instead of the
+  persisted run/subrun normalization table
+
+## Current milestone
+- status: done
+- subsystem: `app/` + `io/` sample build seam + sample workflow shell
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep plain-text
+  inputs explicit, and keep logical sample grouping out of downstream wrapper
+  paths
+
+## What changed
+- added a native logical-sample CLI in `mk_sample`:
+  - `--sample NAME --manifest SAMPLE.manifest`
+  - manifest rows are explicit `shard sample-list-path`
+- kept the older positional single-list path as a documented transitional
+  bridge and made the older list-of-lists bridge explicit as `@path`
+- taught `tools/render-sample-catalog.sh` to emit:
+  - one `*.sample.manifest` per logical sample
+  - one logical sample root per downstream sample key
+  - a generated dataset manifest that points at already-logical sample roots
+- taught `samples-dag.mk` to:
+  - keep artifact `.list` generation as the shard-facing layer
+  - build logical sample roots from generated sample manifests when
+    `logical_samples.*` is present
+  - preserve the old `artifact:subdir` include shape for legacy `datasets.mk`
+- updated `COMMANDS`, `USAGE`, `INSTALL`, and `samples/README` so the
+  preferred sample-building story matches the new native path
+
+## Why this is simpler
+- shard membership is now a first-class plain-text input instead of something
+  later workflow stages have to reconstruct indirectly
+- generated sample workflows now stop at one logical `SampleIO` root per
+  downstream key, which removes one layer of accidental shard naming from the
+  build graph
+- `samples-dag.mk` has a flatter split:
+  - artifact list generation
+  - logical sample root construction
+  - optional dataset assembly
+- the compatibility story is sharper:
+  - native logical sample path for new work
+  - older single-list path only as a bridge
+
+## Verification
+- target-only commands:
+  - `make -f samples-dag.mk print-samples`
+  - `make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk print-samples`
+  - `make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk print-datasets`
+- shell checks:
+  - `bash -n tools/render-sample-catalog.sh`
+  - `bash tools/render-sample-catalog.sh`
+  - `make -n -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples`
+- smoke checks:
+  - Docker rebuild plus focused `mk_sample` build
+  - native manifest smoke on a synthetic two-shard sample
+  - legacy single-list smoke on the same synthetic input
+  - duplicate-shard and malformed-manifest failure smokes
+  - compiled verifier for the produced logical sample ROOT file
+- results:
+  - generated sample manifests and generated logical dataset manifests were
+    refreshed under `samples/generated/`
+  - the generated sample DAG now invokes `mk_sample --sample ... --manifest`
+    for logical sample outputs
+  - Docker verification passed with the expected native usage, success-path
+    smokes, and failure-path smokes
+  - an interactive ROOT verification attempt was noisy in this environment
+    because the container session picks up an unrelated `/work/build/lib`
+    startup search path; a compiled verifier was used instead and passed
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the need for generated workflows to rely on `mk_dataset` repeated
+    keys as the first place where shard membership becomes logical-sample
+    identity
+- shell branches removed: 0
+- docs/build artifacts removed: stale generated sample workflow wording
+- approximate LOC delta: additive manifest plumbing in exchange for a clearer
+  one-logical-sample-per-output workflow
+
+## Decisions
+- keep artifact `.list` generation as the shard-facing layer, but make logical
+  sample membership explicit through generated sample manifests
+- keep the positional single-list `mk_sample` mode for now, but document it as
+  transitional
+- keep the older list-of-lists bridge only behind explicit `@path` syntax
+
+## Remaining hotspots
+- `mk_dataset` still accepts the older repeated-key shard-merge story and
+  should move toward an explicit logical-only native scope in the next
+  milestone
+- `mk_eventlist` still uses the old scalar weighting shortcut instead of the
+  persisted run/subrun normalization table
+
+## Current milestone
+- status: done
+- subsystem: `io/` + legacy dataset assembly seam
+- design rule from `DESIGN.md`: keep `io/` persistence-only, prefer plain
+  data, and fix the data contract before widening the workflow surface
+
+## What changed
+- added explicit logical-sample normalization payloads to the persistence
+  layer:
+  - per-shard generated exposure by `(run,subrun)` in `InputPartitionIO`
+  - per-sample aggregated run/subrun normalization entries in `SampleIO`
+  - carried-forward logical normalization entries in `DatasetIO`
+- added provenance fields needed for the later manifest-native path:
+  - `sample`
+  - `normalisation_mode`
+  - `sample_list_path`
+  - optional `shard`
+- taught the legacy repeated-key `mk_dataset` merge path to preserve and
+  combine the new run/subrun normalization entries instead of silently
+  dropping them
+- updated `EventListIO` sample metadata and the dataset print macro to surface
+  the new fields for inspection
+
+## Why this is simpler
+- the logical normalization contract now lives with the persisted sample and
+  dataset objects instead of being reconstructible only as one scalar
+- shard provenance is sharper: the source sample-list path and generated
+  exposures now travel with the persisted record
+- later milestones can move `mk_eventlist` and `mk_dist` onto an explicit
+  run/subrun map instead of inventing another side channel
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- `cmake --build build --target IO mk_sample mk_dataset --parallel`
+- shell checks:
+  - `git diff --check -- io/bits/RunDatabaseService.hh io/bits/RunDatabaseService.cc io/InputPartitionIO.hh io/InputPartitionIO.cc io/DatasetIO.hh io/DatasetIO.cc io/SampleIO.hh io/SampleIO.cc io/EventListIO.cc app/mk_dataset.cc io/macro/print_dataset.C io/README .agent/current_execplan.md docs/minimality-log.md`
+- smoke checks:
+- `build/bin/mk_sample --help`
+- `build/bin/mk_dataset --help || true`
+- results:
+  - `git diff --check` passed
+  - host-side reuse of the checked-in build trees is invalid here:
+    - the generated `build/` makefiles reference `/usr/bin/cmake`
+    - the checked-in `build/bin/*` and `build-host/bin/*` binaries are Linux
+      ELF executables and cannot run on this macOS host
+  - Docker verification passed in a fresh Linux build tree:
+    - `docker build -t amarantin-dev .`
+    - configured `cmake -S . -B .build/m2-docker -DCMAKE_BUILD_TYPE=Release`
+    - built `IO`, `mk_sample`, and `mk_dataset`
+    - `mk_sample --help` printed the expected usage
+    - `mk_dataset --help` printed the current usage text and then followed its
+      existing invalid-arguments path
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the need for later workflow steps to reconstruct logical
+    normalization only from a sample-wide scalar
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta: additive persistence fields and merge plumbing in
+  exchange for a clearer normalization contract
+
+## Decisions
+- keep `normalisation` as a summary scalar for compatibility, but stop
+  treating it as the full logical-sample contract
+- store missing per-run target exposure explicitly as zero in the new table so
+  later milestones can fail loudly instead of hiding the gap
+- preserve the legacy repeated-key `mk_dataset` workflow for now, but make it
+  carry the new normalization surface forward
+
+## Remaining hotspots
+- native `mk_sample --sample --manifest` still needs to populate the new
+  logical sample identity cleanly
+- `mk_eventlist` still uses the old scalar weight shortcut and needs to move
+  onto the embedded run/subrun normalization map
+- the checked-in host build trees remain stale/mixed and should not be reused
+  as native macOS verification trees
+
+## Current milestone
+- status: blocked
+- subsystem: `app/` + `io/` downstream channel workflow
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep module
+  boundaries sharp, and prefer one plain-text native path over extra wrapper
+  layers
+
+## What changed
+- started a native channel-assembly pass so final-region building can move
+  beyond the current one-signal / one-background bridge
+- chosen implementation direction:
+  - preserve the old positional `mk_channel` mode
+  - add one additive plain-text manifest mode for many
+    signal/background/data inputs
+  - fill observed data automatically from persisted cached inputs
+  - persist a little more channel provenance instead of relying on external
+    command history
+
+## Why this is simpler
+- the downstream ladder becomes more honest: cached bins can now assemble into
+  a final region natively instead of depending on hand-entered observation bins
+- one manifest is easier to grep and review than growing more special-purpose
+  CLI flags
+- final-region provenance moves with `ChannelIO` instead of living only in the
+  shell history
+
+## Verification
+- configure/build commands:
+  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+- target-only commands:
+  - `cmake --build build --target mk_channel --parallel`
+- shell checks:
+  - `git diff --check -- app/mk_channel.cc io/ChannelIO.hh io/ChannelIO.cc COMMANDS USAGE .agent/current_execplan.md docs/minimality-log.md`
+- smoke checks:
+  - fallback syntax-only compile attempt for `app/mk_channel.cc`
+- results:
+  - `git diff --check` passed
+  - focused build verification is blocked in the local environment:
+    - the existing `build/` tree does not define `mk_channel`
+    - rerunning CMake fails because local SQLite3 and Eigen package discovery
+      is broken here
+    - the default `c++` driver in this shell cannot find standard library
+      headers, so the syntax-only fallback is not usable either
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the need to hand-enter observed bins for the normal multi-process
+    manifest path
+- shell branches removed: pending
+- docs/build artifacts removed: 0
+- approximate LOC delta: modest additive native channel-assembly support plus
+  additive observed-data provenance
+
+## Current milestone
+- status: blocked
+- subsystem: `syst/` + `io/` systematics-cache seam
+- design rule from `DESIGN.md`: keep module boundaries sharp, prefer plain
+  data plus namespace functions, and keep the internal split flat
+
+## What changed
+- made `DistributionIO` persist retained universe histograms for `genie`,
+  `flux`, and `reint` families
+- made persistent cache reuse validate file metadata against the current
+  `EventListIO` path and systematics cache schema version
+- stopped rebinned loads from silently linearly rebinning sigma-only family
+  payloads across a different binning
+- documented one canonical detector-plus-reweighting cache workflow in:
+  - `syst/README`
+  - `COMMANDS`
+  - `USAGE`
+- added focused smoke entry points:
+  - `tools/systematics-detector-smoke.sh`
+  - `tools/systematics-reweight-smoke.sh`
+
+## Why this is simpler
+- a cache file now either belongs to the current event list or it is rejected;
+  there is no silent relabeling path
+- retained universe histograms are now a real public option instead of a dead
+  flag
+- the docs now describe the same two-lane detector-plus-reweighting story that
+  the code implements
+- smoke entry points make the two main systematics lanes easier to verify
+  directly without inventing a second test harness abstraction
+
+## Verification
+- configure/build commands:
+  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+- target-only commands:
+  - `cmake --build build --target Syst mk_eventlist --parallel`
+- shell checks:
+  - `bash -n tools/systematics-detector-smoke.sh`
+  - `bash -n tools/systematics-reweight-smoke.sh`
+  - `git diff --check -- io/DistributionIO.hh io/DistributionIO.cc syst/CMakeLists.txt syst/Systematics.cc syst/Detector.cc syst/Support.cc syst/UniverseFill.cc syst/UniverseSummary.cc syst/bits/Detail.hh syst/README COMMANDS USAGE tools/systematics-detector-smoke.sh tools/systematics-reweight-smoke.sh .agent/current_execplan.md docs/minimality-log.md`
+- smoke checks:
+  - added detector-lane smoke script
+  - added reweighting-lane smoke script with persistent-cache metadata
+    mismatch coverage
+- results:
+  - `git diff --check` passed
+  - both new smoke scripts passed `bash -n`
+  - focused rebuild verification is still blocked locally:
+    - `cmake --build build --target Syst mk_eventlist --parallel` fails because
+      the generated `build/` makefiles reference `/usr/bin/cmake`
+    - rerunning `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release` fails because
+      local `SQLite3` and `Eigen3` discovery are unavailable here
+    - the smoke scripts were not executed because `root-config` is not on PATH
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the silent "metadata relabel then reuse stale cache" path from
+    persistent cache evaluation
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta: additive cache-safety checks, payload plumbing, and
+  direct smoke scripts
+
+## Decisions
+- reject non-empty persistent cache files when their metadata does not match
+  the current event list instead of trying to partially relabel them
+- treat retained universe histograms as a real persisted payload rather than a
+  no-op option
+- fail loudly when a cached sigma-only family would need a mathematically
+  invalid rebin
+
+## Remaining hotspots
+- run the new smoke scripts in an environment with `root-config` plus a valid
+  rebuilt `Syst` target
+- decide later whether the shorter private filenames in `syst/` should stay as
+  `Detector.cc` / `Support.cc` / `UniverseFill.cc` / `UniverseSummary.cc` or
+  be renamed once the worktree settles
+
+## Current milestone
+- status: done
 - subsystem: `fit/` + `app/`
 - design rule from `DESIGN.md`: keep workflows in `app/`, keep module
   boundaries sharp, and prefer fixing the direct seam over adding wrappers
@@ -65,11 +455,11 @@
 - split detector handling and universe-family handling out of the monolithic
   `Systematics.cc`
 - added:
-  - `syst/SystematicsSupport.cc`
-  - `syst/SystematicsDetector.cc`
-  - `syst/SystematicsUniverseFill.cc`
-  - `syst/SystematicsUniverseSummary.cc`
-  - `syst/bits/SystematicsInternal.hh`
+  - `syst/Support.cc`
+  - `syst/Detector.cc`
+  - `syst/UniverseFill.cc`
+  - `syst/UniverseSummary.cc`
+  - `syst/bits/Detail.hh`
 - kept `Systematics.hh` as the one public header and left top-level evaluate /
   cache orchestration in `Systematics.cc`
 

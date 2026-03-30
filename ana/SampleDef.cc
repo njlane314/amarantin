@@ -1,6 +1,7 @@
 #include "SampleDef.hh"
 
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -33,6 +34,76 @@ namespace
         while (input >> field)
             fields.push_back(field);
         return fields;
+    }
+
+    std::string trim_copy(const std::string &input)
+    {
+        const std::string::size_type first = input.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos)
+            return "";
+
+        const std::string::size_type last = input.find_last_not_of(" \t\r\n");
+        return input.substr(first, last - first + 1);
+    }
+
+    std::vector<std::string> split_scope_tokens(const std::string &value)
+    {
+        std::string spaced = value;
+        std::transform(spaced.begin(), spaced.end(), spaced.begin(),
+                       [](unsigned char c) {
+                           return std::isalnum(c) ? static_cast<char>(c) : ' ';
+                       });
+
+        std::istringstream input(spaced);
+        std::vector<std::string> out;
+        std::string token;
+        while (input >> token)
+            out.push_back(token);
+        return out;
+    }
+
+    bool is_run_token(const std::string &token)
+    {
+        if (token.size() < 4)
+            return false;
+        if (token.rfind("run", 0) != 0)
+            return false;
+        return std::isdigit(static_cast<unsigned char>(token[3])) != 0;
+    }
+
+    void merge_run_hint(std::string &current,
+                        const std::string &candidate,
+                        const std::string &field_name,
+                        const std::string &sample_key)
+    {
+        const std::string trimmed = trim_copy(candidate);
+        if (trimmed.empty())
+            return;
+
+        if (current.empty())
+        {
+            current = trimmed;
+            return;
+        }
+
+        if (current != trimmed)
+        {
+            throw std::runtime_error("SampleDef: conflicting inferred run scope for " +
+                                     sample_key + " (" + current + " vs " + trimmed +
+                                     " from " + field_name + ")");
+        }
+    }
+
+    std::string infer_run_from_value(const std::string &value)
+    {
+        std::string out;
+        for (const auto &token : split_scope_tokens(value))
+        {
+            if (!is_run_token(token))
+                continue;
+            merge_run_hint(out, token, "value", value);
+        }
+        return out;
     }
 
     const ana::SampleDef &must_find_def(const std::vector<ana::SampleDef> &defs,
@@ -107,5 +178,32 @@ namespace ana
                            DatasetIO::Sample &sample)
     {
         must_find_def(defs, key).apply(sample);
+    }
+
+    std::string infer_sample_run(const SampleDef &def)
+    {
+        std::string out;
+        merge_run_hint(out, infer_run_from_value(def.campaign), "campaign", def.key);
+        merge_run_hint(out, infer_run_from_value(def.defname), "defname", def.key);
+        return out;
+    }
+
+    void validate_sample_scope(const SampleDef &def,
+                               const DatasetScope &scope)
+    {
+        const std::string inferred_run = infer_sample_run(def);
+        if (!scope.run.empty() && !inferred_run.empty() && inferred_run != scope.run)
+        {
+            throw std::runtime_error("SampleDef: sample " + def.key +
+                                     " implies run " + inferred_run +
+                                     " but dataset scope requested " + scope.run);
+        }
+
+        if (!scope.campaign.empty() && !def.campaign.empty() && def.campaign != scope.campaign)
+        {
+            throw std::runtime_error("SampleDef: sample " + def.key +
+                                     " has campaign " + def.campaign +
+                                     " but dataset scope requested " + scope.campaign);
+        }
     }
 }

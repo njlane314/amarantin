@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -15,8 +16,11 @@
 #include <TObject.h>
 #include <TTree.h>
 
-InputPartitionIO::InputPartitionIO(const std::string &input_path)
+InputPartitionIO::InputPartitionIO(const std::string &input_path,
+                                   const std::string &shard)
 {
+    sample_list_path_ = input_path;
+    shard_ = shard;
     input_files_ = read_sample_list(input_path);
     if (!input_files_.empty()) scan_subruns(input_files_);
 }
@@ -26,6 +30,8 @@ void InputPartitionIO::write(TDirectory *d) const
     if (!d) throw std::runtime_error("InputPartitionIO::write: null directory");
     d->cd();
 
+    utils::write_named(d, "sample_list_path", sample_list_path_);
+    utils::write_named(d, "shard", shard_);
     utils::write_param<double>(d, "pot_sum", subrun_pot_sum());
     utils::write_param<long long>(d, "entries", n_events());
 
@@ -45,13 +51,29 @@ void InputPartitionIO::write(TDirectory *d) const
         TTree rs("run_subrun", "");
         Int_t run = 0;
         Int_t subrun = 0;
+        Double_t generated_exposure = 0.0;
         rs.Branch("run", &run, "run/I");
         rs.Branch("subrun", &subrun, "subrun/I");
-        for (const auto &pair : run_subruns())
+        rs.Branch("generated_exposure", &generated_exposure, "generated_exposure/D");
+        if (!generated_exposures_.empty())
         {
-            run = pair.first;
-            subrun = pair.second;
-            rs.Fill();
+            for (const auto &entry : generated_exposures_)
+            {
+                run = entry.run;
+                subrun = entry.subrun;
+                generated_exposure = entry.generated_exposure;
+                rs.Fill();
+            }
+        }
+        else
+        {
+            for (const auto &pair : run_subruns())
+            {
+                run = pair.first;
+                subrun = pair.second;
+                generated_exposure = 0.0;
+                rs.Fill();
+            }
         }
         rs.Write("run_subrun", TObject::kOverwrite);
     }
@@ -62,6 +84,8 @@ InputPartitionIO InputPartitionIO::read(TDirectory *d)
     if (!d) throw std::runtime_error("InputPartitionIO::read: null directory");
 
     InputPartitionIO out;
+    out.sample_list_path_ = utils::read_named_or(d, "sample_list_path");
+    out.shard_ = utils::read_named_or(d, "shard");
     out.pot_sum_ = utils::read_param<double>(d, "pot_sum");
     out.n_events_ = utils::read_param<long long>(d, "entries");
 
@@ -88,15 +112,25 @@ InputPartitionIO InputPartitionIO::read(TDirectory *d)
 
         Int_t run = 0;
         Int_t subrun = 0;
+        Double_t generated_exposure = 0.0;
         t->SetBranchAddress("run", &run);
         t->SetBranchAddress("subrun", &subrun);
+        const bool have_generated_exposure = t->GetBranch("generated_exposure") != nullptr;
+        if (have_generated_exposure)
+            t->SetBranchAddress("generated_exposure", &generated_exposure);
 
         const Long64_t n = t->GetEntries();
+        out.generated_exposures_.reserve(static_cast<size_t>(n));
         out.run_subruns_.reserve(static_cast<size_t>(n));
         for (Long64_t i = 0; i < n; ++i)
         {
             t->GetEntry(i);
             out.run_subruns_.emplace_back(static_cast<int>(run), static_cast<int>(subrun));
+            RunSubrunExposure entry;
+            entry.run = static_cast<int>(run);
+            entry.subrun = static_cast<int>(subrun);
+            entry.generated_exposure = have_generated_exposure ? static_cast<double>(generated_exposure) : 0.0;
+            out.generated_exposures_.push_back(entry);
         }
     }
 
@@ -126,6 +160,7 @@ void InputPartitionIO::scan_subruns(const std::vector<std::string> &files)
     if (files.empty()) throw std::runtime_error("InputPartitionIO: no input files provided for subrun scan.");
 
     run_subruns_.clear();
+    generated_exposures_.clear();
 
     pot_sum_ = 0.0;
     n_events_ = 0;
@@ -172,29 +207,21 @@ void InputPartitionIO::scan_subruns(const std::vector<std::string> &files)
     const Long64_t n = chain.GetEntries();
     n_events_ = static_cast<long long>(n);
 
-    std::vector<std::pair<int, int>> pairs;
-    pairs.reserve(static_cast<size_t>(n));
+    std::map<std::pair<int, int>, double> exposures;
 
     for (Long64_t i = 0; i < n; ++i)
     {
         chain.GetEntry(i);
         pot_sum_ += static_cast<double>(pot);
-        pairs.emplace_back(static_cast<int>(run), static_cast<int>(subrun));
+        exposures[std::make_pair(static_cast<int>(run), static_cast<int>(subrun))] += static_cast<double>(pot);
     }
 
-    std::sort(pairs.begin(), pairs.end(),
-              [](const std::pair<int, int> &a, const std::pair<int, int> &b)
-              {
-                  if (a.first != b.first) return a.first < b.first;
-                  return a.second < b.second;
-              });
-
-    pairs.erase(std::unique(pairs.begin(), pairs.end(),
-                            [](const std::pair<int, int> &a, const std::pair<int, int> &b)
-                            {
-                                return a.first == b.first && a.second == b.second;
-                            }),
-                pairs.end());
-
-    run_subruns_ = std::move(pairs);
+    run_subruns_.reserve(exposures.size());
+    generated_exposures_.reserve(exposures.size());
+    for (const auto &entry : exposures)
+    {
+        run_subruns_.push_back(entry.first);
+        generated_exposures_.push_back(
+            RunSubrunExposure{entry.first.first, entry.first.second, entry.second});
+    }
 }

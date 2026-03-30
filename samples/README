@@ -22,7 +22,7 @@ datasets.tsv
     dataset_key  context  base_dir  list_dir
 
 catalog.tsv
-  One row per concrete shard-level `SampleIO` artifact.
+  One row per concrete shard-level member of a logical sample manifest.
   Fields:
     dataset_key  artifact_key  logical_key  source_kind  source_ref
     origin  variation  nominal  tag  role  defname  campaign  beam  polarity
@@ -32,7 +32,7 @@ catalog.tsv
       Dataset alias used by `samples-dag.mk` and the generated manifests.
 
     artifact_key
-      One concrete shard-level sample build output.
+      One concrete shard-level list/build input.
       Examples: `beam-s0`, `ext-p1`, `beam-s0-sce`.
 
     logical_key
@@ -73,14 +73,18 @@ Run:
 That writes plain-text generated files under `samples/generated/`:
 
   datasets.mk
-    Richer include for `samples-dag.mk` with per-artifact source and metadata
-    overrides.
+    Richer include for `samples-dag.mk` with per-artifact list-generation
+    overrides plus one logical `mk_sample` manifest per downstream sample key.
+
+  <dataset>.<logical>.sample.manifest
+    Plain-text shard membership for the native
+    `mk_sample --sample <logical> --manifest ...` path.
 
   <dataset>.sample.defs
     Logical-sample metadata for `mk_dataset --defs`.
 
   <dataset>.dataset.manifest
-    Repeated-key manifest for `mk_dataset --manifest`.
+    Logical-key to logical-sample-root manifest for `mk_dataset --manifest`.
 
 Example workflow
 ----------------
@@ -88,7 +92,7 @@ Generate the derived files:
 
   bash tools/render-sample-catalog.sh
 
-Build shard-level `SampleIO` files:
+Build logical `SampleIO` files from the generated manifests:
 
   make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
 
@@ -100,18 +104,23 @@ Or assemble one logical dataset directly:
 
   build/bin/mk_dataset \
     --defs samples/generated/run1_fhc.sample.defs \
+    --campaign run1_fhc_v08_00_00_82 \
+    --run run1 \
+    --beam numi \
+    --polarity fhc \
     --manifest samples/generated/run1_fhc.dataset.manifest \
-    build/datasets/run1_fhc.root \
-    numi_fhc_run1
+    build/datasets/run1_fhc.root
 
 Notes
 -----
-`mk_dataset --manifest` is additive. The older positional
-`sample-key=sample.root` workflow still works.
+The native `mk_dataset` path consumes already-logical sample roots with an
+explicit run / beam / polarity scope. The older positional
+`sample-key=sample.root` workflow still works as a compatibility bridge.
 
 `samples-dag.mk`
   Still accepts the old `artifact:subdir` include shape from `datasets.mk`.
-  The richer generated path now emits explicit `sample_source_kind.*` and
+  The richer generated path now emits explicit `logical_samples.*`,
+  `sample_manifest.*`, `sample_artifacts.*`, `sample_source_kind.*`, and
   `sample_source_ref.*` variables instead.
 
 `tools/mklist.sh --samdef`

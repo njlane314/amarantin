@@ -26,22 +26,27 @@ sample_polarity_for = $(if $(value sample_polarity.$(1).$(2)),$(value sample_pol
 sample_source_kind_for = $(if $(value sample_source_kind.$(1).$(2)),$(value sample_source_kind.$(1).$(2)),$(if $(3),dir,$(DEFAULT_SOURCE_KIND)))
 sample_source_ref_for = $(if $(value sample_source_ref.$(1).$(2)),$(value sample_source_ref.$(1).$(2)),$(3))
 sample_source_base_for = $(if $(value sample_source_base.$(1).$(2)),$(value sample_source_base.$(1).$(2)),$(base.$(1)))
+sample_list_path_for = $(out.$(1))/$(2).list
+sample_manifest_for = $(value sample_manifest.$(1).$(2))
+sample_artifacts_for = $(value sample_artifacts.$(1).$(2))
+sample_artifact_lists_for = $(foreach artifact,$(call sample_artifacts_for,$(1),$(2)),$(call sample_list_path_for,$(1),$(artifact)))
 dataset_defs_for = $(value dataset_defs.$(1))
 dataset_manifest_for = $(value dataset_manifest.$(1))
 dataset_sample_roots_for = $(value DATASET_SAMPLE_ROOTS.$(1))
+dataset_run_for = $(value dataset_run.$(1))
+dataset_beam_for = $(value dataset_beam.$(1))
+dataset_polarity_for = $(value dataset_polarity.$(1))
+dataset_campaign_for = $(value dataset_campaign.$(1))
 
 ALL_SAMPLE_LISTS :=
 ALL_SAMPLE_ROOTS :=
 ALL_SAMPLE_STAMPS :=
 ALL_DATASET_ROOTS :=
 
-define SAMPLE_RULE
-ALL_SAMPLE_LISTS += $(out.$(1))/$(2).list
-ALL_SAMPLE_ROOTS += $(SAMPLES_BUILD_DIR)/$(1)/$(2).root
-ALL_SAMPLE_STAMPS += $(SAMPLES_BUILD_DIR)/$(1)/$(2).root$(SAMPLES_STAMP_EXT)
-DATASET_SAMPLE_ROOTS.$(1) += $(SAMPLES_BUILD_DIR)/$(1)/$(2).root
+define SAMPLE_LIST_RULE
+ALL_SAMPLE_LISTS += $(call sample_list_path_for,$(1),$(2))
 
-$(out.$(1))/$(2).list: $(MKLIST)
+$(call sample_list_path_for,$(1),$(2)): $(MKLIST)
 	@set -eu; \
 	source_kind='$(call sample_source_kind_for,$(1),$(2),$(3))'; \
 	source_ref='$(call sample_source_ref_for,$(1),$(2),$(3))'; \
@@ -57,11 +62,17 @@ $(out.$(1))/$(2).list: $(MKLIST)
 			echo "samples-dag: unknown source kind '$$$$source_kind' for $(1):$(2)" >&2; \
 			exit 1 ;; \
 	esac
+endef
 
-$(SAMPLES_BUILD_DIR)/$(1)/$(2).root: $(out.$(1))/$(2).list $(MK_SAMPLE) $(DATASETS_FILE) samples-dag.mk
+define LEGACY_SAMPLE_RULE
+ALL_SAMPLE_ROOTS += $(SAMPLES_BUILD_DIR)/$(1)/$(2).root
+ALL_SAMPLE_STAMPS += $(SAMPLES_BUILD_DIR)/$(1)/$(2).root$(SAMPLES_STAMP_EXT)
+DATASET_SAMPLE_ROOTS.$(1) += $(SAMPLES_BUILD_DIR)/$(1)/$(2).root
+
+$(SAMPLES_BUILD_DIR)/$(1)/$(2).root: $(call sample_list_path_for,$(1),$(2)) $(MK_SAMPLE) $(DATASETS_FILE) samples-dag.mk
 	@set -eu; \
 	out="$$@"; \
-	list_file="$$<"; \
+	list_file="$(call sample_list_path_for,$(1),$(2))"; \
 	stamp_file="$$@$(SAMPLES_STAMP_EXT)"; \
 	tmp_stamp="$$$$stamp_file.tmp"; \
 	if command -v sha256sum >/dev/null 2>&1; then \
@@ -106,6 +117,62 @@ $(SAMPLES_BUILD_DIR)/$(1)/$(2).root: $(out.$(1))/$(2).list $(MK_SAMPLE) $(DATASE
 	fi
 endef
 
+define LOGICAL_SAMPLE_RULE
+ALL_SAMPLE_ROOTS += $(SAMPLES_BUILD_DIR)/$(1)/$(2).root
+ALL_SAMPLE_STAMPS += $(SAMPLES_BUILD_DIR)/$(1)/$(2).root$(SAMPLES_STAMP_EXT)
+DATASET_SAMPLE_ROOTS.$(1) += $(SAMPLES_BUILD_DIR)/$(1)/$(2).root
+
+$(SAMPLES_BUILD_DIR)/$(1)/$(2).root: $(call sample_artifact_lists_for,$(1),$(2)) $(call sample_manifest_for,$(1),$(2)) $(MK_SAMPLE) $(DATASETS_FILE) samples-dag.mk
+	@set -eu; \
+	out="$$@"; \
+	manifest_file="$(call sample_manifest_for,$(1),$(2))"; \
+	stamp_file="$$@$(SAMPLES_STAMP_EXT)"; \
+	tmp_stamp="$$$$stamp_file.tmp"; \
+	if command -v sha256sum >/dev/null 2>&1; then \
+		hash_file() { sha256sum "$$$$1" | awk '{print $$$$1}'; }; \
+	elif command -v shasum >/dev/null 2>&1; then \
+		hash_file() { shasum -a 256 "$$$$1" | awk '{print $$$$1}'; }; \
+	else \
+		echo "samples-dag: need sha256sum or shasum" >&2; \
+		exit 1; \
+	fi; \
+	run_db_args=""; \
+	if [ -n '$(RUN_DB_PATH)' ]; then \
+		run_db_args="--run-db $(RUN_DB_PATH)"; \
+	fi; \
+	mkdir -p "$$$${out%/*}"; \
+		{ \
+			printf 'manifest_sha256=%s\n' "$$$$(hash_file "$$$$manifest_file")"; \
+			for list_file in $(call sample_artifact_lists_for,$(1),$(2)); do \
+				printf 'list_sha256[%s]=%s\n' "$$$$list_file" "$$$$(hash_file "$$$$list_file")"; \
+			done; \
+			printf 'mk_sample_sha256=%s\n' "$$$$(hash_file "$(MK_SAMPLE)")"; \
+			printf 'pattern=%s\n' '$(pat)'; \
+			printf 'origin=%s\n' '$(call sample_origin_for,$(1),$(2))'; \
+			printf 'variation=%s\n' '$(call sample_variation_for,$(1),$(2))'; \
+			printf 'beam=%s\n' '$(call sample_beam_for,$(1),$(2))'; \
+			printf 'polarity=%s\n' '$(call sample_polarity_for,$(1),$(2))'; \
+			printf 'run_db=%s\n' '$(RUN_DB_PATH)'; \
+			printf 'dataset=%s\n' '$(1)'; \
+			printf 'sample=%s\n' '$(2)'; \
+			printf 'manifest=%s\n' '$(call sample_manifest_for,$(1),$(2))'; \
+		} > "$$$$tmp_stamp"; \
+	if [ -f "$$$$out" ] && [ -f "$$$$stamp_file" ] && cmp -s "$$$$tmp_stamp" "$$$$stamp_file"; then \
+		rm -f "$$$$tmp_stamp"; \
+		echo "samples-dag: $$$$out is up to date"; \
+	else \
+		"$(MK_SAMPLE)" $$$$run_db_args \
+			--sample "$(2)" \
+			--manifest "$$$$manifest_file" \
+			"$$$$out" \
+			"$(call sample_origin_for,$(1),$(2))" \
+			"$(call sample_variation_for,$(1),$(2))" \
+			"$(call sample_beam_for,$(1),$(2))" \
+			"$(call sample_polarity_for,$(1),$(2))"; \
+		mv "$$$$tmp_stamp" "$$$$stamp_file"; \
+	fi
+endef
+
 define DATASET_RULE
 ifneq ($(strip $(call dataset_manifest_for,$(1))),)
 ALL_DATASET_ROOTS += $(DATASETS_BUILD_DIR)/$(1).root
@@ -114,14 +181,30 @@ $(DATASETS_BUILD_DIR)/$(1).root: $(call dataset_sample_roots_for,$(1)) $(MK_DATA
 	@set -eu; \
 	out="$$@"; \
 	mkdir -p "$$$${out%/*}"; \
-	"$(MK_DATASET)" \
-		--defs "$(call dataset_defs_for,$(1))" \
-		--manifest "$(call dataset_manifest_for,$(1))" \
-		"$$$$out" "$(name.$(1))"
+	if [ -n '$(call dataset_run_for,$(1))' ] && [ -n '$(call dataset_beam_for,$(1))' ] && [ -n '$(call dataset_polarity_for,$(1))' ]; then \
+		campaign_args=""; \
+		if [ -n '$(call dataset_campaign_for,$(1))' ]; then \
+			campaign_args="--campaign $(call dataset_campaign_for,$(1))"; \
+		fi; \
+		"$(MK_DATASET)" \
+			--defs "$(call dataset_defs_for,$(1))" \
+			$$$$campaign_args \
+			--run "$(call dataset_run_for,$(1))" \
+			--beam "$(call dataset_beam_for,$(1))" \
+			--polarity "$(call dataset_polarity_for,$(1))" \
+			--manifest "$(call dataset_manifest_for,$(1))" \
+			"$$$$out"; \
+	else \
+		"$(MK_DATASET)" \
+			--defs "$(call dataset_defs_for,$(1))" \
+			--manifest "$(call dataset_manifest_for,$(1))" \
+			"$$$$out" "$(name.$(1))"; \
+	fi
 endif
 endef
 
-$(foreach ds,$(datasets),$(foreach item,$(samples.$(ds)),$(eval $(call SAMPLE_RULE,$(ds),$(call sample_item_key,$(item)),$(call sample_item_legacy_ref,$(item))))))
+$(foreach ds,$(datasets),$(foreach item,$(samples.$(ds)),$(eval $(call SAMPLE_LIST_RULE,$(ds),$(call sample_item_key,$(item)),$(call sample_item_legacy_ref,$(item))))))
+$(foreach ds,$(datasets),$(if $(strip $(value logical_samples.$(ds))),$(foreach logical,$(logical_samples.$(ds)),$(eval $(call LOGICAL_SAMPLE_RULE,$(ds),$(logical)))),$(foreach item,$(samples.$(ds)),$(eval $(call LEGACY_SAMPLE_RULE,$(ds),$(call sample_item_key,$(item)),$(call sample_item_legacy_ref,$(item)))))))
 $(foreach ds,$(datasets),$(eval $(call DATASET_RULE,$(ds))))
 
 .PHONY: samples samples-lists samples-clean datasets datasets-clean print-samples print-sample-stamps print-datasets

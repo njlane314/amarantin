@@ -134,3 +134,72 @@ RunInfoSums RunDatabaseService::sum_run_info(const std::vector<std::pair<int, in
 
     return out;
 }
+
+std::vector<RunTortgtEntry> RunDatabaseService::lookup_tortgt(const std::vector<std::pair<int, int>> &pairs) const
+{
+    if (pairs.empty())
+    {
+        throw std::runtime_error("DB selection is empty (no run/subrun pairs).");
+    }
+
+    const std::set<std::pair<int, int>> unique_pairs(pairs.begin(), pairs.end());
+
+    exec("CREATE TEMP TABLE IF NOT EXISTS sel(run INTEGER, subrun INTEGER);");
+    exec("DELETE FROM sel;");
+    exec("BEGIN;");
+
+    sqlite3_stmt *ins = nullptr;
+    prepare("INSERT INTO sel(run, subrun) VALUES(?, ?);", &ins);
+
+    for (const auto &p : unique_pairs)
+    {
+        sqlite3_reset(ins);
+        sqlite3_clear_bindings(ins);
+        sqlite3_bind_int(ins, 1, p.first);
+        sqlite3_bind_int(ins, 2, p.second);
+
+        const int rc = sqlite3_step(ins);
+        if (rc != SQLITE_DONE)
+        {
+            const std::string msg = sqlite3_errmsg(db_);
+            sqlite3_finalize(ins);
+            exec("ROLLBACK;");
+            throw std::runtime_error("SQLite insert failed: " + msg);
+        }
+    }
+
+    sqlite3_finalize(ins);
+    exec("COMMIT;");
+
+    sqlite3_stmt *q = nullptr;
+    prepare(
+        "SELECT r.run, r.subrun, r.tortgt "
+        "FROM runinfo r "
+        "JOIN sel USING(run, subrun) "
+        "ORDER BY r.run, r.subrun;",
+        &q);
+
+    std::vector<RunTortgtEntry> out;
+    out.reserve(unique_pairs.size());
+    for (;;)
+    {
+        const int rc = sqlite3_step(q);
+        if (rc == SQLITE_DONE)
+            break;
+        if (rc != SQLITE_ROW)
+        {
+            const std::string msg = sqlite3_errmsg(db_);
+            sqlite3_finalize(q);
+            throw std::runtime_error("SQLite tortgt query failed: " + msg);
+        }
+
+        RunTortgtEntry entry;
+        entry.run = sqlite3_column_int(q, 0);
+        entry.subrun = sqlite3_column_int(q, 1);
+        entry.tortgt = sqlite3_column_double(q, 2);
+        out.push_back(entry);
+    }
+
+    sqlite3_finalize(q);
+    return out;
+}

@@ -190,6 +190,18 @@ A simple smoke test is:
 Runtime note for mk_sample
 --------------------------
 mk_sample accepts an optional SQLite run database path via `--run-db PATH`.
+Its native logical-sample form is:
+
+  mk_sample --sample NAME --manifest SAMPLE.manifest output.root [origin] [variation] [beam] [polarity]
+
+Manifest rows are:
+
+  shard sample-list-path
+
+The older positional `output.root input.list ...` form remains available as a
+transitional bridge. If you still need a file containing many list paths, pass
+it as `@path`.
+
 If `--run-db` is not provided, it checks `AMARANTIN_RUN_DB`. If that is
 unset, it falls back to:
 

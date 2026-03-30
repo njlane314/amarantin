@@ -57,7 +57,35 @@ awk -F '\t' -v default_pat="$default_pat" '
 while IFS=$'\t' read -r dataset_key context base_dir list_dir; do
   [ -n "$dataset_key" ] || continue
 
-  awk -F '\t' -v dataset="$dataset_key" -v out_dir="$out_dir" '
+  awk -F '\t' -v dataset="$dataset_key" -v out_dir="$out_dir" -v context="$context" '
+    function merge_scope(current, candidate, label) {
+      if (candidate == "" || candidate == "-")
+        return current
+      if (current == "")
+        return candidate
+      if (current != candidate) {
+        printf("render-sample-catalog: inconsistent %s for dataset %s (%s vs %s)\n", label, dataset, current, candidate) > "/dev/stderr"
+        exit 1
+      }
+      return current
+    }
+    function infer_run(value,    cleaned, fields, n, i, candidate) {
+      cleaned = value
+      gsub(/[^[:alnum:]]+/, " ", cleaned)
+      n = split(cleaned, fields, /[[:space:]]+/)
+      candidate = ""
+      for (i = 1; i <= n; ++i) {
+        if (fields[i] !~ /^run[0-9][[:alnum:]]*$/)
+          continue
+        if (candidate == "")
+          candidate = fields[i]
+        else if (candidate != fields[i]) {
+          printf("render-sample-catalog: inconsistent inferred run for dataset %s (%s vs %s)\n", dataset, candidate, fields[i]) > "/dev/stderr"
+          exit 1
+        }
+      }
+      return candidate
+    }
     function require_valid_row() {
       if (NF != 14) {
         printf("render-sample-catalog: expected 14 fields in %s at line %d\n", FILENAME, FNR) > "/dev/stderr"
@@ -88,6 +116,31 @@ while IFS=$'\t' read -r dataset_key context base_dir list_dir; do
       variation[n] = $7
       beam[n] = $13
       polarity[n] = $14
+      dataset_beam = merge_scope(dataset_beam, $13, "beam")
+      dataset_polarity = merge_scope(dataset_polarity, $14, "polarity")
+      dataset_campaign = merge_scope(dataset_campaign, $12, "campaign")
+      dataset_run = merge_scope(dataset_run, infer_run(dataset " " context " " $11 " " $12), "run")
+      logical[n] = $3
+      if (!(logical[n] in seen_logical)) {
+        seen_logical[logical[n]] = 1
+        logical_order[++m] = logical[n]
+        logical_origin[logical[n]] = $6
+        logical_variation[logical[n]] = $7
+        logical_beam[logical[n]] = $13
+        logical_polarity[logical[n]] = $14
+      } else {
+        if (logical_origin[logical[n]] != $6 ||
+            logical_variation[logical[n]] != $7 ||
+            logical_beam[logical[n]] != $13 ||
+            logical_polarity[logical[n]] != $14) {
+          printf("render-sample-catalog: inconsistent build metadata for logical sample %s in dataset %s\n", logical[n], dataset) > "/dev/stderr"
+          exit 1
+        }
+      }
+      if (logical_artifacts[logical[n]] != "")
+        logical_artifacts[logical[n]] = logical_artifacts[logical[n]] " " artifact[n]
+      else
+        logical_artifacts[logical[n]] = artifact[n]
     }
     END {
       if (n == 0) {
@@ -98,15 +151,35 @@ while IFS=$'\t' read -r dataset_key context base_dir list_dir; do
       for (i = 1; i <= n; ++i)
         printf("\t%s%s\n", artifact[i], (i < n ? " \\" : ""))
       printf("\n")
+      printf("logical_samples.%s := \\\n", dataset)
+      for (i = 1; i <= m; ++i)
+        printf("\t%s%s\n", logical_order[i], (i < m ? " \\" : ""))
+      printf("\n")
       printf("dataset_defs.%s := %s/%s.sample.defs\n", dataset, out_dir, dataset)
       printf("dataset_manifest.%s := %s/%s.dataset.manifest\n\n", dataset, out_dir, dataset)
+      if (dataset_run == "") {
+        printf("render-sample-catalog: could not infer run for dataset %s\n", dataset) > "/dev/stderr"
+        exit 1
+      }
+      printf("dataset_run.%s := %s\n", dataset, dataset_run)
+      printf("dataset_beam.%s := %s\n", dataset, dataset_beam)
+      printf("dataset_polarity.%s := %s\n", dataset, dataset_polarity)
+      if (dataset_campaign != "")
+        printf("dataset_campaign.%s := %s\n", dataset, dataset_campaign)
+      printf("\n")
+      for (i = 1; i <= m; ++i) {
+        logical_key = logical_order[i]
+        printf("sample_manifest.%s.%s := %s/%s.%s.sample.manifest\n", dataset, logical_key, out_dir, dataset, logical_key)
+        printf("sample_artifacts.%s.%s := %s\n", dataset, logical_key, logical_artifacts[logical_key])
+        printf("sample_origin.%s.%s := %s\n", dataset, logical_key, logical_origin[logical_key])
+        printf("sample_variation.%s.%s := %s\n", dataset, logical_key, logical_variation[logical_key])
+        printf("sample_beam.%s.%s := %s\n", dataset, logical_key, logical_beam[logical_key])
+        printf("sample_polarity.%s.%s := %s\n", dataset, logical_key, logical_polarity[logical_key])
+      }
+      printf("\n")
       for (i = 1; i <= n; ++i) {
         printf("sample_source_kind.%s.%s := %s\n", dataset, artifact[i], source_kind[i])
         printf("sample_source_ref.%s.%s := %s\n", dataset, artifact[i], source_ref[i])
-        printf("sample_origin.%s.%s := %s\n", dataset, artifact[i], origin[i])
-        printf("sample_variation.%s.%s := %s\n", dataset, artifact[i], variation[i])
-        printf("sample_beam.%s.%s := %s\n", dataset, artifact[i], beam[i])
-        printf("sample_polarity.%s.%s := %s\n", dataset, artifact[i], polarity[i])
       }
       printf("\n")
     }
@@ -169,6 +242,42 @@ while IFS=$'\t' read -r dataset_key context base_dir list_dir; do
     }
   ' "$catalog_path" > "$defs_path"
 
+  rm -f "$out_dir/$dataset_key".*.sample.manifest
+  awk -F '\t' -v dataset="$dataset_key" -v list_dir="$list_dir" -v out_dir="$out_dir" '
+    function require_valid_row() {
+      if (NF != 14) {
+        printf("render-sample-catalog: expected 14 fields in %s at line %d\n", FILENAME, FNR) > "/dev/stderr"
+        exit 1
+      }
+      if ($4 != "dir" && $4 != "list" && $4 != "samdef") {
+        printf("render-sample-catalog: unsupported source kind %s for %s in dataset %s\n", $4, $2, dataset) > "/dev/stderr"
+        exit 1
+      }
+      if ($5 == "" || $5 == "-") {
+        printf("render-sample-catalog: empty source ref for %s in dataset %s\n", $2, dataset) > "/dev/stderr"
+        exit 1
+      }
+    }
+    BEGIN {
+      current_logical = ""
+    }
+    /^[[:space:]]*#/ || NF == 0 { next }
+    FNR == 1 && $1 == "dataset_key" { next }
+    $1 != dataset { next }
+    {
+      require_valid_row()
+      logical = $3
+      manifest_path = out_dir "/" dataset "." logical ".sample.manifest"
+      if (!(logical in seen)) {
+        seen[logical] = 1
+        print "# Generated by tools/render-sample-catalog.sh" > manifest_path
+        print "# shard sample_list_path" >> manifest_path
+      }
+      print $2 "\t" list_dir "/" $2 ".list" >> manifest_path
+      close(manifest_path)
+    }
+  ' "$catalog_path"
+
   manifest_path="$out_dir/$dataset_key.dataset.manifest"
   awk -F '\t' -v dataset="$dataset_key" -v samples_build_dir="$samples_build_dir" -v context="$context" '
     function require_valid_row() {
@@ -195,7 +304,15 @@ while IFS=$'\t' read -r dataset_key context base_dir list_dir; do
     $1 != dataset { next }
     {
       require_valid_row()
-      print $3 "\t" samples_build_dir "/" dataset "/" $2 ".root"
+      logical = $3
+      if (!(logical in seen)) {
+        seen[logical] = 1
+        order[++n] = logical
+      }
+    }
+    END {
+      for (i = 1; i <= n; ++i)
+        print order[i] "\t" samples_build_dir "/" dataset "/" order[i] ".root"
     }
   ' "$catalog_path" > "$manifest_path"
 done < <(

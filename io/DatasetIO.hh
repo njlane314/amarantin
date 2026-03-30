@@ -11,13 +11,32 @@ class TDirectory;
 class DatasetIO
 {
 public:
+    struct RunSubrunExposure
+    {
+        int run = 0;
+        int subrun = 0;
+        double generated_exposure = 0.0;
+    };
+
+    struct RunSubrunNormalisation
+    {
+        int run = 0;
+        int subrun = 0;
+        double generated_exposure = 0.0;
+        double target_exposure = 0.0;
+        double normalisation = 1.0;
+    };
+
     struct Provenance
     {
         double scale = 1.0;
+        std::string shard;
+        std::string sample_list_path;
         std::vector<std::string> input_files;
         double pot_sum = 0.0;
         long long n_entries = 0;
         std::vector<std::pair<int, int>> run_subruns;
+        std::vector<RunSubrunExposure> generated_exposures;
 
         void write(TDirectory *d) const;
         static Provenance read(TDirectory *d);
@@ -38,7 +57,10 @@ public:
         Beam beam = Beam::kUnknown;
         Polarity polarity = Polarity::kUnknown; // meaningful iff beam==kNuMI
 
+        std::string sample;
+        std::string normalisation_mode;
         std::vector<Provenance> provenance_list;
+        std::vector<RunSubrunNormalisation> run_subrun_normalisations;
 
         double subrun_pot_sum = 0.0;
         double db_tortgt_pot_sum = 0.0;

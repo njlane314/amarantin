@@ -47,11 +47,15 @@ InputPartitionIO
 SampleIO
   Builds a sample-level container from one or more InputPartitionIO
   partitions. It is the bridge between raw input lists and DatasetIO::Sample
-  metadata.
+  metadata. The intended logical-sample surface now includes:
+  - optional logical sample identity
+  - shard/sample-list provenance
+  - aggregate run/subrun normalization entries
 
 DatasetIO
   Persistent collection of named samples. It stores sample metadata and sample
-  provenance, but not selected event trees.
+  provenance, but not selected event trees. It can now carry the logical
+  run/subrun normalization surface needed by downstream event-list building.
 
 EventListIO
   Persistent analysis-ready output. It stores copied selected event trees,

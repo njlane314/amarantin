@@ -21,6 +21,13 @@ public:
     enum class Variation { kNominal, kDetector, kUnknown };
 
 public:
+    struct ShardInput
+    {
+        std::string shard;
+        std::string sample_list_path;
+    };
+
+public:
     SampleIO() = default;
     void build(const std::string &input_paths_spec,
                const std::string &origin,
@@ -28,6 +35,13 @@ public:
                const std::string &beam,
                const std::string &polarity,
                const std::string &run_db_path = "");
+    void build_from_manifest(const std::string &sample,
+                             const std::string &manifest_path,
+                             const std::string &origin,
+                             const std::string &variation,
+                             const std::string &beam,
+                             const std::string &polarity,
+                             const std::string &run_db_path = "");
     void read(const std::string &path);
     void write(const std::string &output_path) const;
     DatasetIO::Sample to_dataset_sample() const;
@@ -36,10 +50,13 @@ public:
 
 public:
     std::vector<std::string> input_paths_;
+    std::string sample_;
     Origin origin_ = Origin::kUnknown;
     Variation variation_ = Variation::kUnknown;
     Beam beam_ = Beam::kUnknown;
     Polarity polarity_ = Polarity::kUnknown;
+    std::string normalisation_mode_;
+    std::vector<DatasetIO::RunSubrunNormalisation> run_subrun_normalisations_;
 
     double subrun_pot_sum_ = 0.0;
     double db_tortgt_pot_sum_ = 0.0;
@@ -132,7 +149,9 @@ private:
     void set_metadata(Origin origin, Variation variation, Beam beam, Polarity polarity);
     void validate_metadata() const;
     static std::vector<std::string> parse_input_paths(const std::string &input_paths_spec);
+    static std::vector<ShardInput> parse_manifest(const std::string &manifest_path);
     void build_from(const std::vector<std::string> &input_paths);
+    void build_from_shards(const std::vector<ShardInput> &shards);
     void load_run_database_normalisation(const std::string &run_db_path);
     static double compute_normalisation(double subrun_pot_sum, double db_tortgt_pot_sum);
 

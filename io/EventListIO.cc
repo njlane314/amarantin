@@ -20,10 +20,12 @@ namespace
 
     void write_sample_metadata(TDirectory *meta_dir, const DatasetIO::Sample &sample)
     {
+        utils::write_named(meta_dir, "sample", sample.sample);
         utils::write_named(meta_dir, "origin", DatasetIO::Sample::origin_name(sample.origin));
         utils::write_named(meta_dir, "variation", DatasetIO::Sample::variation_name(sample.variation));
         utils::write_named(meta_dir, "beam", DatasetIO::Sample::beam_name(sample.beam));
         utils::write_named(meta_dir, "polarity", DatasetIO::Sample::polarity_name(sample.polarity));
+        utils::write_named(meta_dir, "normalisation_mode", sample.normalisation_mode);
 
         utils::write_param<double>(meta_dir, "subrun_pot_sum", sample.subrun_pot_sum);
         utils::write_param<double>(meta_dir, "db_tortgt_pot_sum", sample.db_tortgt_pot_sum);
@@ -172,10 +174,12 @@ DatasetIO::Sample EventListIO::sample(const std::string &sample_key) const
     TDirectory *meta_dir = utils::must_dir(sample_dir, "meta", false);
 
     DatasetIO::Sample sample;
+    sample.sample = utils::read_named_or(meta_dir, "sample");
     sample.origin = DatasetIO::Sample::origin_from(utils::read_named(meta_dir, "origin"));
     sample.variation = DatasetIO::Sample::variation_from(utils::read_named(meta_dir, "variation"));
     sample.beam = DatasetIO::Sample::beam_from(utils::read_named(meta_dir, "beam"));
     sample.polarity = DatasetIO::Sample::polarity_from(utils::read_named(meta_dir, "polarity"));
+    sample.normalisation_mode = utils::read_named_or(meta_dir, "normalisation_mode");
     sample.subrun_pot_sum = utils::read_param<double>(meta_dir, "subrun_pot_sum");
     sample.db_tortgt_pot_sum = utils::read_param<double>(meta_dir, "db_tortgt_pot_sum");
     sample.normalisation = utils::read_param<double>(meta_dir, "normalisation");
@@ -185,6 +189,8 @@ DatasetIO::Sample EventListIO::sample(const std::string &sample_key) const
     sample.role = utils::read_named_or(meta_dir, "role", utils::read_named_or(meta_dir, "workflow_role"));
     sample.defname = utils::read_named_or(meta_dir, "defname", utils::read_named_or(meta_dir, "source_def"));
     sample.campaign = utils::read_named_or(meta_dir, "campaign");
+    if (sample.normalisation_mode.empty() && sample.normalisation > 0.0)
+        sample.normalisation_mode = "scalar";
 
     return sample;
 }

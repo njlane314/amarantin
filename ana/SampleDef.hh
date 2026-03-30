@@ -8,6 +8,14 @@
 
 namespace ana
 {
+    struct DatasetScope
+    {
+        std::string run;
+        DatasetIO::Sample::Beam beam = DatasetIO::Sample::Beam::kUnknown;
+        DatasetIO::Sample::Polarity polarity = DatasetIO::Sample::Polarity::kUnknown;
+        std::string campaign;
+    };
+
     struct SampleDef
     {
         std::string key;
@@ -44,6 +52,9 @@ namespace ana
     void apply_sample_defs(const std::vector<SampleDef> &defs,
                            const std::string &key,
                            DatasetIO::Sample &sample);
+    std::string infer_sample_run(const SampleDef &def);
+    void validate_sample_scope(const SampleDef &def,
+                               const DatasetScope &scope);
 }
 
 #endif // SAMPLE_DEF_HH

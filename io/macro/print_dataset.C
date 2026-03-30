@@ -4,23 +4,29 @@ namespace
     {
         const std::string pad(static_cast<size_t>(indent), ' ');
         os << pad << "scale=" << p.scale
+           << "  shard=" << (p.shard.empty() ? "-" : p.shard)
+           << "  sample_list=" << (p.sample_list_path.empty() ? "-" : p.sample_list_path)
            << "  pot_sum=" << p.pot_sum
            << "  entries=" << p.n_entries
            << "  inputs=" << p.input_files.size()
            << "  run_subruns=" << p.run_subruns.size()
+           << "  generated_exposures=" << p.generated_exposures.size()
            << "\n";
     }
 
     void print_sample(const DatasetIO::Sample &s, std::ostream &os, size_t i)
     {
         os << "[" << i << "] "
+           << "sample=" << (s.sample.empty() ? "-" : s.sample)
            << "origin=" << DatasetIO::Sample::origin_name(s.origin)
            << "  variation=" << DatasetIO::Sample::variation_name(s.variation)
            << "  beam=" << DatasetIO::Sample::beam_name(s.beam)
            << "  polarity=" << DatasetIO::Sample::polarity_name(s.polarity)
+           << "  mode=" << (s.normalisation_mode.empty() ? "-" : s.normalisation_mode)
            << "  norm=" << s.normalisation
            << "  pot(subrun)=" << s.subrun_pot_sum
            << "  pot(db_tortgt)=" << s.db_tortgt_pot_sum
+           << "  run_subrun_norms=" << s.run_subrun_normalisations.size()
            << "  root_files=" << s.root_files.size()
            << "  prov=" << s.provenance_list.size()
            << "\n";

@@ -19,6 +19,13 @@ struct RunInfoSums
     long long Gate2Trig_sum = 0;
 };
 
+struct RunTortgtEntry
+{
+    int run = 0;
+    int subrun = 0;
+    double tortgt = 0.0;
+};
+
 class sqlite3;
 struct sqlite3_stmt;
 
@@ -29,6 +36,7 @@ public:
     ~RunDatabaseService();
 
     RunInfoSums sum_run_info(const std::vector<std::pair<int, int>> &pairs) const;
+    std::vector<RunTortgtEntry> lookup_tortgt(const std::vector<std::pair<int, int>> &pairs) const;
 
 private:
     void exec(const std::string &sql) const;

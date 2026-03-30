@@ -1,8 +1,10 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <cctype>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -27,12 +29,20 @@ namespace
         std::string context;
         std::string defs_path;
         std::string manifest_path;
+        std::string run;
+        std::string beam;
+        std::string polarity;
+        std::string campaign;
         std::vector<SampleArg> samples;
+        bool native_scope = false;
     };
 
     void print_usage(std::ostream &os)
     {
-        os << "usage: mk_dataset [--defs <sample.defs>] [--manifest <dataset.manifest>] "
+        os << "usage: mk_dataset [--defs <sample.defs>] [--campaign <name>] "
+              "--run <run> --beam <beam> --polarity <polarity> --manifest <dataset.manifest> "
+              "<output.root>\n";
+        os << "       mk_dataset [--defs <sample.defs>] [--manifest <dataset.manifest>] "
               "<output.root> <context> <sample-key=sample.root> [sample-key=sample.root ...]\n";
     }
 
@@ -82,7 +92,8 @@ namespace
         return out;
     }
 
-    std::vector<SampleArg> read_manifest(const std::string &path)
+    std::vector<SampleArg> read_manifest(const std::string &path,
+                                         bool allow_equals)
     {
         std::ifstream input(path);
         if (!input)
@@ -100,6 +111,11 @@ namespace
 
             if (trimmed.find('=') != std::string::npos)
             {
+                if (!allow_equals)
+                {
+                    throw std::runtime_error("mk_dataset: native manifest rows must be 'sample sample.root' "
+                                             "at line " + std::to_string(line_number) + " in " + path);
+                }
                 out.push_back(parse_sample_arg(trimmed));
                 continue;
             }
@@ -115,6 +131,83 @@ namespace
         }
 
         return out;
+    }
+
+    DatasetIO::Sample::Beam parse_scope_beam(const std::string &beam)
+    {
+        const DatasetIO::Sample::Beam out = DatasetIO::Sample::beam_from(beam);
+        if (out == DatasetIO::Sample::Beam::kUnknown)
+            throw std::runtime_error("mk_dataset: unknown beam: " + beam);
+        return out;
+    }
+
+    DatasetIO::Sample::Polarity parse_scope_polarity(const std::string &polarity)
+    {
+        std::string lowered = trim_copy(polarity);
+        std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        const DatasetIO::Sample::Polarity out = DatasetIO::Sample::polarity_from(polarity);
+        if (out == DatasetIO::Sample::Polarity::kUnknown &&
+            lowered != "unknown")
+        {
+            throw std::runtime_error("mk_dataset: unknown polarity: " + polarity);
+        }
+        return out;
+    }
+
+    ana::DatasetScope make_dataset_scope(const CliOptions &options)
+    {
+        ana::DatasetScope scope;
+        scope.run = options.run;
+        scope.beam = parse_scope_beam(options.beam);
+        scope.polarity = parse_scope_polarity(options.polarity);
+        scope.campaign = options.campaign;
+
+        if (scope.beam == DatasetIO::Sample::Beam::kBNB &&
+            scope.polarity != DatasetIO::Sample::Polarity::kUnknown)
+        {
+            throw std::runtime_error("mk_dataset: BNB scope must use polarity=unknown");
+        }
+
+        return scope;
+    }
+
+    std::string context_from_scope(const ana::DatasetScope &scope)
+    {
+        std::string out = DatasetIO::Sample::beam_name(scope.beam);
+        if (scope.polarity != DatasetIO::Sample::Polarity::kUnknown)
+        {
+            out += "_";
+            out += DatasetIO::Sample::polarity_name(scope.polarity);
+        }
+        out += "_";
+        out += scope.run;
+        return out;
+    }
+
+    const ana::SampleDef *find_def(const std::vector<ana::SampleDef> &defs,
+                                   const std::string &key)
+    {
+        const auto it = std::find_if(defs.begin(), defs.end(),
+                                     [&](const ana::SampleDef &def) { return def.key == key; });
+        return (it == defs.end()) ? nullptr : &(*it);
+    }
+
+    void require_unique_keys(const std::vector<SampleArg> &samples,
+                             const std::string &path)
+    {
+        std::vector<std::string> keys;
+        keys.reserve(samples.size());
+        for (const auto &sample : samples)
+            keys.push_back(sample.key);
+
+        std::sort(keys.begin(), keys.end());
+        const auto duplicate = std::adjacent_find(keys.begin(), keys.end());
+        if (duplicate != keys.end())
+        {
+            throw std::runtime_error("mk_dataset: duplicate sample '" + *duplicate +
+                                     "' in manifest " + path);
+        }
     }
 
     struct LogicalSample
@@ -197,11 +290,17 @@ namespace
             throw std::runtime_error("mk_dataset: cannot merge empty sample group for key " + key);
 
         DatasetIO::Sample merged = parts.front();
+        merged.sample.clear();
+        merged.normalisation_mode.clear();
         merged.subrun_pot_sum = 0.0;
         merged.db_tortgt_pot_sum = 0.0;
         merged.normalisation = 1.0;
         merged.provenance_list.clear();
+        merged.run_subrun_normalisations.clear();
         merged.root_files.clear();
+
+        using RunSubrunKey = std::pair<int, int>;
+        std::map<RunSubrunKey, DatasetIO::RunSubrunNormalisation> normalisation_by_pair;
 
         for (const auto &part : parts)
         {
@@ -209,6 +308,25 @@ namespace
             require_equal(key, "variation", merged.variation, part.variation, DatasetIO::Sample::variation_name);
             require_equal(key, "beam", merged.beam, part.beam, DatasetIO::Sample::beam_name);
             require_equal(key, "polarity", merged.polarity, part.polarity, DatasetIO::Sample::polarity_name);
+
+            if (!part.sample.empty())
+            {
+                if (merged.sample.empty())
+                    merged.sample = part.sample;
+                else if (merged.sample != part.sample)
+                    throw_merge_conflict(key, "sample", merged.sample, part.sample);
+            }
+
+            if (!part.normalisation_mode.empty())
+            {
+                if (merged.normalisation_mode.empty())
+                    merged.normalisation_mode = part.normalisation_mode;
+                else if (merged.normalisation_mode != part.normalisation_mode)
+                    throw_merge_conflict(key,
+                                         "normalisation_mode",
+                                         merged.normalisation_mode,
+                                         part.normalisation_mode);
+            }
 
             merged.subrun_pot_sum += part.subrun_pot_sum;
             merged.db_tortgt_pot_sum += part.db_tortgt_pot_sum;
@@ -218,11 +336,44 @@ namespace
             merged.root_files.insert(merged.root_files.end(),
                                      part.root_files.begin(),
                                      part.root_files.end());
+
+            for (const auto &entry : part.run_subrun_normalisations)
+            {
+                DatasetIO::RunSubrunNormalisation &merged_entry =
+                    normalisation_by_pair[RunSubrunKey{entry.run, entry.subrun}];
+                merged_entry.run = entry.run;
+                merged_entry.subrun = entry.subrun;
+                merged_entry.generated_exposure += entry.generated_exposure;
+                merged_entry.target_exposure += entry.target_exposure;
+            }
         }
 
         std::sort(merged.root_files.begin(), merged.root_files.end());
         merged.root_files.erase(std::unique(merged.root_files.begin(), merged.root_files.end()),
                                 merged.root_files.end());
+
+        merged.run_subrun_normalisations.reserve(normalisation_by_pair.size());
+        for (auto &kv : normalisation_by_pair)
+        {
+            DatasetIO::RunSubrunNormalisation entry = kv.second;
+            if (!(entry.generated_exposure > 0.0))
+            {
+                entry.normalisation = 0.0;
+            }
+            else if (merged.normalisation_mode == "unit")
+            {
+                entry.normalisation = 1.0;
+            }
+            else
+            {
+                entry.normalisation =
+                    (entry.target_exposure > 0.0)
+                        ? (entry.target_exposure / entry.generated_exposure)
+                        : 0.0;
+            }
+            merged.run_subrun_normalisations.push_back(entry);
+        }
+
         merged.normalisation =
             merged_normalisation(parts, merged.subrun_pot_sum, merged.db_tortgt_pot_sum);
         return merged;
@@ -230,19 +381,28 @@ namespace
 
     CliOptions parse_args(int argc, char **argv)
     {
-        if (argc < 4)
-            print_usage_and_throw();
-
         CliOptions options;
         int i = 1;
         for (; i < argc; ++i)
         {
             const std::string arg = argv[i] ? argv[i] : "";
+            if (arg == "-h" || arg == "--help")
+            {
+                print_usage(std::cout);
+                throw std::runtime_error("");
+            }
             if (arg == "--defs")
             {
                 if (++i >= argc)
                     print_usage_and_throw();
                 options.defs_path = argv[i] ? argv[i] : "";
+                continue;
+            }
+            if (arg == "--campaign")
+            {
+                if (++i >= argc)
+                    print_usage_and_throw();
+                options.campaign = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--manifest")
@@ -252,22 +412,88 @@ namespace
                 options.manifest_path = argv[i] ? argv[i] : "";
                 continue;
             }
+            if (arg == "--run")
+            {
+                if (++i >= argc)
+                    print_usage_and_throw();
+                options.run = argv[i] ? argv[i] : "";
+                continue;
+            }
+            if (arg == "--beam")
+            {
+                if (++i >= argc)
+                    print_usage_and_throw();
+                options.beam = argv[i] ? argv[i] : "";
+                continue;
+            }
+            if (arg == "--polarity")
+            {
+                if (++i >= argc)
+                    print_usage_and_throw();
+                options.polarity = argv[i] ? argv[i] : "";
+                continue;
+            }
             break;
         }
 
-        if (argc - i < 2)
-            print_usage_and_throw();
+        const bool have_native_scope =
+            !options.run.empty() || !options.beam.empty() || !options.polarity.empty() || !options.campaign.empty();
+        if (have_native_scope)
+        {
+            if (options.run.empty() || options.beam.empty() || options.polarity.empty())
+                throw std::runtime_error("mk_dataset: --run, --beam, and --polarity are required together");
+            if (options.manifest_path.empty())
+                throw std::runtime_error("mk_dataset: native scope mode requires --manifest");
+            if (argc - i != 1)
+                print_usage_and_throw();
 
-        options.output_path = argv[i] ? argv[i] : "";
-        options.context = argv[i + 1] ? argv[i + 1] : "";
+            options.native_scope = true;
+            options.output_path = argv[i] ? argv[i] : "";
+        }
+        else
+        {
+            if (argc - i < 2)
+                print_usage_and_throw();
 
-        for (i += 2; i < argc; ++i)
-            options.samples.push_back(parse_sample_arg(argv[i] ? argv[i] : ""));
+            options.output_path = argv[i] ? argv[i] : "";
+            options.context = argv[i + 1] ? argv[i + 1] : "";
 
-        if (options.samples.empty() && options.manifest_path.empty())
-            print_usage_and_throw();
+            for (i += 2; i < argc; ++i)
+                options.samples.push_back(parse_sample_arg(argv[i] ? argv[i] : ""));
+
+            if (options.samples.empty() && options.manifest_path.empty())
+                print_usage_and_throw();
+        }
 
         return options;
+    }
+
+    void validate_native_sample_scope(const ana::DatasetScope &scope,
+                                      const std::string &key,
+                                      const DatasetIO::Sample &sample)
+    {
+        if (sample.sample.empty())
+        {
+            throw std::runtime_error("mk_dataset: sample " + key +
+                                     " is missing persisted logical sample identity");
+        }
+        if (sample.sample != key)
+        {
+            throw std::runtime_error("mk_dataset: manifest key " + key +
+                                     " does not match persisted sample name " + sample.sample);
+        }
+        if (sample.beam != scope.beam)
+        {
+            throw std::runtime_error("mk_dataset: sample " + key +
+                                     " has beam " + DatasetIO::Sample::beam_name(sample.beam) +
+                                     " but dataset scope requested " + DatasetIO::Sample::beam_name(scope.beam));
+        }
+        if (sample.polarity != scope.polarity)
+        {
+            throw std::runtime_error("mk_dataset: sample " + key +
+                                     " has polarity " + DatasetIO::Sample::polarity_name(sample.polarity) +
+                                     " but dataset scope requested " + DatasetIO::Sample::polarity_name(scope.polarity));
+        }
     }
 }
 
@@ -276,13 +502,58 @@ int main(int argc, char **argv)
     try
     {
         const CliOptions options = parse_args(argc, argv);
+        if (options.output_path.empty())
+            print_usage_and_throw();
+
         const bool have_defs = !options.defs_path.empty();
         const std::vector<ana::SampleDef> defs = have_defs ? ana::read_sample_defs(options.defs_path)
                                                            : std::vector<ana::SampleDef>{};
+
+        if (options.native_scope)
+        {
+            const ana::DatasetScope scope = make_dataset_scope(options);
+            const std::vector<SampleArg> manifest_args = read_manifest(options.manifest_path, false);
+            if (manifest_args.empty())
+                throw std::runtime_error("mk_dataset: dataset manifest is empty: " + options.manifest_path);
+            require_unique_keys(manifest_args, options.manifest_path);
+
+            DatasetIO dataset(options.output_path, context_from_scope(scope));
+            for (const auto &sample_arg : manifest_args)
+            {
+                SampleIO sample;
+                sample.read(sample_arg.path);
+
+                DatasetIO::Sample entry = sample.to_dataset_sample();
+                validate_native_sample_scope(scope, sample_arg.key, entry);
+
+                if (have_defs)
+                {
+                    const ana::SampleDef *def = find_def(defs, sample_arg.key);
+                    if (!def)
+                        throw std::runtime_error("SampleDef: missing definition for sample key: " + sample_arg.key);
+                    ana::validate_sample_scope(*def, scope);
+                    def->apply(entry);
+                }
+
+                dataset.add_sample(sample_arg.key, entry);
+            }
+
+            std::cout << "mk_dataset: wrote " << options.output_path
+                      << " with " << manifest_args.size() << " logical samples"
+                      << " for scope "
+                      << DatasetIO::Sample::beam_name(scope.beam) << "_"
+                      << DatasetIO::Sample::polarity_name(scope.polarity) << "_"
+                      << scope.run;
+            if (!options.manifest_path.empty())
+                std::cout << " from manifest " << options.manifest_path;
+            std::cout << "\n";
+            return 0;
+        }
+
         std::vector<SampleArg> sample_args = options.samples;
         if (!options.manifest_path.empty())
         {
-            const std::vector<SampleArg> manifest_args = read_manifest(options.manifest_path);
+            const std::vector<SampleArg> manifest_args = read_manifest(options.manifest_path, true);
             sample_args.insert(sample_args.end(), manifest_args.begin(), manifest_args.end());
         }
         const std::vector<LogicalSample> logical_samples = group_samples(sample_args);
@@ -314,6 +585,8 @@ int main(int argc, char **argv)
     }
     catch (const std::exception &e)
     {
+        if (std::string(e.what()).empty())
+            return 0;
         std::cerr << "mk_dataset: " << e.what() << "\n";
         return 1;
     }
