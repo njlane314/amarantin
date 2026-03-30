@@ -73,11 +73,14 @@ namespace
     {
         os << "usage: mk_eventlist [--preset <name> | --selection <expr>] "
               "[--event-tree <name>] [--subrun-tree <name>] "
+              "<output.root> <dataset.root>\n";
+        os << "legacy compatibility: mk_eventlist [event-list flags] "
               "[--cache-systematics <sample-key> <branch-expr> <nbins> <xmin> <xmax>] "
               "[--cache-output <path>] "
               "[--cache-selection <expr>] [--cache-detvars <csv>] [--cache-fine-nbins <n>] "
               "[--cache-genie] [--cache-flux] [--cache-reint] [--cache-no-overwrite] "
               "<output.root> <dataset.root>\n";
+        os << "preferred cache workflow: mk_eventlist -> mk_dist\n";
     }
 
     [[noreturn]] void print_usage_and_throw()
@@ -216,6 +219,7 @@ int main(int argc, char **argv)
 
         if (options.cache_systematics)
         {
+            std::cerr << "mk_eventlist: legacy compatibility mode: use mk_dist for new DistributionIO cache builds\n";
             EventListIO event_list(options.output_path, EventListIO::Mode::kRead);
             const std::string cache_output_path = resolved_cache_output_path(options);
             DistributionIO distfile(cache_output_path, DistributionIO::Mode::kUpdate);
@@ -244,7 +248,7 @@ int main(int argc, char **argv)
                   << " from dataset " << options.dataset_path;
         if (options.cache_systematics)
         {
-            std::cout << " and " << resolved_cache_output_path(options);
+            std::cout << " and legacy cache " << resolved_cache_output_path(options);
         }
         std::cout << "\n";
         return 0;

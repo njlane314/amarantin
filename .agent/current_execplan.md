@@ -344,7 +344,7 @@ legacy wrapper paths.
       - missing run/subrun lookup entries fail loudly
 
 #### Milestone 6: Extract `mk_dist`
-- status: todo
+- status: done
 - hypothesis: if cache-building moves into a dedicated thin `mk_dist` app,
   then the workflow becomes more honest and `mk_eventlist` goes back to owning
   only the row-wise build step
@@ -352,11 +352,6 @@ legacy wrapper paths.
   - `app/CMakeLists.txt`
   - `app/mk_dist.cc`
   - `app/mk_eventlist.cc`
-  - `syst/Systematics.hh`
-  - `syst/Systematics.cc`
-  - `io/DistributionIO.hh`
-  - `io/DistributionIO.cc`
-  - `syst/README`
   - `COMMANDS`
   - `USAGE`
   - `INSTALL`
@@ -370,6 +365,24 @@ legacy wrapper paths.
   - `mk_dist` owns one-request cache construction
   - `mk_eventlist` no longer owns the preferred persistent-cache workflow
   - compatibility handling for legacy `--cache-*` flags is explicit
+- verification results:
+  - local checks passed:
+    - `git diff --check -- app/CMakeLists.txt app/mk_dist.cc app/mk_eventlist.cc COMMANDS USAGE INSTALL`
+  - Docker verification passed in a fresh Linux build tree:
+    - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/m6-docker -DCMAKE_BUILD_TYPE=Release && cmake --build .build/m6-docker --target Syst mk_eventlist mk_dist --parallel && (.build/m6-docker/bin/mk_eventlist --help || true) && (.build/m6-docker/bin/mk_dist --help || true)'`
+    - `mk_eventlist --help` now prints a dedicated row-wise usage plus an
+      explicit legacy cache-bridge form
+    - `mk_dist --help` prints the new one-request cache-builder usage
+    - a focused synthetic smoke confirmed:
+      - direct `mk_dist` writes a `DistributionIO` cache entry from an existing
+        `EventListIO` file
+      - the legacy `mk_eventlist --cache-*` bridge still writes the same cache
+        payload
+      - the legacy bridge emits the expected `use mk_dist` warning
+  - implementation was intentionally narrowed to `app/` plus top-level docs:
+    the existing `syst::build_systematics_cache(...)` and `DistributionIO`
+    surface were already sufficient, and unrelated in-flight edits under
+    `syst/` did not need to be touched for this milestone
 
 #### Milestone 7: `DistributionIO`-First Downstream Assembly
 - status: todo

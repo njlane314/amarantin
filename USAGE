@@ -129,16 +129,16 @@ Basic mk_eventlist usage
 
 General form:
 
-    build/bin/mk_eventlist output.root dataset.root [event-tree] [subrun-tree] [selection]
+    build/bin/mk_eventlist [--preset name | --selection expr] [--event-tree name] [--subrun-tree name] output.root dataset.root
 
 Example:
 
     build/bin/mk_eventlist \
+      --event-tree EventSelectionFilter \
+      --subrun-tree SubRun \
+      --selection "selected != 0" \
       build/eventlists/run1-numi-fhc.root \
-      build/datasets/run1-numi-fhc.root \
-      EventSelectionFilter \
-      SubRun \
-      "selected != 0"
+      build/datasets/run1-numi-fhc.root
 
 The mk_eventlist program reads a persistent DatasetIO file, chains the
 underlying per-sample job ROOT files, applies a TTreeFormula selection, and
@@ -350,55 +350,62 @@ The current implementation writes:
 Building a systematics cache by hand
 ------------------------------------
 
-The same `mk_eventlist` invocation can also write a `DistributionIO`
-systematics cache.
+The preferred cache builder is `mk_dist`, which reads an existing
+`EventListIO` file and writes one `DistributionIO` request.
 
 Canonical form:
 
-    build/bin/mk_eventlist \
-      --cache-systematics <sample-key> <branch-expr> <nbins> <xmin> <xmax> \
-      [--cache-output <path>] \
-      [--cache-selection <expr>] \
-      [--cache-detvars <csv>] \
-      [--cache-fine-nbins <n>] \
-      [--cache-genie] \
-      [--cache-flux] \
-      [--cache-reint] \
-      [--cache-no-overwrite] \
-      output.eventlist.root \
-      input.dataset.root
+    build/bin/mk_dist \
+      [--selection <expr>] \
+      [--detvars <csv>] \
+      [--fine-nbins <n>] \
+      [--genie] \
+      [--flux] \
+      [--reint] \
+      [--no-overwrite] \
+      output.dists.root \
+      input.eventlist.root \
+      <sample-key> \
+      <branch-expr> \
+      <nbins> <xmin> <xmax>
 
 Representative detector-plus-reweighting example:
 
-    build/bin/mk_eventlist \
-      --cache-systematics beam-s0 topological_score 50 0 1 \
-      --cache-output build/dists/run1-numi-fhc.root \
-      --cache-selection "__pass_muon__" \
-      --cache-detvars beam-s0-sce,beam-s0-wiremodx \
-      --cache-fine-nbins 400 \
-      --cache-genie \
-      --cache-flux \
-      --cache-reint \
+    build/bin/mk_dist \
+      --selection "__pass_muon__" \
+      --detvars beam-s0-sce,beam-s0-wiremodx \
+      --fine-nbins 400 \
+      --genie \
+      --flux \
+      --reint \
+      build/dists/run1-numi-fhc.root \
       build/eventlists/run1-numi-fhc.root \
-      build/datasets/run1-numi-fhc.root
+      beam-s0 \
+      topological_score \
+      50 0 1
 
-Reading the cache flags from left to right:
+Reading the cache inputs from left to right:
 
-  * `--cache-systematics` names the nominal sample and the histogram to cache
-  * `--cache-selection` applies the cache-time selection expression
-  * `--cache-detvars` names detector-variation samples in the event list
-  * `--cache-fine-nbins` chooses the finer on-disk cache binning
-  * `--cache-genie`, `--cache-flux`, and `--cache-reint` enable the
+  * `--selection` applies the cache-time selection expression
+  * `--detvars` names detector-variation samples in the event list
+  * `--fine-nbins` chooses the finer on-disk cache binning
+  * `--genie`, `--flux`, and `--reint` enable the
     reweighting families on the nominal sample
-  * `--cache-output` overrides the default `<eventlist>.dists.root` path
-  * `--cache-no-overwrite` preserves existing matching cache entries
+  * `output.dists.root` is the `DistributionIO` file to update
+  * `input.eventlist.root` is the persisted selected-row input
+  * `<sample-key> <branch-expr> <nbins> <xmin> <xmax>` names the nominal
+    sample and histogram request
+  * `--no-overwrite` preserves existing matching cache entries
 
 Conceptually this builds two systematic lanes and merges them in one
 `DistributionIO` payload:
 
-  * detector lane: alternate `EventListIO` samples listed in `--cache-detvars`
+  * detector lane: alternate `EventListIO` samples listed in `--detvars`
   * reweighting lane: alternate weight branches on the nominal sample selected
-    by `--cache-genie`, `--cache-flux`, and `--cache-reint`
+    by `--genie`, `--flux`, and `--reint`
+
+The older `mk_eventlist --cache-*` path remains as a compatibility bridge, but
+it is no longer the preferred cache-building workflow.
 
 Building a persistent channel by hand
 -------------------------------------
@@ -652,15 +659,33 @@ Typical event-list workflow
 After a DatasetIO file exists, produce a persistent selected-event container:
 
     build/bin/mk_eventlist \
+      --event-tree EventSelectionFilter \
+      --subrun-tree SubRun \
+      --selection "selected != 0" \
       build/eventlists/run1-numi-fhc.root \
-      build/datasets/run1-numi-fhc.root \
-      EventSelectionFilter \
-      SubRun \
-      "selected != 0"
+      build/datasets/run1-numi-fhc.root
 
 This keeps DatasetIO as the persistent sample-grouping layer and writes an
 EventListIO file that can be loaded in ROOT macros for plotting and printed
 summaries.
+
+Typical cache workflow
+----------------------
+
+After an EventListIO file exists, produce one cached `DistributionIO` request:
+
+    build/bin/mk_dist \
+      --selection "__pass_muon__" \
+      --detvars beam-s0-sce,beam-s0-wiremodx \
+      --fine-nbins 400 \
+      --genie \
+      --flux \
+      --reint \
+      build/dists/run1-numi-fhc.root \
+      build/eventlists/run1-numi-fhc.root \
+      beam-s0 \
+      topological_score \
+      50 0 1
 
 Typical channel-and-fit workflow
 --------------------------------
@@ -763,7 +788,12 @@ Then build and run:
     bash tools/render-sample-catalog.sh
     make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
     make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
-    build/bin/mk_eventlist build/eventlists/run1-numi-fhc.root build/datasets/run1-numi-fhc.root EventSelectionFilter SubRun "selected != 0"
+    build/bin/mk_eventlist \
+      --event-tree EventSelectionFilter \
+      --subrun-tree SubRun \
+      --selection "selected != 0" \
+      build/eventlists/run1-numi-fhc.root \
+      build/datasets/run1-numi-fhc.root
 
 Troubleshooting
 ---------------

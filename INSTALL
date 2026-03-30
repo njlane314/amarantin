@@ -34,6 +34,7 @@ Executables
   * mk_sample
   * mk_dataset
   * mk_eventlist
+  * mk_dist
   * mk_channel
   * mk_xsec_fit
 
@@ -77,6 +78,7 @@ Build only selected targets
   cmake --build build --target mk_sample
   cmake --build build --target mk_dataset
   cmake --build build --target mk_eventlist
+  cmake --build build --target mk_dist
   cmake --build build --target mk_channel
   cmake --build build --target mk_xsec_fit
 
@@ -146,6 +148,7 @@ Typical installed outputs are:
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_sample
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dataset
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_eventlist
+  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dist
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_channel
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_xsec_fit
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libIO.<shared-library>
@@ -179,6 +182,7 @@ After a successful build, the build tree should contain:
   build/bin/mk_sample
   build/bin/mk_dataset
   build/bin/mk_eventlist
+  build/bin/mk_dist
   build/bin/mk_channel
   build/bin/mk_xsec_fit
   build/lib/

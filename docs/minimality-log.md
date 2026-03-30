@@ -2,6 +2,84 @@
 
 ## Current milestone
 - status: done
+- subsystem: `app/` cache-build seam
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep `syst/` focused
+  on cache construction rather than CLI orchestration, and prefer flatter
+  explicit workflow steps over one overloaded app
+
+## What changed
+- added a dedicated one-request cache builder:
+  - `mk_dist`
+  - reads one `EventListIO`
+  - writes one `DistributionIO` request
+- rewrote the preferred workflow docs so the normal path is now:
+  - `mk_eventlist`
+  - `mk_dist`
+  - downstream channel / fit steps
+- kept `mk_eventlist --cache-*` as an explicit legacy compatibility bridge
+  instead of silently treating it as the preferred cache path
+- updated `mk_eventlist --help` to show:
+  - the normal row-wise event-list form
+  - the separate legacy compatibility form
+  - an explicit `mk_eventlist -> mk_dist` preference note
+- updated `COMMANDS`, `USAGE`, and `INSTALL` so `mk_dist` is listed as a built
+  and installed app target
+
+## Why this is simpler
+- cache construction now has one honest app boundary instead of hiding inside
+  the event-list builder
+- `mk_eventlist` can read as the row-wise build step again, while `mk_dist`
+  reads as the bin-wise cache step
+- the preferred workflow is flatter and easier to grep because the two stages
+  now have separate names and separate CLIs
+- this pass stayed out of the unrelated dirty `syst/` files because the
+  existing cache API was already sufficient for the thinner workflow split
+
+## Verification
+- local checks:
+  - `git diff --check -- app/CMakeLists.txt app/mk_dist.cc app/mk_eventlist.cc COMMANDS USAGE INSTALL`
+- Docker checks:
+  - focused Linux rebuild of `Syst`, `mk_eventlist`, and `mk_dist`
+  - `mk_eventlist --help` usage smoke
+  - `mk_dist --help` usage smoke
+  - synthetic direct-cache smoke:
+    - build event list
+    - run `mk_dist`
+    - verify the produced `DistributionIO` metadata and payload
+  - synthetic legacy-bridge smoke:
+    - run `mk_eventlist --cache-*`
+    - verify the produced `DistributionIO` metadata and payload
+    - verify the explicit legacy warning
+- results:
+  - `mk_dist` now owns the preferred one-request `DistributionIO` cache path
+  - the legacy `mk_eventlist --cache-*` path still works, but now says it is a
+    compatibility bridge
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the need to treat `mk_eventlist --cache-*` as the preferred
+    persistent-cache entrypoint
+- shell branches removed: 0
+- docs/build artifacts removed: stale `mk_eventlist`-first cache workflow
+  wording in top-level docs
+- approximate LOC delta: one thin app plus smaller event-list responsibility
+  framing in exchange for making the cache step explicit
+
+## Decisions
+- keep `mk_eventlist --cache-*` for now as a documented compatibility bridge
+  instead of deleting it in the same pass
+- avoid touching `syst/Systematics.*`, `DistributionIO.*`, or `syst/README`
+  in this milestone because the current library seam already supported
+  `mk_dist` and those files had unrelated in-flight edits
+
+## Remaining hotspots
+- `mk_eventlist` still contains the legacy `--cache-*` parser and bridge path
+- `mk_dist` currently supports one request at a time; batch request manifests
+  are still a later step
+
+## Current milestone
+- status: done
 - subsystem: `ana/` + `io/` event-list weighting seam
 - design rule from `DESIGN.md`: keep event-list construction in `ana/`, keep
   persistence in `io/`, and make downstream row-wise surfaces explicit rather
