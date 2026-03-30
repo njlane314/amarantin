@@ -208,22 +208,23 @@ Notes:
   rebuilding them.
   `mk_eventlist --cache-*` remains available only as a legacy compatibility bridge.
 
-Channel workflow
-----------------
-Build one persistent ChannelIO file directly from cached signal/background
-distributions
+Channel compatibility workflow
+------------------------------
+Build one persistent ChannelIO compatibility bundle directly from cached
+DistributionIO inputs
   build/bin/mk_channel \
     --data-bins "12,10,9,7,6,5,4,3,2,1" \
     output.channels.root output.dists.root beam-s0 beam-bkg muon_region
 
-Build one ChannelIO file with explicit selection text and observed bins
+Build one ChannelIO compatibility bundle with explicit selection text and
+observed bins
   build/bin/mk_channel \
     --selection "__pass_muon__" \
     --data-bins "12,10,9,7,6,5,4,3,2,1" \
     output.channels.root output.dists.root beam-s0 beam-bkg muon_region
 
-Build one multi-process ChannelIO file from a plain-text manifest with
-automatic observed data
+Build one multi-process ChannelIO compatibility bundle from a plain-text
+manifest with automatic observed data
   cat > muon_region.channel.manifest <<'EOF'
   signal signal beam-s0
   beam_bkg background beam-bkg
@@ -244,12 +245,17 @@ Kinds:
   data
 
 Notes:
+  `DistributionIO` is the preferred persisted downstream surface after
+  `mk_dist`.
+  `mk_channel` is the current compatibility bridge that bundles selected
+  cached distributions into one `ChannelIO` region for the native fit.
   `data` rows fill `ChannelIO::Channel::data` automatically.
   The current manifest mode expects unique non-data process names.
 
 Fit workflow
 ------------
-Run one native xsec fit directly from ChannelIO and print the fit report
+Run one native xsec fit from the ChannelIO compatibility bundle and print the
+fit report
   build/bin/mk_xsec_fit output.channels.root muon_region
 
 If the channel intentionally carries an all-zero observed spectrum
@@ -260,6 +266,11 @@ Run one native xsec fit with explicit signal process and write a text report
     --signal-process signal \
     --output muon_region.fit.txt \
     output.channels.root muon_region
+
+Notes:
+  `mk_xsec_fit` currently consumes `ChannelIO`, not raw `DistributionIO`.
+  The normal persisted cache surface before that fit bridge is
+  `DistributionIO`.
 
 Macro runner
 ------------

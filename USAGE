@@ -14,9 +14,10 @@ The usual workflow is:
   3. Run mk_sample to create persistent sample ROOT files
   4. Optionally assemble multiple persistent samples into one DatasetIO file
   5. Build persistent EventListIO files from DatasetIO using event-tree selections
-  6. Optionally assemble cached signal/background distributions into one ChannelIO file
-  7. Optionally run the native xsec fit on that channel
-  8. Optionally drive many sample builds through samples-dag.mk
+  6. Optionally run mk_dist to create cached DistributionIO requests
+  7. Optionally bridge cached DistributionIO inputs into one ChannelIO file for the current fit workflow
+  8. Optionally run the native xsec fit on that channel
+  9. Optionally drive many sample builds through samples-dag.mk
 
 Basic build workflow
 --------------------
@@ -178,10 +179,10 @@ Manifest example:
       build/dists/run1-numi-fhc.root \
       muon_region
 
-The mk_channel program reads cached `DistributionIO` entries, checks that the
-channel inputs share common binning plus selection metadata, and writes one
-persistent `ChannelIO` object with observed data bins plus per-process
-systematic payloads.
+The mk_channel program is the current compatibility bridge from cached
+`DistributionIO` entries into one persisted `ChannelIO` bundle. It checks that
+the channel inputs share common binning plus selection metadata, then writes
+observed data bins plus per-process systematic payloads for the native fit.
 
 In the legacy positional mode, observed bins are still provided explicitly via
 `--data-bins` unless `--allow-zero-data` is passed.
@@ -215,9 +216,10 @@ Example:
       build/channels/run1-numi-fhc.root \
       muon_region
 
-The mk_xsec_fit program reads one persistent `ChannelIO` object, builds the
-default signal-strength problem from the persisted nuisance payloads, profiles
-the signal-strength parameter `mu`, and prints or writes a plain-text report.
+The mk_xsec_fit program reads one persistent `ChannelIO` compatibility bundle,
+builds the default signal-strength problem from the persisted nuisance
+payloads, profiles the signal-strength parameter `mu`, and prints or writes a
+plain-text report.
 If every observed bin is zero, the CLI now requires `--allow-zero-data` so an
 empty observation is an explicit choice rather than a missing-input accident.
 
@@ -407,11 +409,11 @@ Conceptually this builds two systematic lanes and merges them in one
 The older `mk_eventlist --cache-*` path remains as a compatibility bridge, but
 it is no longer the preferred cache-building workflow.
 
-Building a persistent channel by hand
--------------------------------------
+Building a compatibility channel by hand
+----------------------------------------
 
 Once a cached DistributionIO file already exists, build a persistent ChannelIO
-file:
+compatibility bundle:
 
     build/bin/mk_channel \
       --selection "__pass_muon__" \
@@ -706,8 +708,9 @@ After a DistributionIO cache already exists, build a channel and fit it:
       build/channels/run1-numi-fhc.root \
       muon_region
 
-This keeps the reusable fit inputs in ChannelIO and writes a separate plain
-text fit summary as the final downstream product.
+This keeps `DistributionIO` as the normal persisted cache surface, uses
+`mk_channel` only as the current compatibility bridge into `ChannelIO`, and
+writes a separate plain-text fit summary as the final downstream product.
 
 How the stamp files work
 ------------------------

@@ -385,7 +385,7 @@ legacy wrapper paths.
     `syst/` did not need to be touched for this milestone
 
 #### Milestone 7: `DistributionIO`-First Downstream Assembly
-- status: todo
+- status: done
 - hypothesis: if docs and downstream assembly code default to
   `DistributionIO` rather than `EventListIO` or hand-entered channel data, then
   the normal teaching path and the normal final-analysis path stop diverging
@@ -410,6 +410,23 @@ legacy wrapper paths.
   - compatibility channel/fit tooling still works
   - any remaining `ChannelIO` dependency is described as compatibility or
     transitional, not as the target end state
+- verification results:
+  - local checks passed:
+    - `git diff --check -- plot/README fit/README COMMANDS USAGE io/ChannelIO.hh io/ChannelIO.cc fit/SignalStrengthFit.hh app/mk_channel.cc app/mk_xsec_fit.cc .agent/current_execplan.md docs/minimality-log.md`
+  - Docker verification passed in a fresh Linux build tree:
+    - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/m7-docker -DCMAKE_BUILD_TYPE=Release && cmake --build .build/m7-docker --target IO Fit mk_channel mk_xsec_fit --parallel && (.build/m7-docker/bin/mk_channel --help || true) && (.build/m7-docker/bin/mk_xsec_fit --help || true)'`
+    - a focused synthetic smoke confirmed:
+      - `mk_channel --manifest` builds a multi-process `ChannelIO` bundle from
+        cached `DistributionIO` entries and records observed-data provenance
+      - the legacy positional `mk_channel` path still writes a compatible
+        two-process channel
+      - `mk_xsec_fit` runs on the manifest-built channel and now reports the
+        source `distribution_path` plus observed-data source keys
+  - implementation notes:
+    - this milestone intentionally built on top of additive in-flight
+      `mk_channel` / `ChannelIO` changes that already moved channel assembly
+      closer to cached `DistributionIO` inputs
+    - unrelated plotting and `syst/` worktree changes stayed untouched
 
 #### Milestone 8: Deletion Pass And Compatibility Review
 - status: todo

@@ -62,6 +62,21 @@ namespace
         return os.str();
     }
 
+    std::string format_strings_csv(const std::vector<std::string> &values)
+    {
+        if (values.empty())
+            return "-";
+
+        std::ostringstream os;
+        for (std::size_t i = 0; i < values.size(); ++i)
+        {
+            if (i != 0)
+                os << ",";
+            os << values[i];
+        }
+        return os.str();
+    }
+
     const char *format_bool(bool value)
     {
         return value ? "true" : "false";
@@ -79,6 +94,7 @@ namespace
 
     std::string format_report(const std::string &channel_path,
                               const std::string &channel_key,
+                              const ChannelIO::Metadata &metadata,
                               const fit::Problem &problem,
                               const fit::Result &result)
     {
@@ -86,6 +102,10 @@ namespace
         os << std::fixed << std::setprecision(6);
         os << "channel_path: " << channel_path << "\n";
         os << "channel_key: " << channel_key << "\n";
+        os << "distribution_path: "
+           << (metadata.distribution_path.empty() ? "-" : metadata.distribution_path)
+           << "\n";
+        os << "channel_build_version: " << metadata.build_version << "\n";
         os << "signal_process: " << problem.signal_process << "\n";
         os << "converged: " << format_bool(result.converged) << "\n";
         os << "minimizer_status: " << result.minimizer_status << "\n";
@@ -101,6 +121,8 @@ namespace
         os << "mu_err_stat_up_found: " << format_bool(result.mu_err_stat_up_found) << "\n";
         os << "mu_err_stat_up: " << result.mu_err_stat_up << "\n";
         os << "sigma_relation: sigma_fit = mu_hat * sigma_nominal\n";
+        os << "observed_source_keys: "
+           << format_strings_csv(problem.channel->data_source_keys) << "\n";
         os << "observed_bins: " << format_bins_csv(problem.channel->data) << "\n";
         os << "predicted_signal_bins: " << format_bins_csv(result.predicted_signal) << "\n";
         os << "predicted_background_bins: " << format_bins_csv(result.predicted_background) << "\n";
@@ -257,6 +279,7 @@ int main(int argc, char **argv)
         const CliOptions options = parse_args(argc, argv);
 
         ChannelIO chio(options.channel_path, ChannelIO::Mode::kRead);
+        const ChannelIO::Metadata metadata = chio.metadata();
         const ChannelIO::Channel channel = chio.read(options.channel_key);
         if (!options.allow_zero_data && all_zero_bins(channel.data))
         {
@@ -281,7 +304,7 @@ int main(int argc, char **argv)
 
         const fit::Result result = fit::profile_signal_strength(problem, fit_options);
         const std::string report =
-            format_report(options.channel_path, options.channel_key, problem, result);
+            format_report(options.channel_path, options.channel_key, metadata, problem, result);
 
         if (!options.output_path.empty())
         {

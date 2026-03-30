@@ -65,6 +65,7 @@ public:
     {
         Spec spec;
         std::vector<double> data;
+        std::vector<std::string> data_source_keys;
         std::vector<Process> processes;
 
         const Process *find_process(const std::string &name) const;

@@ -89,8 +89,9 @@ namespace fit
         std::vector<double> predicted_total;
     };
 
-    // Build the default signal-strength problem from persisted mode, detector,
-    // and statistical payloads on ChannelIO.
+    // Build the default signal-strength problem from the persisted mode,
+    // detector, and statistical payloads on one ChannelIO compatibility
+    // bundle assembled from cached DistributionIO entries.
     Problem make_independent_problem(const ChannelIO::Channel &channel,
                                      const std::string &signal_process,
                                      double mu_start = 1.0,

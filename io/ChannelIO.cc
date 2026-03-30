@@ -480,11 +480,16 @@ ChannelIO::Channel ChannelIO::read(const std::string &channel_key) const
         if (payload)
         {
             std::vector<double> *data = nullptr;
+            std::vector<std::string> *data_source_keys = nullptr;
             payload->SetBranchAddress("data", &data);
+            if (payload->GetBranch("data_source_keys"))
+                payload->SetBranchAddress("data_source_keys", &data_source_keys);
             if (payload->GetEntries() > 0)
             {
                 payload->GetEntry(0);
                 channel.data = data ? *data : std::vector<double>{};
+                channel.data_source_keys =
+                    data_source_keys ? *data_source_keys : std::vector<std::string>{};
             }
         }
     }
@@ -520,9 +525,11 @@ void ChannelIO::write(const std::string &channel_key, const Channel &channel)
     {
         TDirectory *data_dir = utils::must_dir(channel_dir, "data", true);
         std::vector<double> data = channel.data;
+        std::vector<std::string> data_source_keys = channel.data_source_keys;
         data_dir->cd();
         TTree payload("payload", "Channel data payload");
         payload.Branch("data", &data);
+        payload.Branch("data_source_keys", &data_source_keys);
         payload.Fill();
         payload.Write("payload", TObject::kOverwrite);
     }

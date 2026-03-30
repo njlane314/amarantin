@@ -3,7 +3,12 @@ amarantin
 
 Native fit library
 ------------------
-`amarantin` now includes an additive native `Fit` library for
+The preferred persisted downstream analysis surface is `DistributionIO`.
+The current native fit path still uses a smaller `ChannelIO` bundle assembled
+from cached `DistributionIO` entries, so `mk_channel` is the compatibility
+bridge and `mk_xsec_fit` is the consumer on top of that bridge.
+
+`amarantin` includes an additive native `Fit` library for those
 `ChannelIO`-based signal-strength fits.
 
 The small public surface is:
@@ -25,6 +30,19 @@ Minimal example:
   fit::Result result = fit::profile_signal_strength(problem);
 
   // Fitted cross section = result.mu_hat * nominal_input_cross_section
+
+Typical workflow:
+
+  build/bin/mk_channel \
+    --manifest numu_signal_region.channel.manifest \
+    build/channels/final.channels.root \
+    build/dists/final.dists.root \
+    numu_signal_region
+
+  build/bin/mk_xsec_fit \
+    --output build/fits/numu_signal_region.fit.txt \
+    build/channels/final.channels.root \
+    numu_signal_region
 
 The default problem builder now shares family nuisances across processes,
 includes detector/statistical payloads from `ChannelIO`, and only falls back to

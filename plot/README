@@ -11,7 +11,7 @@ schema, or systematic evaluation.
 The main surfaces are:
 
   EventListIO      --reads--> event displays and row-wise plots
-  DistributionIO   --reads--> cached histogram payloads
+  DistributionIO   --reads--> cached histogram payloads and final-region plots
   Plotter          --renders-> stacked and unstacked channel views
   EfficiencyPlot   --renders-> denominator / numerator + efficiency overlays
 
@@ -52,9 +52,16 @@ PlottingHelper.hh
 
 Rendering notes
 ---------------
-The preferred downstream path is to read EventListIO directly for most plots.
-The plotting layer can also consume DistributionIO payloads when a persisted
-bin-wise product already exists.
+The preferred final-analysis surface is `DistributionIO`.
+After `mk_eventlist -> mk_dist`, downstream plots should usually read the
+cached bin-wise payloads instead of rebuilding them from rows.
+
+Use `EventListIO` for row-wise inspection, event displays, and one-off debug
+plots when the cache surface is too coarse.
+
+Some older stack / unstack helpers still read `EventListIO` directly.
+Treat those as row-wise compatibility paths rather than the long-term final
+plotting default.
 
 The stack / unstack path assumes the usual EventListIO-derived columns such as
 __analysis_channel__ and __w__.

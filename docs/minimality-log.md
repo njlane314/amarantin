@@ -2,6 +2,87 @@
 
 ## Current milestone
 - status: done
+- subsystem: `plot/` + `fit/` downstream teaching seam
+- design rule from `DESIGN.md`: prefer the flatter persisted downstream
+  surface, keep workflows in `app/`, and describe compatibility wrappers as
+  wrappers rather than the target data flow
+
+## What changed
+- rewrote downstream docs so the preferred final-analysis path is now stated as:
+  - `mk_eventlist`
+  - `mk_dist`
+  - `DistributionIO`
+- reframed `mk_channel` and `mk_xsec_fit` as the current compatibility bridge
+  on top of cached `DistributionIO` entries instead of the target end state
+- kept the additive `mk_channel --manifest` path and observed-data provenance
+  support on `ChannelIO`, so one channel can now be assembled from many cached
+  processes without hand-entered observed bins
+- extended `mk_xsec_fit` reports with:
+  - `distribution_path`
+  - `channel_build_version`
+  - observed-data source keys
+- updated `plot/README`, `fit/README`, `COMMANDS`, and `USAGE` so the docs now
+  match the intended `VISION.md` teaching path
+
+## Why this is simpler
+- the normal downstream story now has one clear persisted final surface:
+  `DistributionIO`
+- `ChannelIO` is described honestly as a smaller compatibility bundle for the
+  current fit path, which removes the old doc split between the preferred
+  workflow and the documented workflow
+- manifest-driven channel assembly deletes ad hoc hand-entered observed-bin
+  bookkeeping when the observed spectrum already exists as cached data bins
+- the fit report now exposes where the channel came from, so provenance no
+  longer requires reopening the ROOT file just to see the `DistributionIO`
+  source
+
+## Verification
+- local checks:
+  - `git diff --check -- plot/README fit/README COMMANDS USAGE io/ChannelIO.hh io/ChannelIO.cc fit/SignalStrengthFit.hh app/mk_channel.cc app/mk_xsec_fit.cc .agent/current_execplan.md docs/minimality-log.md`
+- Docker checks:
+  - focused Linux rebuild of `IO`, `Fit`, `mk_channel`, and `mk_xsec_fit`
+  - `mk_channel --help` usage smoke
+  - `mk_xsec_fit --help` usage smoke
+  - synthetic manifest-channel smoke:
+    - write a small `DistributionIO` file
+    - run `mk_channel --manifest`
+    - verify observed-data provenance survives on `ChannelIO`
+  - synthetic legacy-channel smoke:
+    - run the positional `mk_channel` path on the same cache input
+  - synthetic fit smoke:
+    - run `mk_xsec_fit` on the manifest-built channel
+    - verify the report includes `distribution_path` and observed source keys
+- results:
+  - downstream docs now teach `DistributionIO` as the normal final surface
+  - current `mk_channel` / `mk_xsec_fit` compatibility tooling still works on
+    top of cached `DistributionIO` entries
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the need to describe `ChannelIO` as the preferred downstream
+    analysis surface
+- shell branches removed: 0
+- docs/build artifacts removed: stale EventListIO-first / channel-first
+  downstream wording in plot/fit docs
+- approximate LOC delta: small provenance/report additions plus doc rewrites in
+  exchange for deleting the old mixed downstream story
+
+## Decisions
+- keep `ChannelIO` and `mk_channel` as the current fit bridge until a later
+  milestone can delete them without leaving the native fit path orphaned
+- build on top of the existing additive `mk_channel --manifest` and
+  `ChannelIO::data_source_keys` work instead of rewriting that seam again in
+  this pass
+
+## Remaining hotspots
+- `plot/` still has older row-wise stack / unstack helpers that open
+  `EventListIO` directly
+- `mk_xsec_fit` still reads `ChannelIO` rather than `DistributionIO` directly,
+  so the last compatibility layer is not deleted yet
+
+## Current milestone
+- status: done
 - subsystem: `app/` cache-build seam
 - design rule from `DESIGN.md`: keep workflows in `app/`, keep `syst/` focused
   on cache construction rather than CLI orchestration, and prefer flatter
