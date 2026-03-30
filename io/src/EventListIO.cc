@@ -23,11 +23,10 @@ namespace
         utils::write_param<double>(meta_dir, "db_tortgt_pot_sum", sample.db_tortgt_pot_sum);
         utils::write_param<double>(meta_dir, "normalisation", sample.normalisation);
 
-        utils::write_named(meta_dir, "family", sample.family);
-        utils::write_named(meta_dir, "nominal_key", sample.nominal_key);
-        utils::write_named(meta_dir, "variant_name", sample.variant_name);
-        utils::write_named(meta_dir, "workflow_role", sample.workflow_role);
-        utils::write_named(meta_dir, "source_def", sample.source_def);
+        utils::write_named(meta_dir, "nominal", sample.nominal);
+        utils::write_named(meta_dir, "tag", sample.tag);
+        utils::write_named(meta_dir, "role", sample.role);
+        utils::write_named(meta_dir, "defname", sample.defname);
         utils::write_named(meta_dir, "campaign", sample.campaign);
     }
 
@@ -189,11 +188,10 @@ DatasetIO::Sample EventListIO::sample(const std::string &sample_key) const
     sample.db_tortgt_pot_sum = utils::read_param<double>(meta_dir, "db_tortgt_pot_sum");
     sample.normalisation = utils::read_param<double>(meta_dir, "normalisation");
 
-    sample.family = utils::read_named_or(meta_dir, "family");
-    sample.nominal_key = utils::read_named_or(meta_dir, "nominal_key");
-    sample.variant_name = utils::read_named_or(meta_dir, "variant_name");
-    sample.workflow_role = utils::read_named_or(meta_dir, "workflow_role");
-    sample.source_def = utils::read_named_or(meta_dir, "source_def");
+    sample.nominal = utils::read_named_or(meta_dir, "nominal", utils::read_named_or(meta_dir, "nominal_key"));
+    sample.tag = utils::read_named_or(meta_dir, "tag", utils::read_named_or(meta_dir, "variant_name"));
+    sample.role = utils::read_named_or(meta_dir, "role", utils::read_named_or(meta_dir, "workflow_role"));
+    sample.defname = utils::read_named_or(meta_dir, "defname", utils::read_named_or(meta_dir, "source_def"));
     sample.campaign = utils::read_named_or(meta_dir, "campaign");
 
     return sample;

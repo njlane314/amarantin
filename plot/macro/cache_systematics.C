@@ -77,7 +77,7 @@ void cache_systematics(const char *read_path = nullptr,
                                                             : std::vector<std::string>{};
         cache_options.requests.push_back(request);
 
-        syst::SystematicsCacheBuilder::build(eventlist, cache_options);
+        syst::build_systematics_cache(eventlist, cache_options);
 
         syst::HistogramSpec spec;
         spec.branch_expr = request.branch_expr;

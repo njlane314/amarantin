@@ -1,5 +1,6 @@
 set(AMARANTIN_ANA_SOURCES
   src/EventListBuilder.cc
+  src/SampleDef.cc
   src/EventListSelection.cc
 )
 
@@ -7,6 +8,7 @@ set(AMARANTIN_ANA_PUBLIC_HEADERS
   include/AnalysisChannels.hh
   include/EventListBuilder.hh
   include/EventListSelection.hh
+  include/SampleDef.hh
 )
 
 add_library(Ana SHARED

@@ -189,13 +189,13 @@ int main(int argc, char **argv)
         {
             EventListIO event_list(options.output_path, EventListIO::Mode::kWrite);
 
-            ana::EventListBuilder::Options build_options;
-            build_options.event_tree_name = options.event_tree_name;
-            build_options.subrun_tree_name = options.subrun_tree_name;
-            build_options.selection_expr = selection_expr;
-            build_options.selection_name = options.selection_name;
+            ana::EventListConfig build_config;
+            build_config.event_tree_name = options.event_tree_name;
+            build_config.subrun_tree_name = options.subrun_tree_name;
+            build_config.selection_expr = selection_expr;
+            build_config.selection_name = options.selection_name;
 
-            ana::EventListBuilder::build(dataset, event_list, build_options);
+            ana::build_event_list(dataset, event_list, build_config);
         }
 
         if (options.cache_systematics)
@@ -219,7 +219,7 @@ int main(int argc, char **argv)
             request.detector_sample_keys = options.cache_detector_sample_keys;
             cache_options.requests.push_back(request);
 
-            syst::SystematicsCacheBuilder::build(event_list, cache_options);
+            syst::build_systematics_cache(event_list, cache_options);
         }
 
         std::cout << "mk_eventlist: wrote " << options.output_path

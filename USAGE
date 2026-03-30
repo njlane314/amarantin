@@ -52,7 +52,7 @@ Basic mk_dataset usage
 
 General form:
 
-    build/bin/mk_dataset [--book sample-book.json] output.root context sample-key=sample.root [sample-key=sample.root ...]
+    build/bin/mk_dataset [--defs sample.defs] output.root context sample-key=sample.root [sample-key=sample.root ...]
 
 Example:
 
@@ -64,9 +64,18 @@ Example:
 The mk_dataset program reads one or more persistent SampleIO ROOT files and
 writes a persistent DatasetIO ROOT file containing keyed samples.
 
-If --book is supplied, mk_dataset also stamps workflow-facing sample metadata
-from a JSON sample-book manifest onto each keyed sample. This metadata is then
+If --defs is supplied, mk_dataset also stamps workflow-facing sample metadata
+from a plain text sample definition file onto each keyed sample. This metadata is then
 available later in EventListIO and systematics cache building.
+
+The plain text format is:
+
+    key variation nominal tag role defname [campaign]
+
+Use `-` for an empty field. Example:
+
+    beam-s0 nominal - beam plot prodgenie_numi_uboone_overlay_fhc_mcc9_run1_v28_v2_sample0_goodruns run1_fhc
+    beam-s0-sce detector beam-s0 sce plot prodgenie_numi_nu_overlay_v08_00_00_53_SCE_300k_reco2_run1_reco2 run1_fhc
 
 Basic mk_eventlist usage
 ------------------------

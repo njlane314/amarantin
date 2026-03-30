@@ -19,13 +19,13 @@ In the current code layout:
   EventListIO
     owns the file format and persistence only
 
-  SampleBook
-    carries workflow-facing sample-family metadata from production manifests
+  ana::SampleDef
+    is the plain-text record used to stamp workflow metadata onto samples
 
-  ana::EventListBuilder
+  ana::build_event_list
     builds selected event lists and helper columns into EventListIO
 
-  syst::SystematicsCacheBuilder
+  syst::build_systematics_cache
     computes and persists rebinnable systematics caches into EventListIO
 
 Framework-owned column naming rule
@@ -70,30 +70,26 @@ Per-sample metadata written in samples/<sample-key>/meta/:
   subrun_pot_sum
   db_tortgt_pot_sum
   normalisation
-  family
-  nominal_key
-  variant_name
-  workflow_role
-  source_def
+  nominal
+  tag
+  role
+  defname
   campaign
 
 These fields are intended to preserve production-level workflow semantics from
-an external sample-book manifest, for example:
+an external plain-text sample definition file, for example:
 
-  family
-    logical detector-family or workflow group
-
-  nominal_key
+  nominal
     the nominal sibling to which a detector variation belongs
 
-  variant_name
-    human-readable detector or workflow variation label
+  tag
+    human-readable detector or workflow tag
 
-  workflow_role
-    training / plotting / nominal / validation style role tags
+  role
+    training / plotting / validation style role tag
 
-  source_def
-    production-level source definition or other external dataset handle
+  defname
+    production-level dataset definition name or other external handle
 
   campaign
     production campaign label
@@ -355,14 +351,15 @@ The intended workflow is:
 
 These caches can be built either:
 
-  * as part of the event-list workflow by running ana::EventListBuilder and then
-    syst::SystematicsCacheBuilder
+  * as part of the event-list workflow by running ana::build_event_list and then
+    syst::build_systematics_cache
   * later on an existing file by reopening EventListIO in update mode and
-    calling syst::SystematicsCacheBuilder
+    calling syst::build_systematics_cache
 
-When detector sample keys are not given explicitly, SystematicsCacheBuilder can
-recover detector siblings from the persisted sample-book metadata in
-samples/<sample-key>/meta/.
+When detector sample keys are not given explicitly, syst::build_systematics_cache can
+recover detector siblings from the persisted sample metadata in
+samples/<sample-key>/meta/ by matching detector variations with the same
+nominal sample.
 
 Detector-systematic caching stores per-variation fine templates so envelopes
 can be rebuilt after rebinning.

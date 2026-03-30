@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include "SampleBook.hh"
+#include "SampleDef.hh"
 #include "Systematics.hh"
 
 namespace syst
@@ -15,32 +15,28 @@ namespace syst
         {
             if (!request.detector_sample_keys.empty())
                 return request.detector_sample_keys;
-
-            const SampleBook book = SampleBook::from_event_list(eventlist);
-            if (!book.has(request.sample_key))
-                return {};
-            return book.detector_mates(request.sample_key);
+            return ana::detector_mates(eventlist, request.sample_key);
         }
     }
 
-    void SystematicsCacheBuilder::build(EventListIO &eventlist,
-                                        const CacheBuildOptions &options)
+    void build_systematics_cache(EventListIO &eventlist,
+                                 const CacheBuildOptions &options)
     {
         if (!options.active())
             return;
         if (eventlist.mode() == EventListIO::Mode::kRead)
-            throw std::runtime_error("SystematicsCacheBuilder: event list must be writable");
+            throw std::runtime_error("syst::build_systematics_cache: event list must be writable");
 
         for (const auto &request : options.requests)
         {
             if (request.sample_key.empty())
-                throw std::runtime_error("SystematicsCacheBuilder: request sample_key must not be empty");
+                throw std::runtime_error("syst::build_systematics_cache: request sample_key must not be empty");
             if (request.branch_expr.empty())
-                throw std::runtime_error("SystematicsCacheBuilder: request branch_expr must not be empty");
+                throw std::runtime_error("syst::build_systematics_cache: request branch_expr must not be empty");
             if (request.nbins <= 0)
-                throw std::runtime_error("SystematicsCacheBuilder: request nbins must be positive");
+                throw std::runtime_error("syst::build_systematics_cache: request nbins must be positive");
             if (!(request.xmax > request.xmin))
-                throw std::runtime_error("SystematicsCacheBuilder: request range is invalid");
+                throw std::runtime_error("syst::build_systematics_cache: request range is invalid");
 
             HistogramSpec spec;
             spec.branch_expr = request.branch_expr;

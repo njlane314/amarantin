@@ -10,7 +10,7 @@ target_link_libraries(mk_sample
 
 target_link_libraries(mk_dataset
   PRIVATE
-    Book
+    Ana
     IO
     amarantin_build_options
 )

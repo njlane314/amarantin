@@ -1,7 +1,6 @@
 {
     const TString root_dir = gSystem->pwd();
     const TString include_dir = root_dir + "/io/include";
-    const TString book_include_dir = root_dir + "/book/include";
     const TString ana_include_dir = root_dir + "/ana/include";
     const TString macro_dir = root_dir + "/macro";
     const TString plot_include_dir = root_dir + "/plot/include";
@@ -10,13 +9,11 @@
     const TString syst_include_dir = root_dir + "/syst/include";
     const TString lib_dir = root_dir + "/build/lib";
     const TString lib_path = lib_dir + "/libIO.so";
-    const TString book_lib_path = lib_dir + "/libBook.so";
     const TString ana_lib_path = lib_dir + "/libAna.so";
     const TString plot_lib_path = lib_dir + "/libPlot.so";
     const TString syst_lib_path = lib_dir + "/libSyst.so";
 
     gInterpreter->AddIncludePath(include_dir.Data());
-    gInterpreter->AddIncludePath(book_include_dir.Data());
     gInterpreter->AddIncludePath(ana_include_dir.Data());
     gInterpreter->AddIncludePath(macro_dir.Data());
     gInterpreter->AddIncludePath(plot_include_dir.Data());
@@ -25,7 +22,6 @@
     gInterpreter->AddIncludePath(syst_include_dir.Data());
     gSystem->AddDynamicPath(lib_dir.Data());
     gSystem->Load(lib_path.Data());
-    gSystem->Load(book_lib_path.Data());
     gSystem->Load(ana_lib_path.Data());
     gSystem->Load(plot_lib_path.Data());
     gSystem->Load(syst_lib_path.Data());
@@ -43,7 +39,7 @@
         #include "TCanvas.h"
 
         #include "SampleIO.hh"
-        #include "SampleBook.hh"
+        #include "SampleDef.hh"
         #include "DatasetIO.hh"
         #include "EventListIO.hh"
         #include "EventListBuilder.hh"

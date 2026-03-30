@@ -43,7 +43,7 @@ namespace
         if (!chain.GetBranch("count_strange"))
         {
             throw std::runtime_error(
-                "EventListBuilder: sample origin requires count_strange for orthogonal filtering");
+                "ana::build_event_list: sample origin requires count_strange for orthogonal filtering");
         }
 
         if (selection_expr.empty())
@@ -219,7 +219,7 @@ namespace
             chain.Add(path.c_str());
 
         if (chain.GetNtrees() == 0)
-            throw std::runtime_error("EventListBuilder: no input trees found for event tree " + event_tree_name);
+            throw std::runtime_error("ana::build_event_list: no input trees found for event tree " + event_tree_name);
 
         const std::string effective_selection_expr =
             build_selection_expression(sample, chain, selection_expr);
@@ -227,11 +227,11 @@ namespace
                                                                  effective_selection_expr.c_str(),
                                                                  &chain));
         if (!selection || !selection->GetTree())
-            throw std::runtime_error("EventListBuilder: failed to compile selection expression: " + effective_selection_expr);
+            throw std::runtime_error("ana::build_event_list: failed to compile selection expression: " + effective_selection_expr);
 
         std::unique_ptr<TTree> selected(chain.CloneTree(0));
         if (!selected)
-            throw std::runtime_error("EventListBuilder: failed to clone event tree structure");
+            throw std::runtime_error("ana::build_event_list: failed to clone event tree structure");
         selected->SetDirectory(nullptr);
         selected->SetName("selected");
         selected->SetTitle("Selected event list");
@@ -470,11 +470,11 @@ namespace
             chain.Add(path.c_str());
 
         if (chain.GetNtrees() == 0)
-            throw std::runtime_error("EventListBuilder: no input trees found for subrun tree " + subrun_tree_name);
+            throw std::runtime_error("ana::build_event_list: no input trees found for subrun tree " + subrun_tree_name);
 
         std::unique_ptr<TTree> copied(chain.CloneTree(-1, "fast"));
         if (!copied)
-            throw std::runtime_error("EventListBuilder: failed to copy subrun tree");
+            throw std::runtime_error("ana::build_event_list: failed to copy subrun tree");
         copied->SetDirectory(nullptr);
         copied->SetName(subrun_tree_name.c_str());
         return copied;
@@ -483,41 +483,41 @@ namespace
 
 namespace ana
 {
-    void EventListBuilder::build(const DatasetIO &dataset,
-                                 EventListIO &event_list,
-                                 const Options &options)
+    void build_event_list(const DatasetIO &dataset,
+                          EventListIO &event_list,
+                          const EventListConfig &config)
     {
-        if (options.event_tree_name.empty())
-            throw std::runtime_error("EventListBuilder: event_tree_name must not be empty");
-        if (options.subrun_tree_name.empty())
-            throw std::runtime_error("EventListBuilder: subrun_tree_name must not be empty");
-        if (options.selection_expr.empty() && options.selection_name.empty())
-            throw std::runtime_error("EventListBuilder: selection_expr must not be empty");
+        if (config.event_tree_name.empty())
+            throw std::runtime_error("ana::build_event_list: event_tree_name must not be empty");
+        if (config.subrun_tree_name.empty())
+            throw std::runtime_error("ana::build_event_list: subrun_tree_name must not be empty");
+        if (config.selection_expr.empty() && config.selection_name.empty())
+            throw std::runtime_error("ana::build_event_list: selection_expr must not be empty");
 
         EventListIO::Metadata metadata;
         metadata.dataset_path = dataset.path();
         metadata.dataset_context = dataset.context();
-        metadata.event_tree_name = options.event_tree_name;
-        metadata.subrun_tree_name = options.subrun_tree_name;
-        metadata.selection_name = options.selection_name;
-        metadata.selection_expr = options.selection_expr;
-        metadata.slice_required_count = options.selection_config.slice_required_count;
-        metadata.slice_min_topology_score = options.selection_config.slice_min_topology_score;
-        metadata.numi_run_boundary = options.selection_config.numi_run_boundary;
+        metadata.event_tree_name = config.event_tree_name;
+        metadata.subrun_tree_name = config.subrun_tree_name;
+        metadata.selection_name = config.selection_name;
+        metadata.selection_expr = config.selection_expr;
+        metadata.slice_required_count = config.selection_config.slice_required_count;
+        metadata.slice_min_topology_score = config.selection_config.slice_min_topology_score;
+        metadata.numi_run_boundary = config.selection_config.numi_run_boundary;
         event_list.write_metadata(metadata);
 
         for (const auto &key : dataset.sample_keys())
         {
             const DatasetIO::Sample sample = dataset.sample(key);
 
-            TChain preview_chain(options.event_tree_name.c_str());
+            TChain preview_chain(config.event_tree_name.c_str());
             for (const auto &path : sample.root_files)
                 preview_chain.Add(path.c_str());
             if (preview_chain.GetNtrees() == 0)
-                throw std::runtime_error("EventListBuilder: no input trees found for event tree " + options.event_tree_name);
+                throw std::runtime_error("ana::build_event_list: no input trees found for event tree " + config.event_tree_name);
 
-            std::string effective_selection_expr = options.selection_expr;
-            if (!options.selection_name.empty() && options.selection_name != "raw")
+            std::string effective_selection_expr = config.selection_expr;
+            if (!config.selection_name.empty() && config.selection_name != "raw")
             {
                 TTree *preview_tree = preview_chain.GetTree();
                 if (!preview_tree)
@@ -526,25 +526,25 @@ namespace ana
                     preview_tree = preview_chain.GetTree();
                 }
                 effective_selection_expr = EventListSelection::expression(
-                    EventListSelection::preset_from_string(options.selection_name),
+                    EventListSelection::preset_from_string(config.selection_name),
                     sample,
                     branch_names(preview_tree),
-                    options.selection_config);
+                    config.selection_config);
             }
 
             std::unique_ptr<TTree> selected =
                 copy_selected_tree(sample,
-                                   options.event_tree_name,
+                                   config.event_tree_name,
                                    effective_selection_expr,
-                                   options.selection_config);
+                                   config.selection_config);
             std::unique_ptr<TTree> subruns =
-                copy_subrun_tree(sample, options.subrun_tree_name);
+                copy_subrun_tree(sample, config.subrun_tree_name);
 
             event_list.write_sample(key,
                                     sample,
                                     selected.get(),
                                     subruns.get(),
-                                    options.subrun_tree_name);
+                                    config.subrun_tree_name);
         }
 
         event_list.flush();

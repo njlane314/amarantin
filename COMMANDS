@@ -22,8 +22,8 @@ Build all sample ROOT files from datasets.mk
 Build a persistent DatasetIO file from sample ROOT files
     build/bin/mk_dataset output.dataset.root run1-numi-fhc beam-s0=build/samples/run1/beam-s0.root
 
-Build a persistent DatasetIO file and stamp a sample-book manifest
-    build/bin/mk_dataset --book sample-book.json output.dataset.root run1-numi-fhc beam-s0=build/samples/run1/beam-s0.root
+Build a persistent DatasetIO file and stamp sample definitions
+    build/bin/mk_dataset --defs sample.defs output.dataset.root run1-numi-fhc beam-s0=build/samples/run1/beam-s0.root
 
 Build a persistent EventListIO file from a DatasetIO file
     build/bin/mk_eventlist output.eventlist.root input.dataset.root

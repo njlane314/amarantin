@@ -28,7 +28,7 @@ target_link_libraries(Syst
     IO
     amarantin_root_deps
   PRIVATE
-    Book
+    Ana
     amarantin_build_options
 )
 

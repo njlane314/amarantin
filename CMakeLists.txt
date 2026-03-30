@@ -80,7 +80,6 @@ elseif(MSVC)
 endif()
 
 add_subdirectory(io)
-add_subdirectory(book)
 add_subdirectory(ana)
 add_subdirectory(syst)
 add_subdirectory(plot)

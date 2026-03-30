@@ -43,12 +43,8 @@ namespace syst
         }
     };
 
-    class SystematicsCacheBuilder
-    {
-    public:
-        static void build(EventListIO &eventlist,
-                          const CacheBuildOptions &options);
-    };
+    void build_systematics_cache(EventListIO &eventlist,
+                                 const CacheBuildOptions &options);
 }
 
 #endif // SYSTEMATICS_CACHE_BUILDER_HH
