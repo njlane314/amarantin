@@ -28,6 +28,10 @@ public:
     static const char *preset_name(Preset preset);
     static const char *preset_label(Preset preset);
     static Preset preset_from_string(const std::string &name);
+    static const char *trigger_branch();
+    static const char *slice_branch();
+    static const char *fiducial_branch();
+    static const char *muon_branch();
 
     static std::string expression(Preset preset,
                                   const DatasetIO::Sample &sample,

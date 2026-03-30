@@ -69,6 +69,26 @@ namespace
         return names;
     }
 
+    std::unique_ptr<TTreeFormula> make_optional_formula(const char *name,
+                                                        EventListSelection::Preset preset,
+                                                        const DatasetIO::Sample &sample,
+                                                        const std::vector<std::string> &columns,
+                                                        const EventListSelection::Config &config,
+                                                        TChain &chain)
+    {
+        try
+        {
+            const std::string expr = EventListSelection::expression(preset, sample, columns, config);
+            if (expr.empty())
+                return nullptr;
+            return std::unique_ptr<TTreeFormula>(new TTreeFormula(name, expr.c_str(), &chain));
+        }
+        catch (...)
+        {
+            return nullptr;
+        }
+    }
+
     bool is_mc_origin(const DatasetIO::Sample &sample)
     {
         return sample.origin == DatasetIO::Sample::Origin::kOverlay ||
@@ -149,7 +169,8 @@ namespace
     TTree *copy_selected_tree(TDirectory *events_dir,
                               const DatasetIO::Sample &sample,
                               const std::string &event_tree_name,
-                              const std::string &selection_expr)
+                              const std::string &selection_expr,
+                              const EventListSelection::Config &selection_config)
     {
         TChain chain(event_tree_name.c_str());
         for (const auto &path : sample.root_files)
@@ -172,6 +193,42 @@ namespace
             throw std::runtime_error("EventListIO: failed to clone event tree structure");
         selected->SetName("selected");
         selected->SetTitle("Selected event list");
+
+        TTree *first_tree = chain.GetTree();
+        if (!first_tree)
+        {
+            chain.LoadTree(0);
+            first_tree = chain.GetTree();
+        }
+        const std::vector<std::string> columns = branch_names(first_tree);
+        std::unique_ptr<TTreeFormula> pass_trigger_formula =
+            make_optional_formula("eventlist_pass_trigger",
+                                  EventListSelection::Preset::kTrigger,
+                                  sample,
+                                  columns,
+                                  selection_config,
+                                  chain);
+        std::unique_ptr<TTreeFormula> pass_slice_formula =
+            make_optional_formula("eventlist_pass_slice",
+                                  EventListSelection::Preset::kSlice,
+                                  sample,
+                                  columns,
+                                  selection_config,
+                                  chain);
+        std::unique_ptr<TTreeFormula> pass_fiducial_formula =
+            make_optional_formula("eventlist_pass_fiducial",
+                                  EventListSelection::Preset::kFiducial,
+                                  sample,
+                                  columns,
+                                  selection_config,
+                                  chain);
+        std::unique_ptr<TTreeFormula> pass_muon_formula =
+            make_optional_formula("eventlist_pass_muon",
+                                  EventListSelection::Preset::kMuon,
+                                  sample,
+                                  columns,
+                                  selection_config,
+                                  chain);
 
         float weight_spline = 1.0f;
         float weight_tune = 1.0f;
@@ -198,10 +255,22 @@ namespace
 
         double event_weight = 1.0;
         double event_weight_squared = 1.0;
+        bool pass_trigger = false;
+        bool pass_slice = false;
+        bool pass_fiducial = false;
+        bool pass_muon = false;
         selected->Branch(kEventWeightBranch, &event_weight, (std::string(kEventWeightBranch) + "/D").c_str());
         selected->Branch(kEventWeightSquaredBranch,
                          &event_weight_squared,
                          (std::string(kEventWeightSquaredBranch) + "/D").c_str());
+        selected->Branch(EventListSelection::trigger_branch(), &pass_trigger,
+                         (std::string(EventListSelection::trigger_branch()) + "/O").c_str());
+        selected->Branch(EventListSelection::slice_branch(), &pass_slice,
+                         (std::string(EventListSelection::slice_branch()) + "/O").c_str());
+        selected->Branch(EventListSelection::fiducial_branch(), &pass_fiducial,
+                         (std::string(EventListSelection::fiducial_branch()) + "/O").c_str());
+        selected->Branch(EventListSelection::muon_branch(), &pass_muon,
+                         (std::string(EventListSelection::muon_branch()) + "/O").c_str());
 
         int current_tree_number = -1;
         const Long64_t n_entries = chain.GetEntries();
@@ -215,9 +284,17 @@ namespace
             {
                 current_tree_number = chain.GetTreeNumber();
                 selection->UpdateFormulaLeaves();
+                if (pass_trigger_formula) pass_trigger_formula->UpdateFormulaLeaves();
+                if (pass_slice_formula) pass_slice_formula->UpdateFormulaLeaves();
+                if (pass_fiducial_formula) pass_fiducial_formula->UpdateFormulaLeaves();
+                if (pass_muon_formula) pass_muon_formula->UpdateFormulaLeaves();
             }
 
             chain.GetEntry(i);
+            pass_trigger = pass_trigger_formula ? (pass_trigger_formula->EvalInstance() != 0.0) : false;
+            pass_slice = pass_slice_formula ? (pass_slice_formula->EvalInstance() != 0.0) : false;
+            pass_fiducial = pass_fiducial_formula ? (pass_fiducial_formula->EvalInstance() != 0.0) : false;
+            pass_muon = pass_muon_formula ? (pass_muon_formula->EvalInstance() != 0.0) : false;
             if (selection->EvalInstance() != 0.0)
             {
                 event_weight = compute_nominal_weight(sample,
@@ -382,8 +459,7 @@ void EventListIO::skim(const DatasetIO &ds,
                     branch_names(preview_tree),
                     selection_config);
             }
-
-            copy_selected_tree(events_dir, sample, event_tree_name, effective_selection_expr);
+            copy_selected_tree(events_dir, sample, event_tree_name, effective_selection_expr, selection_config);
             copy_subrun_tree(subruns_dir, sample, subrun_tree_name);
         }
 

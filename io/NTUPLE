@@ -187,6 +187,211 @@ writes a separate EventWeights tree containing:
   evt                int
   weights            std::map<std::string, std::vector<double>>
 
+Branches added by the ImageAnalysis tool
+----------------------------------------
+
+The ImageAnalysis tool can add image- and inference-oriented branches onto the
+main EventSelectionFilter tree.
+
+Scalar branches written by ImageAnalysis:
+
+  reco_neutrino_vertex_x             float
+  reco_neutrino_vertex_y             float
+  reco_neutrino_vertex_z             float
+  active_pixels_u                    int
+  active_pixels_v                    int
+  active_pixels_w                    int
+  is_vtx_in_image_u                  bool
+  is_vtx_in_image_v                  bool
+  is_vtx_in_image_w                  bool
+
+Detector-image sparse content:
+
+  detector_image_u_index             std::vector<uint32_t>
+  detector_image_u_adc               std::vector<float>
+  detector_image_v_index             std::vector<uint32_t>
+  detector_image_v_adc               std::vector<float>
+  detector_image_w_index             std::vector<uint32_t>
+  detector_image_w_adc               std::vector<float>
+
+Semantic-image content:
+
+  semantic_image_u_label             std::vector<uint8_t>
+  semantic_image_v_label             std::vector<uint8_t>
+  semantic_image_w_label             std::vector<uint8_t>
+  slice_semantic_active_pixels_u     std::vector<int>
+  slice_semantic_active_pixels_v     std::vector<int>
+  slice_semantic_active_pixels_w     std::vector<int>
+  semantic_label_names               std::vector<std::string>
+
+Inference prediction content:
+
+  inf_model                          std::vector<std::string>
+  inf_n_scores                       std::vector<int>
+  inf_scores                         std::vector<float>
+
+Inference performance content:
+
+  inf_t_write_req_ms                 std::vector<float>
+  inf_t_exec_total_ms                std::vector<float>
+  inf_t_read_resp_ms                 std::vector<float>
+  inf_t_child_total_ms               std::vector<float>
+  inf_t_child_setup_ms               std::vector<float>
+  inf_t_child_infer_ms               std::vector<float>
+  inf_t_child_post_ms                std::vector<float>
+  inf_child_max_rss_mb               std::vector<float>
+
+Notes on ImageAnalysis:
+
+  The image content is written per slice and is organised by plane:
+
+    U
+    V
+    W
+
+  detector_image_*_index and detector_image_*_adc form sparse detector-image
+  content for each plane.
+
+  semantic_image_*_label stores per-pixel semantic labels, and
+  slice_semantic_active_pixels_* stores counts per semantic label for the
+  corresponding plane.
+
+  semantic_label_names is populated from
+  image::SemanticClassifier::semantic_label_names and provides the label-name
+  ordering for the semantic-count vectors.
+
+  The inference branches are optional and depend on whether the production job
+  provides InferencePredProduct and InferencePerfProduct using the configured
+  tags.
+
+Branches added by the TruthAnalysis tool
+----------------------------------------
+
+The TruthAnalysis tool can add truth-level neutrino-interaction, flux, and
+primary-particle content onto the main EventSelectionFilter tree.
+
+Neutrino-interaction scalar branches:
+
+  nu_pdg                           int
+  int_ccnc                         int
+  int_mode                         int
+  int_type                         int
+  nu_E                             float
+  ccnc                             int
+  interaction_mode                 int
+  interaction_type                 int
+  nu_v                             float[3]
+  nu_dir                           float[3]
+  is_nu_mu_cc                      bool
+  nu_theta                         float
+  nu_pt                            float
+  tgt_pdg                          int
+  struck_nucleon_pdg               int
+  kin_W                            float
+  bjorken_x                        float
+  inelasticity_y                   float
+  Q2                               float
+  nu_px                            float
+  nu_py                            float
+  nu_pz                            float
+
+Truth-neutrino vertex and mapping branches:
+
+  nu_vtx_x                         float
+  nu_vtx_y                         float
+  nu_vtx_z                         float
+  nu_vtx_wire_u                    float
+  nu_vtx_wire_v                    float
+  nu_vtx_wire_w                    float
+  nu_vtx_t                         float
+  nu_vtx_sce_x                     float
+  nu_vtx_sce_y                     float
+  nu_vtx_sce_z                     float
+  lep_E                            float
+  nu_true_px                       float
+  nu_true_py                       float
+  nu_true_pz                       float
+  nu_vtx_in_fv                     bool
+
+Flux and beamline branches:
+
+  flux_path_len                    float
+  flux_parent_pdg                  int
+  flux_hadron_pdg                  int
+  flux_decay_mode                  int
+  flux_decay_vtx_x                 double
+  flux_decay_vtx_y                 double
+  flux_decay_vtx_z                 double
+  flux_decay_px                    double
+  flux_decay_py                    double
+  flux_decay_pz                    double
+  numi_L                           double
+  numi_offaxis_deg                 float
+  bnb_L                            double
+  bnb_offaxis_deg                  float
+
+Primary-particle branches:
+
+  prim_pdg                         std::vector<int>
+  prim_track_id                    std::vector<int>
+  prim_E                           std::vector<float>
+  prim_n_scat_elastic              std::vector<uint>
+  prim_n_scat_inelastic            std::vector<uint>
+  prim_px                          std::vector<float>
+  prim_py                          std::vector<float>
+  prim_pz                          std::vector<float>
+  prim_p_end                       std::vector<float>
+  prim_vx                          std::vector<float>
+  prim_vy                          std::vector<float>
+  prim_vz                          std::vector<float>
+  prim_end_x                       std::vector<float>
+  prim_end_y                       std::vector<float>
+  prim_end_z                       std::vector<float>
+  prim_final_state                 std::vector<std::string>
+  prim_bt_completeness             std::vector<float>
+  prim_bt_purity                   std::vector<float>
+
+Primary-daughter branches:
+
+  prim_dau_pdg                     std::vector<std::vector<int>>
+  prim_dau_E                       std::vector<std::vector<float>>
+  prim_dau_process_flat            std::vector<std::string>
+  prim_dau_process_idx             std::vector<size_t>
+  prim_dau_px                      std::vector<std::vector<float>>
+  prim_dau_py                      std::vector<std::vector<float>>
+  prim_dau_pz                      std::vector<std::vector<float>>
+  prim_dau_vx                      std::vector<std::vector<float>>
+  prim_dau_vy                      std::vector<std::vector<float>>
+  prim_dau_vz                      std::vector<std::vector<float>>
+
+Truth event-balance summary branches:
+
+  sum_pt_true                      float
+  sum_pt_vis                       float
+  sum_p_true                       float
+  sum_p_vis                        float
+  sum_E_vis                        float
+
+Notes on TruthAnalysis:
+
+  TruthAnalysis is only meaningful for non-data samples. On data events the
+  truth-oriented branches are reset to empty or sentinel values.
+
+  The truth-neutrino fields are taken from the first MCTruth neutrino record
+  in the event when NeutrinoSet() is true.
+
+  prim_* vectors are aligned element-by-element and describe primary final
+  state MC particles with Process() == "primary" and StatusCode() == 1.
+
+  prim_dau_* uses a nested-per-primary layout for PDG, energy, momentum, and
+  vertex content. prim_dau_process_flat and prim_dau_process_idx provide a
+  flattened process-string representation parallel to those per-primary
+  daughter collections.
+
+  prim_bt_completeness and prim_bt_purity are populated during analyseSlice()
+  by matching the selected reconstructed slice hits back to the truth primary
+  particles.
+
 Notes
 -----
 
@@ -202,6 +407,13 @@ selection tool and analysis tools used in production.
 
 In particular, EventWeightAnalysis adds a substantial set of optional weight
 branches that are important for systematic reweighting studies.
+
+ImageAnalysis can also add large sparse-image, semantic-label, and inference
+payload branches that are relevant for ML-oriented downstream workflows and
+training snapshots.
+
+TruthAnalysis can add a large truth-level description of the interaction,
+beamline parentage, and truth-primary topology for MC samples.
 
 SubRun
 ------
