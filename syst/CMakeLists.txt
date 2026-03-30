@@ -11,7 +11,7 @@ add_library(Syst SHARED
   ${AMARANTIN_SYST_PUBLIC_HEADERS}
 )
 
-find_package(Eigen3 QUIET)
+find_package(Eigen3 REQUIRED)
 
 target_compile_features(Syst PUBLIC cxx_std_17)
 
@@ -27,13 +27,9 @@ target_link_libraries(Syst
     amarantin_root_deps
   PRIVATE
     Ana
+    Eigen3::Eigen
     amarantin_build_options
 )
-
-if(Eigen3_FOUND)
-  target_link_libraries(Syst PRIVATE Eigen3::Eigen)
-  target_compile_definitions(Syst PRIVATE AMARANTIN_HAVE_EIGEN=1)
-endif()
 
 set_target_properties(Syst PROPERTIES
   OUTPUT_NAME Syst

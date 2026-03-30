@@ -18,10 +18,8 @@
 #include "TTree.h"
 #include "TTreeFormula.h"
 
-#if defined(AMARANTIN_HAVE_EIGEN)
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
-#endif
 
 namespace
 {
@@ -30,6 +28,7 @@ namespace
 
     using CacheEntry = DistributionIO::Entry;
     using FamilyCache = DistributionIO::Family;
+    using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
     double sanitise_universe_weight(double weight)
     {
@@ -264,9 +263,6 @@ namespace
         return out;
     }
 
-#if defined(AMARANTIN_HAVE_EIGEN)
-    using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
-
     MatrixRowMajor build_rebin_matrix(int source_nbins,
                                       double source_xmin,
                                       double source_xmax,
@@ -296,7 +292,6 @@ namespace
         }
         return rebin;
     }
-#endif
 
     std::vector<double> rebin_vector(const std::vector<double> &source,
                                      int source_nbins,
@@ -307,7 +302,6 @@ namespace
         if (source.empty())
             return std::vector<double>{};
 
-#if defined(AMARANTIN_HAVE_EIGEN)
         const MatrixRowMajor rebin = build_rebin_matrix(source_nbins,
                                                         source_xmin,
                                                         source_xmax,
@@ -317,26 +311,6 @@ namespace
         const Eigen::Map<const Eigen::VectorXd> source_vec(source.data(), source_nbins);
         const Eigen::VectorXd target = rebin * source_vec;
         return std::vector<double>(target.data(), target.data() + target.size());
-#else
-        std::vector<double> target(static_cast<std::size_t>(target_spec.nbins), 0.0);
-        const double source_width = (source_xmax - source_xmin) / static_cast<double>(source_nbins);
-        const double target_width = (target_spec.xmax - target_spec.xmin) / static_cast<double>(target_spec.nbins);
-        for (int target_bin = 0; target_bin < target_spec.nbins; ++target_bin)
-        {
-            const double target_low = target_spec.xmin + target_width * static_cast<double>(target_bin);
-            const double target_high = target_low + target_width;
-
-            for (int source_bin = 0; source_bin < source_nbins; ++source_bin)
-            {
-                const double source_low = source_xmin + source_width * static_cast<double>(source_bin);
-                const double source_high = source_low + source_width;
-                const double overlap = std::max(0.0, std::min(source_high, target_high) - std::max(source_low, target_low));
-                if (overlap > 0.0)
-                    target[static_cast<std::size_t>(target_bin)] += source[static_cast<std::size_t>(source_bin)] * (overlap / source_width);
-            }
-        }
-        return target;
-#endif
     }
 
     std::vector<std::vector<double>> rebin_detector_templates(const CacheEntry &entry,
@@ -349,7 +323,6 @@ namespace
         out.assign(static_cast<std::size_t>(entry.detector_template_count),
                    std::vector<double>(static_cast<std::size_t>(target_spec.nbins), 0.0));
 
-#if defined(AMARANTIN_HAVE_EIGEN)
         const MatrixRowMajor rebin = build_rebin_matrix(entry.spec.nbins,
                                                         entry.spec.xmin,
                                                         entry.spec.xmax,
@@ -365,18 +338,6 @@ namespace
             for (int col = 0; col < target_spec.nbins; ++col)
                 out[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)] = rebinned(row, col);
         }
-#else
-        for (int row = 0; row < entry.detector_template_count; ++row)
-        {
-            const std::vector<double> source(entry.detector_templates.begin() + row * entry.spec.nbins,
-                                             entry.detector_templates.begin() + (row + 1) * entry.spec.nbins);
-            out[static_cast<std::size_t>(row)] = rebin_vector(source,
-                                                              entry.spec.nbins,
-                                                              entry.spec.xmin,
-                                                              entry.spec.xmax,
-                                                              target_spec);
-        }
-#endif
         return out;
     }
 
@@ -415,7 +376,6 @@ namespace
         if (family.n_universes == 0)
             return out;
 
-#if defined(AMARANTIN_HAVE_EIGEN)
         const Eigen::Map<const MatrixRowMajor> universes(family.histograms.data(),
                                                          nbins,
                                                          static_cast<Eigen::Index>(family.n_universes));
@@ -475,20 +435,6 @@ namespace
                     out.eigenmodes[static_cast<std::size_t>(row * selected.size() + col)] = mode(row);
             }
         }
-#else
-        for (int row = 0; row < nbins; ++row)
-        {
-            const std::size_t row_offset = static_cast<std::size_t>(row) * family.n_universes;
-            double variance = 0.0;
-            for (std::size_t universe = 0; universe < family.n_universes; ++universe)
-            {
-                const double delta = family.histograms[row_offset + universe] - nominal[static_cast<std::size_t>(row)];
-                variance += delta * delta;
-            }
-            out.sigma[static_cast<std::size_t>(row)] =
-                std::sqrt(variance / static_cast<double>(family.n_universes));
-        }
-#endif
         return out;
     }
 
@@ -619,7 +565,6 @@ namespace
 
         if (!family.eigenmodes.empty() && family.eigen_rank > 0)
         {
-#if defined(AMARANTIN_HAVE_EIGEN)
             const MatrixRowMajor rebin = build_rebin_matrix(entry.spec.nbins,
                                                             entry.spec.xmin,
                                                             entry.spec.xmax,
@@ -653,19 +598,9 @@ namespace
                         out.covariance[static_cast<std::size_t>(row * target_spec.nbins + col)] = covariance(row, col);
                 }
             }
-#else
-            out.sigma = rebin_vector(family.sigma, entry.spec.nbins, entry.spec.xmin, entry.spec.xmax, target_spec);
-            if (build_full_covariance)
-                out.covariance = rebin_vector(family.covariance,
-                                              entry.spec.nbins * entry.spec.nbins,
-                                              0.0,
-                                              static_cast<double>(entry.spec.nbins * entry.spec.nbins),
-                                              target_spec);
-#endif
         }
         else if (!family.covariance.empty())
         {
-#if defined(AMARANTIN_HAVE_EIGEN)
             const MatrixRowMajor rebin = build_rebin_matrix(entry.spec.nbins,
                                                             entry.spec.xmin,
                                                             entry.spec.xmax,
@@ -684,11 +619,6 @@ namespace
                 for (int col = 0; col < target_spec.nbins; ++col)
                     out.covariance[static_cast<std::size_t>(row * target_spec.nbins + col)] = rebinned(row, col);
             }
-#else
-            out.sigma = rebin_vector(family.sigma, entry.spec.nbins, entry.spec.xmin, entry.spec.xmax, target_spec);
-            if (build_full_covariance)
-                out.covariance = family.covariance;
-#endif
         }
         else
         {
