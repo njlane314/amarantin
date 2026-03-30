@@ -29,6 +29,7 @@ namespace
         double tolerance = 1e-4;
         bool compute_stat_only_interval = true;
         bool run_hesse = true;
+        bool allow_zero_data = false;
     };
 
     void print_usage(std::ostream &os)
@@ -38,6 +39,7 @@ namespace
               "[--max-iterations <n>] [--max-function-calls <n>] "
               "[--scan-points <n>] [--strategy <n>] [--print-level <n>] "
               "[--tolerance <value>] [--no-stat-interval] [--no-hesse] "
+              "[--allow-zero-data] "
               "<input.channels.root> <channel-key>\n";
     }
 
@@ -63,6 +65,16 @@ namespace
     const char *format_bool(bool value)
     {
         return value ? "true" : "false";
+    }
+
+    bool all_zero_bins(const std::vector<double> &values)
+    {
+        for (double value : values)
+        {
+            if (value != 0.0)
+                return false;
+        }
+        return true;
     }
 
     std::string format_report(const std::string &channel_path,
@@ -218,6 +230,11 @@ namespace
                 options.run_hesse = false;
                 continue;
             }
+            if (arg == "--allow-zero-data")
+            {
+                options.allow_zero_data = true;
+                continue;
+            }
             break;
         }
 
@@ -241,6 +258,11 @@ int main(int argc, char **argv)
 
         ChannelIO chio(options.channel_path, ChannelIO::Mode::kRead);
         const ChannelIO::Channel channel = chio.read(options.channel_key);
+        if (!options.allow_zero_data && all_zero_bins(channel.data))
+        {
+            throw std::runtime_error(
+                "mk_xsec_fit: observed bins are all zero; pass --allow-zero-data to fit an empty observation intentionally");
+        }
 
         fit::Problem problem =
             fit::make_independent_problem(channel, options.signal_process, options.mu_start, options.mu_upper);

@@ -126,7 +126,7 @@ Basic mk_channel usage
 
 General form:
 
-    build/bin/mk_channel [--selection <expr>] [--data-bins <csv>] [--signal-cache <key>] [--background-cache <key>] output.root input.dists.root signal-sample-key background-sample-key channel-key
+    build/bin/mk_channel [--selection <expr>] [--data-bins <csv>] [--signal-cache <key>] [--background-cache <key>] [--allow-zero-data] output.root input.dists.root signal-sample-key background-sample-key channel-key
 
 Example:
 
@@ -140,15 +140,17 @@ Example:
       muon_region
 
 The mk_channel program reads cached `DistributionIO` entries, checks that the
-signal and background inputs share common binning, and writes one persistent
-`ChannelIO` object with observed data bins plus per-process systematic payloads.
+signal and background inputs share common binning plus selection metadata, and
+writes one persistent `ChannelIO` object with observed data bins plus
+per-process systematic payloads. Observed bins are required unless
+`--allow-zero-data` is passed explicitly.
 
 Basic mk_xsec_fit usage
 -----------------------
 
 General form:
 
-    build/bin/mk_xsec_fit [--signal-process <name>] [--output <path>] [--mu-start <value>] [--mu-lower <value>] [--mu-upper <value>] input.channels.root channel-key
+    build/bin/mk_xsec_fit [--signal-process <name>] [--output <path>] [--mu-start <value>] [--mu-lower <value>] [--mu-upper <value>] [--allow-zero-data] input.channels.root channel-key
 
 Example:
 
@@ -160,6 +162,8 @@ Example:
 The mk_xsec_fit program reads one persistent `ChannelIO` object, builds the
 default signal-strength problem from the persisted nuisance payloads, profiles
 the signal-strength parameter `mu`, and prints or writes a plain-text report.
+If every observed bin is zero, the CLI now requires `--allow-zero-data` so an
+empty observation is an explicit choice rather than a missing-input accident.
 
 Creating a sample list
 ----------------------

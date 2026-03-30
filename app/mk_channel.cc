@@ -23,12 +23,14 @@ namespace
         std::string data_bins_csv;
         std::string signal_name = "signal";
         std::string background_name = "background";
+        bool allow_zero_data = false;
     };
 
     void print_usage(std::ostream &os)
     {
         os << "usage: mk_channel [--selection <expr>] [--data-bins <csv>] "
               "[--signal-cache <key>] [--background-cache <key>] "
+              "[--allow-zero-data] "
               "[--signal-name <name>] [--background-name <name>] "
               "<output.root> <input.dists.root> <signal-sample-key> "
               "<background-sample-key> <channel-key>\n";
@@ -57,10 +59,16 @@ namespace
         return keys.front();
     }
 
-    std::vector<double> parse_bins_csv(const std::string &csv, int expected_nbins)
+    std::vector<double> parse_bins_csv(const std::string &csv,
+                                       int expected_nbins,
+                                       bool allow_zero_data)
     {
         if (csv.empty())
+        {
+            if (!allow_zero_data)
+                throw std::runtime_error("mk_channel: data-bins is required unless --allow-zero-data is set");
             return std::vector<double>(static_cast<std::size_t>(expected_nbins), 0.0);
+        }
 
         std::vector<double> out;
         std::stringstream ss(csv);
@@ -77,8 +85,8 @@ namespace
         return out;
     }
 
-    void require_matching_binning(const DistributionIO::Entry &signal,
-                                  const DistributionIO::Entry &background)
+    void require_matching_inputs(const DistributionIO::Entry &signal,
+                                 const DistributionIO::Entry &background)
     {
         if (signal.spec.nbins != background.spec.nbins ||
             signal.spec.xmin != background.spec.xmin ||
@@ -89,6 +97,24 @@ namespace
 
         if (signal.spec.branch_expr != background.spec.branch_expr)
             throw std::runtime_error("mk_channel: signal and background caches do not share branch_expr");
+        if (signal.spec.selection_expr != background.spec.selection_expr)
+            throw std::runtime_error("mk_channel: signal and background caches do not share selection_expr");
+    }
+
+    std::string resolve_selection_expr(const DistributionIO::Entry &signal,
+                                       const DistributionIO::Entry &background,
+                                       const std::string &requested)
+    {
+        require_matching_inputs(signal, background);
+
+        const std::string &cached = signal.spec.selection_expr;
+        if (requested.empty())
+            return cached;
+        if (cached.empty())
+            return requested;
+        if (requested != cached)
+            throw std::runtime_error("mk_channel: requested selection does not match cached distributions");
+        return cached;
     }
 
     ChannelIO::Process make_process(const DistributionIO::Entry &entry,
@@ -168,6 +194,11 @@ namespace
                 options.background_name = argv[i] ? argv[i] : "";
                 continue;
             }
+            if (arg == "--allow-zero-data")
+            {
+                options.allow_zero_data = true;
+                continue;
+            }
             break;
         }
 
@@ -205,18 +236,17 @@ int main(int argc, char **argv)
                                      options.background_sample_key,
                                      options.background_cache_key));
 
-        require_matching_binning(signal, background);
-
         ChannelIO::Channel channel;
         channel.spec.channel_key = options.channel_key;
         channel.spec.branch_expr = signal.spec.branch_expr;
-        channel.spec.selection_expr = options.selection_expr.empty()
-                                          ? signal.spec.selection_expr
-                                          : options.selection_expr;
+        channel.spec.selection_expr =
+            resolve_selection_expr(signal, background, options.selection_expr);
         channel.spec.nbins = signal.spec.nbins;
         channel.spec.xmin = signal.spec.xmin;
         channel.spec.xmax = signal.spec.xmax;
-        channel.data = parse_bins_csv(options.data_bins_csv, signal.spec.nbins);
+        channel.data = parse_bins_csv(options.data_bins_csv,
+                                      signal.spec.nbins,
+                                      options.allow_zero_data);
         channel.processes.push_back(
             make_process(signal, options.signal_name, ChannelIO::ProcessKind::kSignal));
         channel.processes.push_back(

@@ -151,7 +151,9 @@ Channel workflow
 ----------------
 Build one persistent ChannelIO file directly from cached signal/background
 distributions
-  build/bin/mk_channel output.channels.root output.dists.root beam-s0 beam-bkg muon_region
+  build/bin/mk_channel \
+    --data-bins "12,10,9,7,6,5,4,3,2,1" \
+    output.channels.root output.dists.root beam-s0 beam-bkg muon_region
 
 Build one ChannelIO file with explicit selection text and observed bins
   build/bin/mk_channel \
@@ -163,6 +165,9 @@ Fit workflow
 ------------
 Run one native xsec fit directly from ChannelIO and print the fit report
   build/bin/mk_xsec_fit output.channels.root muon_region
+
+If the channel intentionally carries an all-zero observed spectrum
+  build/bin/mk_xsec_fit --allow-zero-data output.channels.root muon_region
 
 Run one native xsec fit with explicit signal process and write a text report
   build/bin/mk_xsec_fit \

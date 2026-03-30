@@ -193,7 +193,7 @@ namespace
             return "detector:" + process.detector_sample_keys[static_cast<std::size_t>(template_index)];
         }
 
-        return "detector:template" + std::to_string(template_index);
+        return "detector:" + process.name + ":template" + std::to_string(template_index);
     }
 
     std::string detector_group_name(const ChannelIO::Process &process)
@@ -914,37 +914,26 @@ namespace fit
         validate_problem(problem);
 
         ProfilePoint best_point = minimise_joint(problem, options);
-        ProfilePoint best_profile = minimise_at_mu(problem,
-                                                   best_point.mu,
-                                                   best_point.nuisance_values,
-                                                   options);
-        best_profile.parameter_names = best_point.parameter_names;
-        best_profile.parameter_values = best_point.parameter_values;
-        best_profile.covariance = best_point.covariance;
-        best_profile.converged = best_point.converged && best_profile.converged;
-        best_profile.minimizer_status = best_point.minimizer_status;
-        best_profile.edm = best_point.edm;
-        best_profile.mu = best_point.mu;
 
         const IntervalEstimate total_up =
-            scan_crossing(problem, options, best_profile, true, false);
+            scan_crossing(problem, options, best_point, true, false);
         const IntervalEstimate total_down =
-            scan_crossing(problem, options, best_profile, false, false);
+            scan_crossing(problem, options, best_point, false, false);
 
         IntervalEstimate stat_up;
         IntervalEstimate stat_down;
         if (options.compute_stat_only_interval)
         {
-            stat_up = scan_crossing(problem, options, best_profile, true, true);
-            stat_down = scan_crossing(problem, options, best_profile, false, true);
+            stat_up = scan_crossing(problem, options, best_point, true, true);
+            stat_down = scan_crossing(problem, options, best_point, false, true);
         }
 
         Result out;
-        out.converged = best_profile.converged;
-        out.minimizer_status = best_profile.minimizer_status;
-        out.edm = best_profile.edm;
-        out.objective = best_profile.objective;
-        out.mu_hat = best_profile.mu;
+        out.converged = best_point.converged;
+        out.minimizer_status = best_point.minimizer_status;
+        out.edm = best_point.edm;
+        out.objective = best_point.objective;
+        out.mu_hat = best_point.mu;
         out.mu_err_total_up = total_up.error;
         out.mu_err_total_down = total_down.error;
         out.mu_err_stat_up = stat_up.error;
@@ -953,18 +942,18 @@ namespace fit
         out.mu_err_total_down_found = total_down.found;
         out.mu_err_stat_up_found = stat_up.found;
         out.mu_err_stat_down_found = stat_down.found;
-        out.nuisance_values = best_profile.nuisance_values;
-        out.parameter_names = best_profile.parameter_names;
-        out.parameter_values = best_profile.parameter_values;
-        out.covariance = best_profile.covariance;
+        out.nuisance_values = best_point.nuisance_values;
+        out.parameter_names = best_point.parameter_names;
+        out.parameter_values = best_point.parameter_values;
+        out.covariance = best_point.covariance;
 
         out.nuisance_names.reserve(problem.nuisances.size());
         for (const auto &nuisance : problem.nuisances)
             out.nuisance_names.push_back(nuisance.name);
 
         accumulate_prediction(problem,
-                              best_profile.mu,
-                              best_profile.nuisance_values.data(),
+                              best_point.mu,
+                              best_point.nuisance_values.data(),
                               out.predicted_signal,
                               out.predicted_background,
                               out.predicted_total);
