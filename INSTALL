@@ -3,166 +3,172 @@ amarantin installation
 
 Overview
 --------
+amarantin is a C++17 / ROOT project for building and processing ROOT-based
+sample, dataset, and event-list containers.
 
-amarantin is a small C++ and ROOT library plus one CLI for building ROOT
-sample containers from text lists of input ROOT files.
-
-This project is expected to build in two environments.
-
-The first is on the uBooNE GPVMs using the provided .container.sh and .setup.sh
-scripts.
-
-The second is in the Docker-based portable development container.
+The supported installation path documented here is the CMake build. Older
+build artifacts may still exist in the tree, but they are not the primary
+path described below.
 
 Repository layout
 -----------------
+io/         Core I/O library
+ana/        Analysis-side helpers and event-list construction
+syst/       Systematics cache construction
+plot/       Plotting library
+app/        Command-line tools
+tools/      Helper scripts
+cmake/      CMake package config template
+Dockerfile  Portable development container
 
-io/
-  Main library sources and headers
+What gets built
+---------------
+Libraries
+  * IO
+  * Ana
+  * Syst
+  * Plot
 
-app/
-  CLI entry point for mk_sample
+Executables
+  * mk_sample
+  * mk_dataset
+  * mk_eventlist
 
-tools/
-  Helper scripts such as sample-list generation
-
-cmake/
-  Installed package config template for downstream CMake consumers
-
-Dependencies
-------------
-
+Prerequisites
+-------------
 Required
-  CMake 3.16 or newer
-  C++17 compiler
-  ROOT
-  SQLite3 development files
+  * CMake 3.16 or newer
+  * C++17 compiler
+  * ROOT
+  * SQLite3 development files
 
 Optional
-  nlohmann_json headers, only if needed by your local build
+  * nlohmann_json headers or package
 
-GPVM and Fermilab container workflow
-------------------------------------
+ROOT may be provided either as a CMake package via `ROOT_DIR` or via
+`root-config` on `PATH`.
 
-The intended native environment is the Fermilab stack. The repository includes
-.container.sh and .setup.sh.
+Quick start
+-----------
+Out-of-source builds are required.
 
-Typical usage on a GPVM is:
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+  cmake --build build --parallel
 
-    source ./.container.sh
-
-This drops you into the expected container environment. Inside that
-environment, run:
-
-    source ./.setup.sh
-
-Then configure and build from the repository root:
-
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-    cmake --build build --parallel
-
-If you want to install into a local prefix:
-
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$PWD/install
-    cmake --build build --parallel
-    cmake --install build
-
-Portable Docker workflow
-------------------------
-
-Build the development image from the repository root:
-
-    docker build -t amarantin-dev .
-
-Run the repository inside the container:
-
-    docker run --rm -it -v "$PWD":/work -w /work amarantin-dev
-
-Then configure and build:
-
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-    cmake --build build --parallel
-
-One-shot build without opening a shell:
-
-    docker run --rm -v "$PWD":/work -w /work amarantin-dev \
-      cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-
-    docker run --rm -v "$PWD":/work -w /work amarantin-dev \
-      cmake --build build --parallel
-
-Portable Docker workflow has been verified with this repository. The current
-Docker image uses an amd64 ROOT base image. On arm64 hosts, Docker may build
-and run it under emulation.
-
-Configuration notes
--------------------
-
-Use an out-of-source build:
-
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-    cmake --build build --parallel
-
-To build only the library and skip mk_sample:
-
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAMARANTIN_BUILD_APP=OFF
-
-ROOT is located in one of two ways.
-
-If ROOT_DIR is set, CMake uses the ROOT CMake package.
-
-Otherwise, if root-config is on PATH, the build uses root-config directly.
-
-If ROOT is not discovered automatically and you have a working ROOT CMake
-package, run:
-
-    cmake -S . -B build -DROOT_DIR=/path/to/directory/containing/ROOTConfig.cmake
-
-If nlohmann_json headers are needed but no CMake package is available, run:
-
-    cmake -S . -B build -DNLOHMANN_JSON_INC=/path/to/include
+Build only selected targets
+---------------------------
+  cmake --build build --target IO
+  cmake --build build --target Ana
+  cmake --build build --target Syst
+  cmake --build build --target Plot
+  cmake --build build --target mk_sample
+  cmake --build build --target mk_dataset
+  cmake --build build --target mk_eventlist
 
 Install
 -------
+Install into the configured prefix:
 
-Install from an existing build tree:
+  cmake --install build
 
-    cmake --install build
+Install into a local prefix:
 
-To stage into a local prefix:
+  cmake -S . -B build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$PWD/install"
+  cmake --build build --parallel
+  cmake --install build
 
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$PWD/install
-    cmake --build build --parallel
-    cmake --install build
+GPVM / Fermilab workflow
+------------------------
+On supported Fermilab systems, the repository provides helper scripts for the
+expected container and product setup:
+
+  source ./.container.sh
+  source ./.setup.sh
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+  cmake --build build --parallel
+
+Docker workflow
+---------------
+Build the portable development image from the repository root:
+
+  docker build -t amarantin-dev .
+
+Open a shell in the container:
+
+  docker run --rm -it -v "$PWD":/work -w /work amarantin-dev bash
+
+Then configure and build inside the container:
+
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+  cmake --build build --parallel
+
+Configuration notes
+-------------------
+ROOT discovery
+  Preferred:
+    cmake -S . -B build -DROOT_DIR=/path/to/dir/containing/ROOTConfig.cmake
+
+  Fallback:
+    Put root-config on PATH before running CMake.
+
+Optional JSON headers
+  If nlohmann_json is needed but no CMake package is available:
+
+    cmake -S . -B build -DNLOHMANN_JSON_INC=/path/to/include
+
+Applications
+  The command-line tools are built by default. To build the libraries without
+  the applications:
+
+    cmake -S . -B build -DAMARANTIN_BUILD_APP=OFF
 
 Installed files
 ---------------
+Typical installed outputs are:
 
-    ${prefix}/lib/libIO.so
-    ${prefix}/bin/mk_sample
-    ${prefix}/include/amarantin/*.hh
-    ${prefix}/lib/cmake/amarantin/amarantinConfig.cmake
+  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_sample
+  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dataset
+  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_eventlist
+  ${prefix}/${CMAKE_INSTALL_LIBDIR}/libIO.<shared-library>
+  ${prefix}/${CMAKE_INSTALL_LIBDIR}/libAna.<shared-library>
+  ${prefix}/${CMAKE_INSTALL_LIBDIR}/libSyst.<shared-library>
+  ${prefix}/${CMAKE_INSTALL_LIBDIR}/libPlot.<shared-library>
+  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/*.hh
+  ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfig.cmake
+  ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfigVersion.cmake
+  ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinTargets.cmake
 
 Downstream CMake use
 --------------------
+  find_package(amarantin CONFIG REQUIRED)
 
-    find_package(amarantin CONFIG REQUIRED)
-    target_link_libraries(your_target PRIVATE amarantin::IO)
+  target_link_libraries(your_target PRIVATE amarantin::IO)
+  # or
+  target_link_libraries(your_target PRIVATE amarantin::Ana)
+  # or
+  target_link_libraries(your_target PRIVATE amarantin::Syst)
+  # or
+  target_link_libraries(your_target PRIVATE amarantin::Plot)
 
-CLI
----
+Verification
+------------
+After a successful build, the build tree should contain:
 
-The main executable is mk_sample:
+  build/bin/mk_sample
+  build/bin/mk_dataset
+  build/bin/mk_eventlist
+  build/lib/
 
-    build/bin/mk_sample [--run-db <path>] <output.root> <input.list> [origin] [variation] [beam] [polarity]
+A simple smoke test is:
 
-Notes
------
+  build/bin/mk_sample --help
 
-Running mk_sample with no arguments prints its usage string.
+Runtime note for mk_sample
+--------------------------
+mk_sample accepts an optional SQLite run database path via `--run-db PATH`.
+If `--run-db` is not provided, it checks `AMARANTIN_RUN_DB`. If that is
+unset, it falls back to:
 
-SampleIO uses the beam database in one of two ways.
-
-If AMARANTIN_RUN_DB is set, that path is used.
-
-Otherwise it falls back to /exp/uboone/data/uboonebeam/beamdb/run.db.
+  /exp/uboone/data/uboonebeam/beamdb/run.db
