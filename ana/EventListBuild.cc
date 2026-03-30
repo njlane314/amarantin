@@ -1,6 +1,7 @@
-#include "EventListBuilder.hh"
+#include "EventListBuild.hh"
 
-#include "AnalysisChannels.hh"
+#include "Cuts.hh"
+#include "Channels.hh"
 
 #include <cmath>
 #include <limits>
@@ -20,6 +21,15 @@ namespace
     constexpr const char *kEventWeightSquaredBranch = "__w2__";
     constexpr const char *kAnalysisChannelBranch = "__analysis_channel__";
     constexpr const char *kSignalBranch = "__is_signal__";
+
+    cuts::Config cuts_config_for(const ana::BuildConfig &config)
+    {
+        cuts::Config cuts_config;
+        cuts_config.slice_required_count = config.slice_required_count;
+        cuts_config.slice_min_topology_score = config.slice_min_topology_score;
+        cuts_config.numi_run_boundary = config.numi_run_boundary;
+        return cuts_config;
+    }
 
     const char *orthogonal_selection_for_sample(const DatasetIO::Sample &sample)
     {
@@ -74,15 +84,15 @@ namespace
     }
 
     std::unique_ptr<TTreeFormula> make_optional_formula(const char *name,
-                                                        eventlist_selection::Preset preset,
+                                                        cuts::Preset preset,
                                                         const DatasetIO::Sample &sample,
                                                         const std::vector<std::string> &columns,
-                                                        const eventlist_selection::Config &config,
+                                                        const cuts::Config &config,
                                                         TChain &chain)
     {
         try
         {
-            const std::string expr = eventlist_selection::expression(preset, sample, columns, config);
+            const std::string expr = cuts::expression(preset, sample, columns, config);
             if (expr.empty())
                 return nullptr;
             return std::unique_ptr<TTreeFormula>(new TTreeFormula(name, expr.c_str(), &chain));
@@ -212,7 +222,7 @@ namespace
     std::unique_ptr<TTree> copy_selected_tree(const DatasetIO::Sample &sample,
                                               const std::string &event_tree_name,
                                               const std::string &selection_expr,
-                                              const EventListSelection::Config &selection_config)
+                                              const cuts::Config &cuts_config)
     {
         TChain chain(event_tree_name.c_str());
         for (const auto &path : sample.root_files)
@@ -245,31 +255,31 @@ namespace
         const std::vector<std::string> columns = branch_names(first_tree);
         std::unique_ptr<TTreeFormula> pass_trigger_formula =
             make_optional_formula("eventlist_pass_trigger",
-                                  eventlist_selection::Preset::kTrigger,
+                                  cuts::Preset::kTrigger,
                                   sample,
                                   columns,
-                                  selection_config,
+                                  cuts_config,
                                   chain);
         std::unique_ptr<TTreeFormula> pass_slice_formula =
             make_optional_formula("eventlist_pass_slice",
-                                  eventlist_selection::Preset::kSlice,
+                                  cuts::Preset::kSlice,
                                   sample,
                                   columns,
-                                  selection_config,
+                                  cuts_config,
                                   chain);
         std::unique_ptr<TTreeFormula> pass_fiducial_formula =
             make_optional_formula("eventlist_pass_fiducial",
-                                  eventlist_selection::Preset::kFiducial,
+                                  cuts::Preset::kFiducial,
                                   sample,
                                   columns,
-                                  selection_config,
+                                  cuts_config,
                                   chain);
         std::unique_ptr<TTreeFormula> pass_muon_formula =
             make_optional_formula("eventlist_pass_muon",
-                                  eventlist_selection::Preset::kMuon,
+                                  cuts::Preset::kMuon,
                                   sample,
                                   columns,
-                                  selection_config,
+                                  cuts_config,
                                   chain);
 
         float weight_spline = 1.0f;
@@ -342,7 +352,7 @@ namespace
         bool pass_slice = false;
         bool pass_fiducial = false;
         bool pass_muon = false;
-        int analysis_channel = analysis_channels::to_int(analysis_channels::Channel::kUnknown);
+        int analysis_channel = channels::to_int(channels::Channel::kUnknown);
         bool is_signal = false;
         selected->Branch(kEventWeightBranch, &event_weight, (std::string(kEventWeightBranch) + "/D").c_str());
         selected->Branch(kEventWeightSquaredBranch,
@@ -354,14 +364,14 @@ namespace
         selected->Branch(kSignalBranch,
                          &is_signal,
                          (std::string(kSignalBranch) + "/O").c_str());
-        selected->Branch(eventlist_selection::trigger_branch(), &pass_trigger,
-                         (std::string(eventlist_selection::trigger_branch()) + "/O").c_str());
-        selected->Branch(eventlist_selection::slice_branch(), &pass_slice,
-                         (std::string(eventlist_selection::slice_branch()) + "/O").c_str());
-        selected->Branch(eventlist_selection::fiducial_branch(), &pass_fiducial,
-                         (std::string(eventlist_selection::fiducial_branch()) + "/O").c_str());
-        selected->Branch(eventlist_selection::muon_branch(), &pass_muon,
-                         (std::string(eventlist_selection::muon_branch()) + "/O").c_str());
+        selected->Branch(cuts::trigger_branch(), &pass_trigger,
+                         (std::string(cuts::trigger_branch()) + "/O").c_str());
+        selected->Branch(cuts::slice_branch(), &pass_slice,
+                         (std::string(cuts::slice_branch()) + "/O").c_str());
+        selected->Branch(cuts::fiducial_branch(), &pass_fiducial,
+                         (std::string(cuts::fiducial_branch()) + "/O").c_str());
+        selected->Branch(cuts::muon_branch(), &pass_muon,
+                         (std::string(cuts::muon_branch()) + "/O").c_str());
 
         int current_tree_number = -1;
         const Long64_t n_entries = chain.GetEntries();
@@ -403,45 +413,45 @@ namespace
 
                 if (is_data_origin(sample))
                 {
-                    analysis_channel = analysis_channels::to_int(analysis_channels::Channel::kDataInclusive);
+                    analysis_channel = channels::to_int(channels::Channel::kDataInclusive);
                     is_signal = false;
                 }
                 else if (is_external_origin(sample))
                 {
-                    analysis_channel = analysis_channels::to_int(analysis_channels::Channel::kExternal);
+                    analysis_channel = channels::to_int(channels::Channel::kExternal);
                     is_signal = false;
                 }
                 else if (is_mc_origin(sample))
                 {
-                    is_signal = analysis_channels::is_signal(is_nu_mu_cc,
-                                                             int_ccnc,
-                                                             truth_in_fiducial,
-                                                             lambda_pdg,
-                                                             mu_p,
-                                                             proton_p,
-                                                             pion_p,
-                                                             lambda_decay_sep);
-                    analysis_channel = analysis_channels::to_int(
-                        analysis_channels::classify(truth_in_fiducial,
-                                                    nu_pdg,
+                    is_signal = channels::is_signal(is_nu_mu_cc,
                                                     int_ccnc,
-                                                    n_protons,
-                                                    n_pi_minus,
-                                                    n_pi_plus,
-                                                    n_pi0,
-                                                    n_gamma,
-                                                    n_k0,
-                                                    n_sigma0,
-                                                    is_nu_mu_cc,
+                                                    truth_in_fiducial,
                                                     lambda_pdg,
                                                     mu_p,
                                                     proton_p,
                                                     pion_p,
-                                                    lambda_decay_sep));
+                                                    lambda_decay_sep);
+                    analysis_channel = channels::to_int(
+                        channels::classify(truth_in_fiducial,
+                                           nu_pdg,
+                                           int_ccnc,
+                                           n_protons,
+                                           n_pi_minus,
+                                           n_pi_plus,
+                                           n_pi0,
+                                           n_gamma,
+                                           n_k0,
+                                           n_sigma0,
+                                           is_nu_mu_cc,
+                                           lambda_pdg,
+                                           mu_p,
+                                           proton_p,
+                                           pion_p,
+                                           lambda_decay_sep));
                 }
                 else
                 {
-                    analysis_channel = analysis_channels::to_int(analysis_channels::Channel::kUnknown);
+                    analysis_channel = channels::to_int(channels::Channel::kUnknown);
                     is_signal = false;
                 }
 
@@ -485,7 +495,7 @@ namespace ana
 {
     void build_event_list(const DatasetIO &dataset,
                           EventListIO &event_list,
-                          const EventListConfig &config)
+                          const BuildConfig &config)
     {
         if (config.event_tree_name.empty())
             throw std::runtime_error("ana::build_event_list: event_tree_name must not be empty");
@@ -494,6 +504,8 @@ namespace ana
         if (config.selection_expr.empty() && config.selection_name.empty())
             throw std::runtime_error("ana::build_event_list: selection_expr must not be empty");
 
+        const cuts::Config cuts_config = cuts_config_for(config);
+
         EventListIO::Metadata metadata;
         metadata.dataset_path = dataset.path();
         metadata.dataset_context = dataset.context();
@@ -501,9 +513,9 @@ namespace ana
         metadata.subrun_tree_name = config.subrun_tree_name;
         metadata.selection_name = config.selection_name;
         metadata.selection_expr = config.selection_expr;
-        metadata.slice_required_count = config.selection_config.slice_required_count;
-        metadata.slice_min_topology_score = config.selection_config.slice_min_topology_score;
-        metadata.numi_run_boundary = config.selection_config.numi_run_boundary;
+        metadata.slice_required_count = cuts_config.slice_required_count;
+        metadata.slice_min_topology_score = cuts_config.slice_min_topology_score;
+        metadata.numi_run_boundary = cuts_config.numi_run_boundary;
         event_list.write_metadata(metadata);
 
         for (const auto &key : dataset.sample_keys())
@@ -525,18 +537,17 @@ namespace ana
                     preview_chain.LoadTree(0);
                     preview_tree = preview_chain.GetTree();
                 }
-                effective_selection_expr = eventlist_selection::expression(
-                    eventlist_selection::preset_from_string(config.selection_name),
-                    sample,
-                    branch_names(preview_tree),
-                    config.selection_config);
+                effective_selection_expr = cuts::expression(cuts::preset_from_string(config.selection_name),
+                                                            sample,
+                                                            branch_names(preview_tree),
+                                                            cuts_config);
             }
 
             std::unique_ptr<TTree> selected =
                 copy_selected_tree(sample,
                                    config.event_tree_name,
                                    effective_selection_expr,
-                                   config.selection_config);
+                                   cuts_config);
             std::unique_ptr<TTree> subruns =
                 copy_subrun_tree(sample, config.subrun_tree_name);
 

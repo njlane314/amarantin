@@ -64,11 +64,8 @@ Prefer the style already present in:
 3. Flatten wrapper layers in non-installed code before adding new abstraction.
 
 ### Medium risk
-1. Audit static-only public utility headers such as:
-   - `ana/SnapshotService.hh`
-   - `ana/EventListSelection.hh`
-   - `ana/AnalysisChannels.hh`
-2. Only change those APIs if a migration is explicitly approved.
+1. Keep `ana/` focused on build-time transforms rather than downstream helper sprawl.
+2. Prefer `EventListIO`-first downstream APIs in `plot/` and `syst/`.
 
 ### Lower priority
 - broad redesign in `plot/` or `syst/`

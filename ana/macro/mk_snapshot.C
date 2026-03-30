@@ -38,7 +38,7 @@ void mk_snapshot(const char *read_path = nullptr,
         spec.columns = split_csv(columns_csv);
         spec.selection = (selection && *selection) ? selection : "true";
         spec.tree_name = "train";
-        const auto count = snapshot::snapshot_merged(event_list, out_path, spec);
+        const auto count = snapshot::merged(event_list, out_path, spec);
         std::cout << "snapshot entries=" << count << "\n";
     });
 }

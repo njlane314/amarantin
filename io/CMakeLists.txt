@@ -2,7 +2,7 @@ set(AMARANTIN_IO_SOURCES
   InputPartitionIO.cc
   DatasetIO.cc
   EventListIO.cc
-  detail/RunDatabaseService.cc
+  bits/RunDatabaseService.cc
   SampleIO.cc
 )
 
@@ -14,8 +14,8 @@ set(AMARANTIN_IO_PUBLIC_HEADERS
 )
 
 set(AMARANTIN_IO_INTERNAL_HEADERS
-  detail/RootUtils.hh
-  detail/RunDatabaseService.hh
+  bits/RootUtils.hh
+  bits/RunDatabaseService.hh
 )
 
 add_library(IO SHARED
@@ -31,7 +31,7 @@ target_include_directories(IO
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/amarantin>
   PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/detail
+    ${CMAKE_CURRENT_SOURCE_DIR}/bits
 )
 
 target_link_libraries(IO

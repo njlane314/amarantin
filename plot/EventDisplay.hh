@@ -203,6 +203,36 @@ namespace plot_utils
         }
     }
 
+    inline TCanvas *draw_event_display(const EventListIO &eventlist,
+                                       const char *sample_key,
+                                       Long64_t entry,
+                                       const char *plane,
+                                       const char *mode_name = "detector",
+                                       int grid_w = 0,
+                                       int grid_h = 0)
+    {
+        if (!sample_key || !*sample_key)
+            throw std::runtime_error("plot_utils::draw_event_display: sample_key is required");
+        if (!plane || !*plane)
+            throw std::runtime_error("plot_utils::draw_event_display: plane is required");
+
+        const std::string mode_text = (mode_name && *mode_name) ? std::string(mode_name) : std::string("detector");
+        const EventDisplay::Mode mode =
+            (mode_text == "semantic")
+                ? EventDisplay::Mode::kSemantic
+                : EventDisplay::Mode::kDetector;
+
+        return event_display::draw_one(eventlist,
+                                       sample_key,
+                                       entry,
+                                       plane,
+                                       mode,
+                                       event_display::Branches{},
+                                       EventDisplay::Options{},
+                                       grid_w,
+                                       grid_h);
+    }
+
     inline TCanvas *draw_event_display(const char *read_path,
                                        const char *sample_key,
                                        Long64_t entry,
@@ -218,22 +248,14 @@ namespace plot_utils
         if (!plane || !*plane)
             throw std::runtime_error("plot_utils::draw_event_display: plane is required");
 
-        const std::string mode_text = (mode_name && *mode_name) ? std::string(mode_name) : std::string("detector");
-        const EventDisplay::Mode mode =
-            (mode_text == "semantic")
-                ? EventDisplay::Mode::kSemantic
-                : EventDisplay::Mode::kDetector;
-
         EventListIO eventlist(read_path, EventListIO::Mode::kRead);
-        return event_display::draw_one(eventlist,
-                                       sample_key,
-                                       entry,
-                                       plane,
-                                       mode,
-                                       event_display::Branches{},
-                                       EventDisplay::Options{},
-                                       grid_w,
-                                       grid_h);
+        return draw_event_display(eventlist,
+                                  sample_key,
+                                  entry,
+                                  plane,
+                                  mode_name,
+                                  grid_w,
+                                  grid_h);
     }
 }
 

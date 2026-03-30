@@ -30,7 +30,7 @@ is cheap to change.
 
 6. Keep module layout flat.
    Within each library, keep public headers and their main `.cc` files
-   together in the module root. Use a small `detail/` subdirectory only for
+   together in the module root. Use a small `bits/` subdirectory only for
    shared private helpers. Avoid `include/` + `src/` directory ceremony unless
    the module genuinely outgrows the flat layout.
 
@@ -58,6 +58,10 @@ The preferred flow is:
 3. persist selected content with `EventListIO`
 4. build derived systematic caches with `syst`
 5. load and render with `plot`
+
+Downstream code should usually open `EventListIO` and stay on that surface.
+`ana` produces `EventListIO`; it should not remain on the hot path for normal
+plotting or systematic evaluation.
 
 The file classes should stay usable without pulling in the full analysis stack.
 

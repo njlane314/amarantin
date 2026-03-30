@@ -1,10 +1,7 @@
 #include "SampleDef.hh"
 
-#include "EventListIO.hh"
-
 #include <algorithm>
 #include <fstream>
-#include <iterator>
 #include <sstream>
 #include <stdexcept>
 
@@ -46,11 +43,6 @@ namespace
         if (it == defs.end())
             throw std::runtime_error("SampleDef: missing definition for sample key: " + key);
         return *it;
-    }
-
-    std::string nominal_or_key(const std::string &key, const DatasetIO::Sample &sample)
-    {
-        return sample.nominal.empty() ? key : sample.nominal;
     }
 }
 
@@ -115,29 +107,5 @@ namespace ana
                            DatasetIO::Sample &sample)
     {
         must_find_def(defs, key).apply(sample);
-    }
-
-    std::vector<std::string> detector_mates(const EventListIO &event_list,
-                                            const std::string &sample_key)
-    {
-        const DatasetIO::Sample seed = event_list.sample(sample_key);
-        const std::string seed_nominal = nominal_or_key(sample_key, seed);
-
-        std::vector<std::string> out;
-        for (const auto &key : event_list.sample_keys())
-        {
-            if (key == sample_key)
-                continue;
-
-            const DatasetIO::Sample sample = event_list.sample(key);
-            if (sample.variation != DatasetIO::Sample::Variation::kDetector)
-                continue;
-            if (nominal_or_key(key, sample) != seed_nominal)
-                continue;
-            out.push_back(key);
-        }
-
-        std::sort(out.begin(), out.end());
-        return out;
     }
 }

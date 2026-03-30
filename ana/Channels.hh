@@ -1,9 +1,9 @@
-#ifndef ANALYSIS_CHANNELS_HH
-#define ANALYSIS_CHANNELS_HH
+#ifndef CHANNELS_HH
+#define CHANNELS_HH
 
 #include <cmath>
 
-namespace analysis_channels
+namespace channels
 {
     enum class Channel
     {
@@ -113,69 +113,4 @@ namespace analysis_channels
     }
 }
 
-class AnalysisChannels
-{
-public:
-    using Channel = analysis_channels::Channel;
-
-    static int to_int(Channel channel)
-    {
-        return analysis_channels::to_int(channel);
-    }
-
-    static bool is_signal(bool is_nu_mu_cc,
-                          int ccnc,
-                          bool in_fiducial,
-                          int lambda_pdg,
-                          float mu_p,
-                          float proton_p,
-                          float pion_p,
-                          float lambda_decay_sep)
-    {
-        return analysis_channels::is_signal(is_nu_mu_cc,
-                                            ccnc,
-                                            in_fiducial,
-                                            lambda_pdg,
-                                            mu_p,
-                                            proton_p,
-                                            pion_p,
-                                            lambda_decay_sep);
-    }
-
-    static Channel classify(bool in_fiducial,
-                            int nu_pdg,
-                            int ccnc,
-                            int n_protons,
-                            int n_pi_minus,
-                            int n_pi_plus,
-                            int n_pi0,
-                            int n_gamma,
-                            int n_k0,
-                            int n_sigma0,
-                            bool is_nu_mu_cc,
-                            int lambda_pdg,
-                            float mu_p,
-                            float proton_p,
-                            float pion_p,
-                            float lambda_decay_sep)
-    {
-        return analysis_channels::classify(in_fiducial,
-                                           nu_pdg,
-                                           ccnc,
-                                           n_protons,
-                                           n_pi_minus,
-                                           n_pi_plus,
-                                           n_pi0,
-                                           n_gamma,
-                                           n_k0,
-                                           n_sigma0,
-                                           is_nu_mu_cc,
-                                           lambda_pdg,
-                                           mu_p,
-                                           proton_p,
-                                           pion_p,
-                                           lambda_decay_sep);
-    }
-};
-
-#endif // ANALYSIS_CHANNELS_HH
+#endif // CHANNELS_HH

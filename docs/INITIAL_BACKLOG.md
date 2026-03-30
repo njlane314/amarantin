@@ -25,15 +25,15 @@ Constraint:
 
 ## Tier 2: do after verification discipline is working
 
-### 3. Public utility-class audit
+### 3. Event-list boundary audit
 Audit:
-- `SnapshotService`
-- `EventListSelection`
-- `AnalysisChannels`
+- `Snapshot`
+- `EventListIO`
+- `Systematics`
 
 Why later:
-- these conflict with the repo's plain-data / namespace-function style
-- but they live in public installed headers, so migration risk is real
+- these define the downstream contract between `ana/`, `syst/`, and `plot/`
+- the payoff is high, but interface churn reaches multiple modules
 
 Constraint:
 - default to compatibility-preserving simplification unless a break is explicitly approved

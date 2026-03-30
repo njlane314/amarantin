@@ -1,7 +1,7 @@
 // SampleIO.cc
 #include "SampleIO.hh"
-#include "detail/RootUtils.hh"
-#include "detail/RunDatabaseService.hh"
+#include "bits/RootUtils.hh"
+#include "bits/RunDatabaseService.hh"
 
 #include <cstdlib>
 #include <fstream>

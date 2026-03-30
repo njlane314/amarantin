@@ -1,6 +1,7 @@
 #include "EventListIO.hh"
-#include "detail/RootUtils.hh"
+#include "bits/RootUtils.hh"
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -12,6 +13,11 @@
 
 namespace
 {
+    std::string nominal_or_key(const std::string &key, const DatasetIO::Sample &sample)
+    {
+        return sample.nominal.empty() ? key : sample.nominal;
+    }
+
     void write_sample_metadata(TDirectory *meta_dir, const DatasetIO::Sample &sample)
     {
         utils::write_named(meta_dir, "origin", DatasetIO::Sample::origin_name(sample.origin));
@@ -195,6 +201,31 @@ DatasetIO::Sample EventListIO::sample(const std::string &sample_key) const
     sample.campaign = utils::read_named_or(meta_dir, "campaign");
 
     return sample;
+}
+
+std::vector<std::string> EventListIO::detector_mates(const std::string &sample_key) const
+{
+    require_open_();
+
+    const DatasetIO::Sample seed = sample(sample_key);
+    const std::string seed_nominal = nominal_or_key(sample_key, seed);
+
+    std::vector<std::string> out;
+    for (const auto &key : sample_keys())
+    {
+        if (key == sample_key)
+            continue;
+
+        const DatasetIO::Sample candidate = sample(key);
+        if (candidate.variation != DatasetIO::Sample::Variation::kDetector)
+            continue;
+        if (nominal_or_key(key, candidate) != seed_nominal)
+            continue;
+        out.push_back(key);
+    }
+
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 TTree *EventListIO::selected_tree(const std::string &sample_key) const

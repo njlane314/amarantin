@@ -1,16 +1,14 @@
 set(AMARANTIN_ANA_SOURCES
-  EventListBuilder.cc
-  SnapshotService.cc
+  EventListBuild.cc
+  Snapshot.cc
   SampleDef.cc
-  EventListSelection.cc
+  Cuts.cc
 )
 
 set(AMARANTIN_ANA_PUBLIC_HEADERS
-  AnalysisChannels.hh
-  EventListBuilder.hh
-  EventListSelection.hh
+  EventListBuild.hh
   SampleDef.hh
-  SnapshotService.hh
+  Snapshot.hh
 )
 
 add_library(Ana SHARED

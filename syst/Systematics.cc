@@ -14,7 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include "SampleDef.hh"
 #include "TH1D.h"
 #include "TTree.h"
 #include "TTreeFormula.h"
@@ -185,7 +184,7 @@ namespace
     {
         if (!request.detector_sample_keys.empty())
             return request.detector_sample_keys;
-        return ana::detector_mates(eventlist, request.sample_key);
+        return eventlist.detector_mates(request.sample_key);
     }
 
     SampleComputation compute_sample(TTree *tree,

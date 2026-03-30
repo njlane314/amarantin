@@ -1,12 +1,12 @@
-#ifndef EVENTLIST_SELECTION_HH
-#define EVENTLIST_SELECTION_HH
+#ifndef CUTS_HH
+#define CUTS_HH
 
 #include <string>
 #include <vector>
 
 #include "DatasetIO.hh"
 
-namespace eventlist_selection
+namespace cuts
 {
     enum class Preset
     {
@@ -38,23 +38,4 @@ namespace eventlist_selection
                            const Config &config);
 }
 
-class EventListSelection
-{
-public:
-    using Preset = eventlist_selection::Preset;
-    using Config = eventlist_selection::Config;
-
-    static const char *preset_name(Preset preset);
-    static const char *preset_label(Preset preset);
-    static Preset preset_from_string(const std::string &name);
-    static const char *trigger_branch();
-    static const char *slice_branch();
-    static const char *fiducial_branch();
-    static const char *muon_branch();
-    static std::string expression(Preset preset,
-                                  const DatasetIO::Sample &sample,
-                                  const std::vector<std::string> &columns,
-                                  const Config &config);
-};
-
-#endif // EVENTLIST_SELECTION_HH
+#endif // CUTS_HH

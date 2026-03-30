@@ -6,9 +6,9 @@
 #include <vector>
 
 #include "DatasetIO.hh"
-#include "EventListBuilder.hh"
+#include "EventListBuild.hh"
 #include "EventListIO.hh"
-#include "SystematicsCacheBuilder.hh"
+#include "Systematics.hh"
 
 namespace
 {
@@ -189,7 +189,7 @@ int main(int argc, char **argv)
         {
             EventListIO event_list(options.output_path, EventListIO::Mode::kWrite);
 
-            ana::EventListConfig build_config;
+            ana::BuildConfig build_config;
             build_config.event_tree_name = options.event_tree_name;
             build_config.subrun_tree_name = options.subrun_tree_name;
             build_config.selection_expr = selection_expr;

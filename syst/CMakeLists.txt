@@ -4,7 +4,6 @@ set(AMARANTIN_SYST_SOURCES
 
 set(AMARANTIN_SYST_PUBLIC_HEADERS
   Systematics.hh
-  SystematicsCacheBuilder.hh
 )
 
 add_library(Syst SHARED

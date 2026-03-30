@@ -40,7 +40,7 @@
  */
  
 #include "DatasetIO.hh"
-#include "detail/RootUtils.hh"
+#include "bits/RootUtils.hh"
 
 #include <cstdio>
 #include <stdexcept>

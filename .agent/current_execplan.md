@@ -250,6 +250,7 @@ Verification:
 - If a header/source pair only carries one function plus two small structs, prefer folding it into the main module surface and leaving a shim include.
 - If `io/` exports anything that is not a persistence class or low-level persistence helper, move it out rather than documenting the mismatch.
 - For this repo size, prefer flat module roots over mirrored `include/` and `src/` trees.
+- Treat `EventListIO` as the downstream contract: `ana` produces it, `syst` augments it, and `plot` should prefer APIs that stay on it instead of reopening files internally.
 
 ## 10. Stop conditions
 - stop after the current verified loop

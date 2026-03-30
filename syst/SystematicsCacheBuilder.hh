@@ -1,6 +1,0 @@
-#ifndef SYSTEMATICS_CACHE_BUILDER_HH
-#define SYSTEMATICS_CACHE_BUILDER_HH
-
-#include "Systematics.hh"
-
-#endif // SYSTEMATICS_CACHE_BUILDER_HH

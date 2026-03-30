@@ -7,7 +7,6 @@
 
 #include "EventListIO.hh"
 #include "Systematics.hh"
-#include "SystematicsCacheBuilder.hh"
 
 void cache_systematics(const char *read_path = nullptr,
                        const char *sample_key = nullptr,

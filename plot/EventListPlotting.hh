@@ -23,6 +23,14 @@ namespace plot_utils
                                          const char *hist_name = "h_eventlist",
                                          const char *sample_key = nullptr);
 
+    TCanvas *draw_distribution(const EventListIO &eventlist,
+                               const char *branch_expr,
+                               int nbins,
+                               double xmin,
+                               double xmax,
+                               const char *canvas_name = "c_eventlist",
+                               const char *sample_key = nullptr);
+
     TCanvas *draw_distribution(const char *read_path,
                                const char *branch_expr,
                                int nbins,

@@ -1,11 +1,11 @@
 /* -- C++ -- */
 /**
- *  @file  io/detail/RunDatabaseService.cc
+ *  @file  io/bits/RunDatabaseService.cc
  *
  *  @brief Implementation of SQLite-backed run info summaries.
  */
 
-#include "detail/RunDatabaseService.hh"
+#include "bits/RunDatabaseService.hh"
 
 #include <sqlite3.h>
 

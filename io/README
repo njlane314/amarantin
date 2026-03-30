@@ -1,0 +1,67 @@
+IO
+==
+
+Overview
+--------
+`io/` contains only persistence classes and low-level private helper code.
+
+The classes form a simple chain:
+
+```text
+input ROOT files
+    |
+    v
+InputPartitionIO
+    |
+    v
+SampleIO
+    |
+    v
+DatasetIO
+    |
+    v
+EventListIO
+```
+
+More concretely:
+
+```text
+InputPartitionIO --scans--> one input file list / partition
+SampleIO         --builds--> one sample container from one or more partitions
+SampleIO         --exports-> DatasetIO::Sample metadata
+DatasetIO        --holds--> many named samples and their metadata
+EventListIO      --writes-> selected event trees, subrun trees, and cache payloads
+EventListIO      --serves-> downstream plotting, systematics, and ad hoc analysis
+```
+
+Class notes
+-----------
+`InputPartitionIO`
+  Small record for one partition of input ROOT files. It scans subruns, POT,
+  and event counts and can write or read that partition summary.
+
+`SampleIO`
+  Builds a sample-level container from one or more `InputPartitionIO`
+  partitions. It is the bridge between raw input lists and `DatasetIO::Sample`
+  metadata.
+
+`DatasetIO`
+  Persistent collection of named samples. It stores sample metadata and sample
+  provenance, but not selected event trees.
+
+`EventListIO`
+  Persistent analysis-ready output. It stores copied selected event trees,
+  subrun trees, sample metadata, and persisted systematics cache payloads.
+  Downstream code should usually open `EventListIO` and stay on that surface.
+
+Private material
+----------------
+`bits/`
+  Private helper code and schema notes used by `io/` itself.
+
+`bits/NTUPLE`
+  Reference for the upstream input ntuple schema.
+
+`bits/DERIVED`
+  Reference for framework-owned derived columns and persisted `EventListIO`
+  structure.

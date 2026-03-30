@@ -1,4 +1,4 @@
-#include "EventListSelection.hh"
+#include "Cuts.hh"
 
 #include <stdexcept>
 #include <string>
@@ -29,12 +29,12 @@ namespace
                         const char *context)
     {
         if (!has_column(columns, name))
-            throw std::runtime_error(std::string("EventListSelection: missing required column for ") +
+            throw std::runtime_error(std::string("cuts: missing required column for ") +
                                      context + ": " + name);
     }
 }
 
-namespace eventlist_selection
+namespace cuts
 {
     const char *preset_name(Preset preset)
     {
@@ -75,7 +75,7 @@ namespace eventlist_selection
         if (name == "muon")
             return Preset::kMuon;
 
-        throw std::runtime_error("EventListSelection: unknown preset: " + name);
+        throw std::runtime_error("cuts: unknown preset: " + name);
     }
 
     const char *trigger_branch() { return "__pass_trigger__"; }
@@ -157,7 +157,7 @@ namespace eventlist_selection
         }
         else
         {
-            throw std::runtime_error("EventListSelection: fiducial preset requires sel_fiducial or in_reco_fiducial");
+            throw std::runtime_error("cuts: fiducial preset requires sel_fiducial or in_reco_fiducial");
         }
         const std::string fiducial_expr = has_column(columns, fiducial_branch())
                                               ? fiducial_base_expr
@@ -173,49 +173,6 @@ namespace eventlist_selection
         if (has_column(columns, "selection_pass"))
             return join_and(fiducial_expr, "(selection_pass > 0)");
 
-        throw std::runtime_error("EventListSelection: muon preset requires sel_muon or selection_pass");
+        throw std::runtime_error("cuts: muon preset requires sel_muon or selection_pass");
     }
-}
-
-const char *EventListSelection::preset_name(Preset preset)
-{
-    return eventlist_selection::preset_name(preset);
-}
-
-const char *EventListSelection::preset_label(Preset preset)
-{
-    return eventlist_selection::preset_label(preset);
-}
-
-EventListSelection::Preset EventListSelection::preset_from_string(const std::string &name)
-{
-    return eventlist_selection::preset_from_string(name);
-}
-
-const char *EventListSelection::trigger_branch()
-{
-    return eventlist_selection::trigger_branch();
-}
-
-const char *EventListSelection::slice_branch()
-{
-    return eventlist_selection::slice_branch();
-}
-
-const char *EventListSelection::fiducial_branch()
-{
-    return eventlist_selection::fiducial_branch();
-}
-
-const char *EventListSelection::muon_branch()
-{
-    return eventlist_selection::muon_branch();
-}
-
-std::string EventListSelection::expression(Preset preset,
-                                           const DatasetIO::Sample &sample,
-                                           const std::vector<std::string> &columns,
-                                           const Config &config)
-{
-    return eventlist_selection::expression(preset, sample, columns, config);
 }

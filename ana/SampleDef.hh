@@ -6,8 +6,6 @@
 
 #include "DatasetIO.hh"
 
-class EventListIO;
-
 namespace ana
 {
     struct SampleDef
@@ -46,8 +44,6 @@ namespace ana
     void apply_sample_defs(const std::vector<SampleDef> &defs,
                            const std::string &key,
                            DatasetIO::Sample &sample);
-    std::vector<std::string> detector_mates(const EventListIO &event_list,
-                                            const std::string &sample_key);
 }
 
 #endif // SAMPLE_DEF_HH

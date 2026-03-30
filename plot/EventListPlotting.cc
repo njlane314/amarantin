@@ -48,7 +48,7 @@ namespace plot_utils
         return hist;
     }
 
-    TCanvas *draw_distribution(const char *read_path,
+    TCanvas *draw_distribution(const EventListIO &eventlist,
                                const char *branch_expr,
                                int nbins,
                                double xmin,
@@ -56,10 +56,6 @@ namespace plot_utils
                                const char *canvas_name,
                                const char *sample_key)
     {
-        if (!read_path || std::string(read_path).empty())
-            throw std::runtime_error("plot_utils::draw_distribution: read_path is required");
-
-        EventListIO eventlist(read_path, EventListIO::Mode::kRead);
         std::unique_ptr<TH1D> hist = make_histogram(eventlist,
                                                     branch_expr,
                                                     nbins,
@@ -76,5 +72,26 @@ namespace plot_utils
 
         hist.release();
         return canvas;
+    }
+
+    TCanvas *draw_distribution(const char *read_path,
+                               const char *branch_expr,
+                               int nbins,
+                               double xmin,
+                               double xmax,
+                               const char *canvas_name,
+                               const char *sample_key)
+    {
+        if (!read_path || std::string(read_path).empty())
+            throw std::runtime_error("plot_utils::draw_distribution: read_path is required");
+
+        EventListIO eventlist(read_path, EventListIO::Mode::kRead);
+        return draw_distribution(eventlist,
+                                 branch_expr,
+                                 nbins,
+                                 xmin,
+                                 xmax,
+                                 canvas_name,
+                                 sample_key);
     }
 }

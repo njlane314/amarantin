@@ -1,4 +1,4 @@
-#include "SnapshotService.hh"
+#include "Snapshot.hh"
 
 #include <algorithm>
 #include <cctype>
@@ -61,7 +61,7 @@ namespace
     {
         if (branch_schema(existing) != branch_schema(incoming))
             throw std::runtime_error(
-                "SnapshotService: existing output tree schema does not match incoming snapshot tree");
+                "snapshot: existing output tree schema does not match incoming snapshot tree");
     }
 
     std::unique_ptr<TFile> open_existing_or_create(const std::string &out_path)
@@ -72,7 +72,7 @@ namespace
 
         file.reset(TFile::Open(out_path.c_str(), "RECREATE"));
         if (!file || file->IsZombie())
-            throw std::runtime_error("SnapshotService: failed to open output file: " + out_path);
+            throw std::runtime_error("snapshot: failed to open output file: " + out_path);
         return file;
     }
 
@@ -98,11 +98,11 @@ namespace
     {
         std::unique_ptr<TFile> fin(TFile::Open(scratch_file.c_str(), "READ"));
         if (!fin || fin->IsZombie())
-            throw std::runtime_error("SnapshotService: failed to open scratch snapshot file: " + scratch_file);
+            throw std::runtime_error("snapshot: failed to open scratch snapshot file: " + scratch_file);
 
         TTree *tin = dynamic_cast<TTree *>(fin->Get(tree_name.c_str()));
         if (!tin)
-            throw std::runtime_error("SnapshotService: scratch snapshot missing tree: " + tree_name);
+            throw std::runtime_error("snapshot: scratch snapshot missing tree: " + tree_name);
 
         std::unique_ptr<TFile> fout = open_existing_or_create(out_path);
         TTree *tout = dynamic_cast<TTree *>(fout->Get(tree_name.c_str()));
@@ -130,7 +130,7 @@ namespace
         if (ec)
         {
             throw std::runtime_error(
-                "SnapshotService: failed to create scratch directory: " + scratch_dir.string() +
+                "snapshot: failed to create scratch directory: " + scratch_dir.string() +
                 " (" + ec.message() + ")");
         }
         return scratch_dir;
@@ -152,7 +152,7 @@ namespace
     std::vector<std::string> snapshot_columns(const SnapshotSpec &spec)
     {
         if (spec.columns.empty())
-            throw std::runtime_error("SnapshotService: snapshot columns must not be empty");
+            throw std::runtime_error("snapshot: snapshot columns must not be empty");
         return spec.columns;
     }
 
@@ -199,9 +199,9 @@ namespace
             scratch_file_path(scratch_dir, tree_name, snapshot::sanitise_root_key(sample_key));
 
         auto count = node.Count();
-        auto snapshot = node.Snapshot(tree_name, scratch_file, columns, snapshot_options());
-        ROOT::RDF::RunGraphs({count, snapshot});
-        (void)snapshot.GetValue();
+        auto snap = node.Snapshot(tree_name, scratch_file, columns, snapshot_options());
+        ROOT::RDF::RunGraphs({count, snap});
+        (void)snap.GetValue();
 
         return {scratch_file, count.GetValue()};
     }
@@ -226,10 +226,10 @@ std::string snapshot::sanitise_root_key(std::string s)
     return s;
 }
 
-unsigned long long snapshot::snapshot_sample(const EventListIO &event_list,
-                                             const std::string &out_path,
-                                             const std::string &sample_key,
-                                             const Spec &spec)
+unsigned long long snapshot::sample(const EventListIO &event_list,
+                                    const std::string &out_path,
+                                    const std::string &sample_key,
+                                    const Spec &spec)
 {
     const std::string tree_name = sanitise_root_key(spec.tree_name) + "_" + sanitise_root_key(sample_key);
 
@@ -250,9 +250,9 @@ unsigned long long snapshot::snapshot_sample(const EventListIO &event_list,
     return snap.count;
 }
 
-unsigned long long snapshot::snapshot_merged(const EventListIO &event_list,
-                                             const std::string &out_path,
-                                             const Spec &spec)
+unsigned long long snapshot::merged(const EventListIO &event_list,
+                                    const std::string &out_path,
+                                    const Spec &spec)
 {
     const auto keys = event_list.sample_keys();
     const std::vector<std::string> base_columns = snapshot_columns(spec);
@@ -281,24 +281,4 @@ unsigned long long snapshot::snapshot_merged(const EventListIO &event_list,
     }
 
     return total;
-}
-
-std::string SnapshotService::sanitise_root_key(std::string s)
-{
-    return snapshot::sanitise_root_key(std::move(s));
-}
-
-unsigned long long SnapshotService::snapshot_sample(const EventListIO &event_list,
-                                                    const std::string &out_path,
-                                                    const std::string &sample_key,
-                                                    const SnapshotSpec &spec)
-{
-    return snapshot::snapshot_sample(event_list, out_path, sample_key, spec);
-}
-
-unsigned long long SnapshotService::snapshot_merged(const EventListIO &event_list,
-                                                    const std::string &out_path,
-                                                    const SnapshotSpec &spec)
-{
-    return snapshot::snapshot_merged(event_list, out_path, spec);
 }

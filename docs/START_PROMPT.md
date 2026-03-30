@@ -35,9 +35,9 @@ Process:
 
 Important hotspots to audit:
 - `tools/run-macro`
-- `ana/SnapshotService.hh`
-- `ana/EventListSelection.hh`
-- `ana/AnalysisChannels.hh`
+- `ana/Snapshot.hh`
+- `io/EventListIO.hh`
+- `syst/Systematics.hh`
 
 Final deliverable:
 - code changes

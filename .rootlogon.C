@@ -44,13 +44,11 @@
         #include "SampleDef.hh"
         #include "DatasetIO.hh"
         #include "EventListIO.hh"
-        #include "EventListBuilder.hh"
-        #include "EventListSelection.hh"
+        #include "EventListBuild.hh"
         #include "EventDisplay.hh"
         #include "EventListPlotting.hh"
         #include "Systematics.hh"
-        #include "SystematicsCacheBuilder.hh"
-        #include "SnapshotService.hh"
+        #include "Snapshot.hh"
 
         namespace macro_utils
         {
