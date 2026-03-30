@@ -10,6 +10,7 @@ RUN apt-get update \
         ca-certificates \
         cmake \
         git \
+        libeigen3-dev \
         libsqlite3-dev \
         nlohmann-json3-dev \
         pkg-config \

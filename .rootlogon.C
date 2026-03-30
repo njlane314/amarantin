@@ -36,6 +36,7 @@
         #include "EventListSelection.hh"
         #include "EventDisplay.hh"
         #include "EventListPlotting.hh"
+        #include "Systematics.hh"
         #include "SnapshotService.hh"
 
         namespace macro_utils

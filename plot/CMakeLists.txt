@@ -1,17 +1,21 @@
 set(AMARANTIN_PLOT_SOURCES
   src/EventDisplay.cc
   src/EventListPlotting.cc
+  src/Systematics.cc
 )
 
 set(AMARANTIN_PLOT_PUBLIC_HEADERS
   include/EventDisplay.hh
   include/EventListPlotting.hh
+  include/Systematics.hh
 )
 
 add_library(Plot SHARED
   ${AMARANTIN_PLOT_SOURCES}
   ${AMARANTIN_PLOT_PUBLIC_HEADERS}
 )
+
+find_package(Eigen3 QUIET)
 
 target_compile_features(Plot PUBLIC cxx_std_17)
 
@@ -28,6 +32,11 @@ target_link_libraries(Plot
   PRIVATE
     amarantin_build_options
 )
+
+if(Eigen3_FOUND)
+  target_link_libraries(Plot PRIVATE Eigen3::Eigen)
+  target_compile_definitions(Plot PRIVATE AMARANTIN_HAVE_EIGEN=1)
+endif()
 
 set_target_properties(Plot PROPERTIES
   OUTPUT_NAME Plot
