@@ -1,9 +1,11 @@
 set(AMARANTIN_PLOT_SOURCES
+  EfficiencyPlot.cc
   EventDisplay.cc
   EventListPlotting.cc
 )
 
 set(AMARANTIN_PLOT_PUBLIC_HEADERS
+  EfficiencyPlot.hh
   EventDisplay.hh
   EventListPlotting.hh
 )

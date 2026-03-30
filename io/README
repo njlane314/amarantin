@@ -3,71 +3,67 @@ IO
 
 Overview
 --------
-`io/` contains only persistence classes and low-level private helper code.
-The repo-wide module/data-flow diagram lives at `docs/repo-internals.puml`.
+io/ contains only persistence classes and low-level private helper code.
+The repo-wide module/data-flow diagram lives at docs/repo-internals.puml.
 
 The classes form a simple chain:
 
-```text
-input ROOT files
-    |
-    v
-InputPartitionIO
-    |
-    v
-SampleIO
-    |
-    v
-DatasetIO
-    |
-    v
-EventListIO
-    |
-    v
-DistributionIO
-    |
-    v
-ChannelIO
-```
+  input ROOT files
+      |
+      v
+  InputPartitionIO
+      |
+      v
+  SampleIO
+      |
+      v
+  DatasetIO
+      |
+      v
+  EventListIO
+      |
+      v
+  DistributionIO
+      |
+      v
+  ChannelIO
 
 More concretely:
 
-```text
-InputPartitionIO --scans--> one input file list / partition
-SampleIO         --builds--> one sample container from one or more partitions
-SampleIO         --exports-> DatasetIO::Sample metadata
-DatasetIO        --holds--> many named samples and their metadata
-EventListIO      --writes-> selected event trees and subrun trees
-DistributionIO   --writes-> binned distributions and persisted systematics payloads
-ChannelIO        --writes-> named channel/process bundles on common binning
-```
+  InputPartitionIO --scans--> one input file list / partition
+  SampleIO         --builds--> one sample container from one or more partitions
+  SampleIO         --exports-> DatasetIO::Sample metadata
+  DatasetIO        --holds--> many named samples and their metadata
+  EventListIO      --writes-> selected event trees and subrun trees
+  DistributionIO   --writes-> binned distributions and persisted systematics payloads
+  ChannelIO        --writes-> named channel/process bundles on common binning
 
 Class notes
 -----------
-`InputPartitionIO`
+InputPartitionIO
   Small record for one partition of input ROOT files. It scans subruns, POT,
   and event counts and can write or read that partition summary.
 
-`SampleIO`
-  Builds a sample-level container from one or more `InputPartitionIO`
-  partitions. It is the bridge between raw input lists and `DatasetIO::Sample`
+SampleIO
+  Builds a sample-level container from one or more InputPartitionIO
+  partitions. It is the bridge between raw input lists and DatasetIO::Sample
   metadata.
 
-`DatasetIO`
+DatasetIO
   Persistent collection of named samples. It stores sample metadata and sample
   provenance, but not selected event trees.
 
-`EventListIO`
+EventListIO
   Persistent analysis-ready output. It stores copied selected event trees,
   subrun trees, and sample metadata.
   Use it for row-wise analysis, event displays, and exploratory plotting.
 
-`DistributionIO`
+DistributionIO
   Persistent bin-wise output. It stores binned distributions, statistical
-  `sumw2`, and persisted systematic summaries derived from `EventListIO`.
+  sumw2, and persisted systematic summaries derived from EventListIO.
   Use it for repeated plotting and other bin-wise downstream work.
 
-`ChannelIO`
+ChannelIO
   Persistent assembled channel output. It stores one analysis region on common
   binning with many named processes, observed data bins, and per-process
   systematic payloads.
@@ -76,12 +72,12 @@ Class notes
 
 Private material
 ----------------
-`bits/`
-  Private helper code and schema notes used by `io/` itself.
+bits/
+  Private helper code and schema notes used by io/ itself.
 
-`bits/NTUPLE`
+bits/NTUPLE
   Reference for the upstream input ntuple schema.
 
-`bits/DERIVED`
-  Reference for framework-owned derived columns and persisted `EventListIO`
+bits/DERIVED
+  Reference for framework-owned derived columns and persisted EventListIO
   structure.

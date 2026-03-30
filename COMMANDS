@@ -116,6 +116,7 @@ Macro runner
 ------------
 Run one ROOT macro through the common wrapper
   bash tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector
+  bash tools/run-macro plot_efficiency build/eventlists/run1.root topological_score "selected != 0" "__pass_muon__" 50 0 1 beam-s0
 
 Run a plotting macro directly through ROOT
   root -l -b -q plot/macro/cache_systematics.C

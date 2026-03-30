@@ -46,6 +46,7 @@
         #include "DistributionIO.hh"
         #include "EventListIO.hh"
         #include "EventListBuild.hh"
+        #include "EfficiencyPlot.hh"
         #include "EventDisplay.hh"
         #include "EventListPlotting.hh"
         #include "Systematics.hh"
