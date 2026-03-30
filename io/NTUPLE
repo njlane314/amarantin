@@ -392,6 +392,95 @@ Notes on TruthAnalysis:
   by matching the selected reconstructed slice hits back to the truth primary
   particles.
 
+Branches added by the LambdaAnalysis_tool
+----------------------------------------
+
+The LambdaAnalysis_tool can add truth-level strange-particle and Lambda-decay
+summary branches onto the main EventSelectionFilter tree.
+
+Muon-truth summary branches:
+
+  mu_truth_trackid                  int
+  mu_truth_pdg                      int
+  mu_p                              float
+  mu_theta                          float
+
+Generator-level strange final-state summary:
+
+  truth_is_nc                       bool
+  truth_has_strange_fs              bool
+  truth_has_nc_strangeness          bool
+  truth_has_fs_lambda0              bool
+  truth_has_fs_sigma0               bool
+  truth_has_g4_lambda0_to_ppi       bool
+  truth_has_ks0                     bool
+  truth_has_pi0                     bool
+  truth_n_fs_lambda0                int
+  truth_n_fs_sigma0                 int
+  truth_n_g4_lambda0_to_ppi         int
+  truth_n_ks0                       int
+  truth_n_pi0                       int
+  truth_fs_lambda0_p                std::vector<float>
+  truth_fs_sigma0_p                 std::vector<float>
+
+Geant4 Lambda-to-p-pi decay branches:
+
+  g4_lambda_trackid                 std::vector<int>
+  g4_lambda_pdg                     std::vector<int>
+  g4_lambda_E                       std::vector<float>
+  g4_lambda_mass                    std::vector<float>
+  g4_lambda_px                      std::vector<float>
+  g4_lambda_py                      std::vector<float>
+  g4_lambda_pz                      std::vector<float>
+  g4_lambda_p_mag                   std::vector<float>
+  g4_lambda_vx                      std::vector<float>
+  g4_lambda_vy                      std::vector<float>
+  g4_lambda_vz                      std::vector<float>
+  g4_lambda_endx                    std::vector<float>
+  g4_lambda_endy                    std::vector<float>
+  g4_lambda_endz                    std::vector<float>
+  g4_lambda_ct                      std::vector<float>
+  g4_lambda_decay_sep               std::vector<float>
+  g4_lambda_p_trackid               std::vector<int>
+  g4_lambda_pi_trackid              std::vector<int>
+  g4_lambda_p_p                     std::vector<float>
+  g4_lambda_pi_p                    std::vector<float>
+  g4_lambda_ppi_opening_angle       std::vector<float>
+
+Pattern-recognition / hit-assignment branches for matched Lambda decays:
+
+  g4_lambda_pr_valid_assignment     std::vector<int>
+  g4_lambda_pr_mu_purity            std::vector<float>
+  g4_lambda_pr_mu_completeness      std::vector<float>
+  g4_lambda_pr_p_purity             std::vector<float>
+  g4_lambda_pr_p_completeness       std::vector<float>
+  g4_lambda_pr_pi_purity            std::vector<float>
+  g4_lambda_pr_pi_completeness      std::vector<float>
+  g4_lambda_mu_true_hits            std::vector<int>
+  g4_lambda_p_true_hits             std::vector<int>
+  g4_lambda_pi_true_hits            std::vector<int>
+
+Notes on LambdaAnalysis_tool:
+
+  LambdaAnalysis_tool is only meaningful for non-data samples. On data events
+  its branches are reset to empty or sentinel values.
+
+  truth_* branches summarize generator-level strange final states from the
+  MCTruth record.
+
+  truth_has_nc_strangeness is true when the event is neutral current and has
+  at least one strange hadron in the generator final state.
+
+  truth_has_g4_lambda0_to_ppi and truth_n_g4_lambda0_to_ppi summarize Geant4
+  Lambda candidates with matched proton-plus-pion daughters.
+
+  The g4_lambda_* vectors are aligned element-by-element, one entry per
+  matched Geant4 Lambda decay candidate.
+
+  The g4_lambda_pr_* and g4_lambda_*_true_hits branches are filled during
+  analyseSlice() by matching the selected reconstructed slice content against
+  the truth muon, proton, and pion track IDs.
+
 Notes
 -----
 
@@ -414,6 +503,10 @@ training snapshots.
 
 TruthAnalysis can add a large truth-level description of the interaction,
 beamline parentage, and truth-primary topology for MC samples.
+
+LambdaAnalysis_tool can add a more specialized strange-particle truth summary,
+including generator strange content and Geant4 Lambda-to-proton-pion decay
+topology.
 
 SubRun
 ------

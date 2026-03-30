@@ -32,6 +32,7 @@
         #include "DatasetIO.hh"
         #include "EventListIO.hh"
         #include "EventListSelection.hh"
+        #include "EventDisplay.hh"
         #include "EventListPlotting.hh"
         #include "SnapshotService.hh"
 
