@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+
+build_name=default
+if [[ $# -gt 0 && "${1}" != -* ]]; then
+  build_name=$1
+  shift
+fi
+
+readonly BUILD_DIR="${ROOT_DIR}/.build/${build_name}"
+mkdir -p "${ROOT_DIR}/.build"
+
+exec cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release "$@"

@@ -26,6 +26,12 @@ Configure and build:
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     cmake --build build --parallel
 
+If you need multiple local build trees, keep the extras under the hidden
+`.build/` parent:
+
+    tools/configure-build host
+    cmake --build .build/host --parallel
+
 The main executable will be:
 
     build/bin/mk_sample

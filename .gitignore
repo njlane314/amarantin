@@ -1,4 +1,7 @@
 /build/
+/build-*/
 /install/
 /cmake-build-*/
+/.build/
 /.codex-run-logs/
+.DS_Store

@@ -5,6 +5,8 @@ readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 readonly ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 readonly -a MACRO_DIRS=("io/macro" "ana/macro" "plot/macro" "fit/macro")
 cd "${ROOT_DIR}"
+export AMARANTIN_ROOT_DIR="${ROOT_DIR}"
+export AMARANTIN_BUILD_DIR="${AMARANTIN_BUILD_DIR:-build}"
 
 usage() {
   cat <<'EOF'

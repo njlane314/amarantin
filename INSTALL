@@ -58,6 +58,15 @@ Out-of-source builds are required.
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
   cmake --build build --parallel
 
+Additional named build trees
+----------------------------
+If you need more than one local build, keep them under the hidden `.build/`
+parent instead of creating more root-level `build-*` or `cmake-build-*`
+directories:
+
+  tools/configure-build host
+  cmake --build .build/host --parallel
+
 Build only selected targets
 ---------------------------
   cmake --build build --target IO

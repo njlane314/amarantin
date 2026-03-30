@@ -37,6 +37,14 @@ Treat CMake as the source of truth. Prefer out-of-source builds.
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
   cmake --build build --parallel
 
+Additional scratch build trees
+------------------------------
+Keep extra local build trees under the hidden `.build/` parent instead of
+spilling `build-*` and `cmake-build-*` directories into the repo root.
+
+  tools/configure-build host
+  cmake --build .build/host --parallel
+
 Environment setup
 -----------------
 GPVM / Fermilab container

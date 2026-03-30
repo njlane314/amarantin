@@ -1,0 +1,14 @@
+{
+  "files.exclude": {
+    ".build": true,
+    "build-*": true,
+    "cmake-build-*": true,
+    "install": true
+  },
+  "search.exclude": {
+    ".build": true,
+    "build-*": true,
+    "cmake-build-*": true,
+    "install": true
+  }
+}
