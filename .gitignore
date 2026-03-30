@@ -3,5 +3,6 @@
 /install/
 /cmake-build-*/
 /.build/
+/.vscode/
 /.codex-run-logs/
 .DS_Store
