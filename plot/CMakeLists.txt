@@ -1,0 +1,51 @@
+set(AMARANTIN_PLOT_SOURCES
+  src/EventDisplay.cc
+  src/EventListPlotting.cc
+)
+
+set(AMARANTIN_PLOT_PUBLIC_HEADERS
+  include/EventDisplay.hh
+  include/EventListPlotting.hh
+)
+
+add_library(Plot SHARED
+  ${AMARANTIN_PLOT_SOURCES}
+  ${AMARANTIN_PLOT_PUBLIC_HEADERS}
+)
+
+target_compile_features(Plot PUBLIC cxx_std_17)
+
+target_include_directories(Plot
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/amarantin>
+)
+
+target_link_libraries(Plot
+  PUBLIC
+    IO
+    amarantin_root_deps
+  PRIVATE
+    amarantin_build_options
+)
+
+set_target_properties(Plot PROPERTIES
+  OUTPUT_NAME Plot
+  VERSION ${PROJECT_VERSION}
+  SOVERSION ${PROJECT_VERSION_MAJOR}
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+install(TARGETS Plot
+  EXPORT amarantinTargets
+  LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amarantin"
+)
+
+install(FILES ${AMARANTIN_PLOT_PUBLIC_HEADERS}
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/amarantin"
+)

@@ -7,6 +7,7 @@
     const TString io_macro_dir = root_dir + "/io/macro";
     const TString lib_dir = root_dir + "/build/lib";
     const TString lib_path = lib_dir + "/libIO.so";
+    const TString plot_lib_path = lib_dir + "/libPlot.so";
 
     gInterpreter->AddIncludePath(include_dir.Data());
     gInterpreter->AddIncludePath(macro_dir.Data());
@@ -15,6 +16,7 @@
     gInterpreter->AddIncludePath(io_macro_dir.Data());
     gSystem->AddDynamicPath(lib_dir.Data());
     gSystem->Load(lib_path.Data());
+    gSystem->Load(plot_lib_path.Data());
 
     gInterpreter->Declare(R"cpp(
         #include <algorithm>
