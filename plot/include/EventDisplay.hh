@@ -2,14 +2,18 @@
 #define EVENT_DISPLAY_HH
 
 #include <memory>
+#include <stdexcept>
 #include <string>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
 #include "RtypesCore.h"
 #include "EventListIO.hh"
 
-class TCanvas;
+#include "TCanvas.h"
+#include "TTree.h"
+
 class TH1F;
 class TH2F;
 class TLegend;
@@ -49,9 +53,10 @@ namespace plot_utils
 
         using DetectorData = std::vector<float>;
         using SemanticData = std::vector<int>;
+        using SparseIndex = std::vector<std::uint32_t>;
 
-        EventDisplay(Spec spec, Options opt, DetectorData data);
-        EventDisplay(Spec spec, Options opt, SemanticData data);
+        EventDisplay(Spec spec, Options opt, DetectorData data, SparseIndex indices = {});
+        EventDisplay(Spec spec, Options opt, SemanticData data, SparseIndex indices = {});
 
         void draw(TCanvas &canvas);
 
@@ -70,6 +75,7 @@ namespace plot_utils
         Options opt_;
         DetectorData detector_;
         SemanticData semantic_;
+        SparseIndex indices_;
         std::unique_ptr<TH2F> hist_;
         std::unique_ptr<TLegend> legend_;
         std::vector<std::unique_ptr<TH1F>> legend_entries_;
@@ -82,6 +88,9 @@ namespace plot_utils
             std::string run = "run";
             std::string sub = "sub";
             std::string evt = "evt";
+            std::string idx_u = "detector_image_u_index";
+            std::string idx_v = "detector_image_v_index";
+            std::string idx_w = "detector_image_w_index";
             std::string det_u = "detector_image_u_adc";
             std::string det_v = "detector_image_v_adc";
             std::string det_w = "detector_image_w_adc";
@@ -90,17 +99,140 @@ namespace plot_utils
             std::string sem_w = "semantic_image_w_label";
         };
 
-        const std::string &branch_for_plane(const Branches &branches,
-                                            const std::string &plane,
-                                            EventDisplay::Mode mode);
+        inline const std::string &branch_for_plane(const Branches &branches,
+                                                   const std::string &plane,
+                                                   EventDisplay::Mode mode)
+        {
+            if (mode == EventDisplay::Mode::kDetector)
+            {
+                if (plane == "U") return branches.det_u;
+                if (plane == "V") return branches.det_v;
+                return branches.det_w;
+            }
 
-        TCanvas *draw_one(const EventListIO &eventlist,
-                          const std::string &sample_key,
-                          Long64_t entry,
-                          const std::string &plane,
-                          EventDisplay::Mode mode,
-                          const Branches &branches = Branches{},
-                          const EventDisplay::Options &options = EventDisplay::Options{});
+            if (plane == "U") return branches.sem_u;
+            if (plane == "V") return branches.sem_v;
+            return branches.sem_w;
+        }
+
+        inline const std::string &index_branch_for_plane(const Branches &branches,
+                                                         const std::string &plane)
+        {
+            if (plane == "U") return branches.idx_u;
+            if (plane == "V") return branches.idx_v;
+            return branches.idx_w;
+        }
+
+        template <class T>
+        inline std::vector<T> read_vector_branch(TTree *tree,
+                                                 const std::string &branch_name,
+                                                 Long64_t entry)
+        {
+            std::vector<T> *ptr = nullptr;
+            tree->SetBranchAddress(branch_name.c_str(), &ptr);
+            tree->GetEntry(entry);
+            return ptr ? *ptr : std::vector<T>{};
+        }
+
+        inline int read_int_branch(TTree *tree,
+                                   const std::string &branch_name,
+                                   Long64_t entry)
+        {
+            int value = 0;
+            tree->SetBranchAddress(branch_name.c_str(), &value);
+            tree->GetEntry(entry);
+            return value;
+        }
+
+        inline TCanvas *draw_one(const EventListIO &eventlist,
+                                 const std::string &sample_key,
+                                 Long64_t entry,
+                                 const std::string &plane,
+                                 EventDisplay::Mode mode,
+                                 const Branches &branches = Branches{},
+                                 const EventDisplay::Options &options = EventDisplay::Options{},
+                                 int grid_w = 0,
+                                 int grid_h = 0)
+        {
+            TTree *tree = eventlist.selected_tree(sample_key);
+            if (!tree)
+                throw std::runtime_error("plot_utils::event_display::draw_one: missing selected tree");
+            if (entry < 0 || entry >= tree->GetEntries())
+                throw std::runtime_error("plot_utils::event_display::draw_one: entry out of range");
+
+            const int run = read_int_branch(tree, branches.run, entry);
+            const int sub = read_int_branch(tree, branches.sub, entry);
+            const int evt = read_int_branch(tree, branches.evt, entry);
+
+            const std::string id = plane + "_" + std::to_string(run) + "_" +
+                                   std::to_string(sub) + "_" + std::to_string(evt);
+            const std::string title =
+                std::string(mode == EventDisplay::Mode::kDetector ? "Detector" : "Semantic") +
+                " Image, Plane " + plane +
+                " - Run " + std::to_string(run) +
+                ", Subrun " + std::to_string(sub) +
+                ", Event " + std::to_string(evt);
+
+            EventDisplay::Spec spec{id, title, mode, grid_w, grid_h};
+            std::vector<std::uint32_t> indices =
+                read_vector_branch<std::uint32_t>(tree, index_branch_for_plane(branches, plane), entry);
+
+            if (mode == EventDisplay::Mode::kDetector)
+            {
+                EventDisplay::DetectorData data =
+                    read_vector_branch<float>(tree, branch_for_plane(branches, plane, mode), entry);
+                EventDisplay display(spec, options, std::move(data), std::move(indices));
+                TCanvas *canvas = new TCanvas(id.c_str(), title.c_str(),
+                                              options.canvas_size, options.canvas_size);
+                display.draw(*canvas);
+                return canvas;
+            }
+
+            std::vector<unsigned char> raw =
+                read_vector_branch<unsigned char>(tree, branch_for_plane(branches, plane, mode), entry);
+            EventDisplay::SemanticData data;
+            data.reserve(raw.size());
+            for (unsigned char value : raw)
+                data.push_back(static_cast<int>(value));
+            EventDisplay display(spec, options, std::move(data), std::move(indices));
+            TCanvas *canvas = new TCanvas(id.c_str(), title.c_str(),
+                                          options.canvas_size, options.canvas_size);
+            display.draw(*canvas);
+            return canvas;
+        }
+    }
+
+    inline TCanvas *draw_event_display(const char *read_path,
+                                       const char *sample_key,
+                                       Long64_t entry,
+                                       const char *plane,
+                                       const char *mode_name = "detector",
+                                       int grid_w = 0,
+                                       int grid_h = 0)
+    {
+        if (!read_path || !*read_path)
+            throw std::runtime_error("plot_utils::draw_event_display: read_path is required");
+        if (!sample_key || !*sample_key)
+            throw std::runtime_error("plot_utils::draw_event_display: sample_key is required");
+        if (!plane || !*plane)
+            throw std::runtime_error("plot_utils::draw_event_display: plane is required");
+
+        const std::string mode_text = (mode_name && *mode_name) ? std::string(mode_name) : std::string("detector");
+        const EventDisplay::Mode mode =
+            (mode_text == "semantic")
+                ? EventDisplay::Mode::kSemantic
+                : EventDisplay::Mode::kDetector;
+
+        EventListIO eventlist(read_path, EventListIO::Mode::kRead);
+        return event_display::draw_one(eventlist,
+                                       sample_key,
+                                       entry,
+                                       plane,
+                                       mode,
+                                       event_display::Branches{},
+                                       EventDisplay::Options{},
+                                       grid_w,
+                                       grid_h);
     }
 }
 

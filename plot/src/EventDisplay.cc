@@ -19,13 +19,13 @@
 
 namespace plot_utils
 {
-    EventDisplay::EventDisplay(Spec spec, Options opt, DetectorData data)
-        : spec_(std::move(spec)), opt_(std::move(opt)), detector_(std::move(data))
+    EventDisplay::EventDisplay(Spec spec, Options opt, DetectorData data, SparseIndex indices)
+        : spec_(std::move(spec)), opt_(std::move(opt)), detector_(std::move(data)), indices_(std::move(indices))
     {
     }
 
-    EventDisplay::EventDisplay(Spec spec, Options opt, SemanticData data)
-        : spec_(std::move(spec)), opt_(std::move(opt)), semantic_(std::move(data))
+    EventDisplay::EventDisplay(Spec spec, Options opt, SemanticData data, SparseIndex indices)
+        : spec_(std::move(spec)), opt_(std::move(opt)), semantic_(std::move(data)), indices_(std::move(indices))
     {
     }
 
@@ -87,7 +87,16 @@ namespace plot_utils
     void EventDisplay::build_histogram()
     {
         const std::size_t flat_size =
-            spec_.mode == Mode::kDetector ? detector_.size() : semantic_.size();
+            !indices_.empty()
+                ? (static_cast<std::size_t>(*std::max_element(indices_.begin(), indices_.end())) + 1)
+                : (spec_.mode == Mode::kDetector ? detector_.size() : semantic_.size());
+
+        if (!indices_.empty() && spec_.grid_w <= 0 && spec_.grid_h <= 0)
+        {
+            throw std::runtime_error(
+                "plot_utils::EventDisplay: sparse image display requires grid_w or grid_h");
+        }
+
         const auto [w, h] = deduce_grid(spec_.grid_w, spec_.grid_h, flat_size);
 
         hist_.reset(new TH2F(spec_.id.c_str(),
@@ -104,32 +113,68 @@ namespace plot_utils
         if (spec_.mode == Mode::kDetector)
         {
             const int n = static_cast<int>(detector_.size());
-            for (int r = 0; r < h; ++r)
+            if (!indices_.empty())
             {
-                for (int c = 0; c < w; ++c)
+                const int nidx = std::min<int>(n, static_cast<int>(indices_.size()));
+                for (int i = 0; i < nidx; ++i)
                 {
-                    const int idx = r * w + c;
-                    if (idx >= n)
-                        break;
-                    float x = detector_[static_cast<std::size_t>(idx)];
+                    const std::uint32_t idx = indices_[static_cast<std::size_t>(i)];
+                    const int r = static_cast<int>(idx / static_cast<std::uint32_t>(w));
+                    const int c = static_cast<int>(idx % static_cast<std::uint32_t>(w));
+                    if (r >= h || c >= w)
+                        continue;
+                    float x = detector_[static_cast<std::size_t>(i)];
                     if (opt_.use_log_z && x <= opt_.det_min)
                         x = static_cast<float>(opt_.det_min);
                     hist_->SetBinContent(c + bin_offset, r + bin_offset, x);
+                }
+            }
+            else
+            {
+                for (int r = 0; r < h; ++r)
+                {
+                    for (int c = 0; c < w; ++c)
+                    {
+                        const int idx = r * w + c;
+                        if (idx >= n)
+                            break;
+                        float x = detector_[static_cast<std::size_t>(idx)];
+                        if (opt_.use_log_z && x <= opt_.det_min)
+                            x = static_cast<float>(opt_.det_min);
+                        hist_->SetBinContent(c + bin_offset, r + bin_offset, x);
+                    }
                 }
             }
         }
         else
         {
             const int n = static_cast<int>(semantic_.size());
-            for (int r = 0; r < h; ++r)
+            if (!indices_.empty())
             {
-                for (int c = 0; c < w; ++c)
+                const int nidx = std::min<int>(n, static_cast<int>(indices_.size()));
+                for (int i = 0; i < nidx; ++i)
                 {
-                    const int idx = r * w + c;
-                    if (idx >= n)
-                        break;
+                    const std::uint32_t idx = indices_[static_cast<std::size_t>(i)];
+                    const int r = static_cast<int>(idx / static_cast<std::uint32_t>(w));
+                    const int c = static_cast<int>(idx % static_cast<std::uint32_t>(w));
+                    if (r >= h || c >= w)
+                        continue;
                     hist_->SetBinContent(c + bin_offset, r + bin_offset,
-                                         semantic_[static_cast<std::size_t>(idx)]);
+                                         semantic_[static_cast<std::size_t>(i)]);
+                }
+            }
+            else
+            {
+                for (int r = 0; r < h; ++r)
+                {
+                    for (int c = 0; c < w; ++c)
+                    {
+                        const int idx = r * w + c;
+                        if (idx >= n)
+                            break;
+                        hist_->SetBinContent(c + bin_offset, r + bin_offset,
+                                             semantic_[static_cast<std::size_t>(idx)]);
+                    }
                 }
             }
         }
@@ -284,95 +329,4 @@ namespace plot_utils
         legend_->Draw();
     }
 
-    namespace event_display
-    {
-        template <class T>
-        std::vector<T> read_vector_branch(TTree *tree,
-                                          const std::string &branch_name,
-                                          Long64_t entry)
-        {
-            std::vector<T> *ptr = nullptr;
-            tree->SetBranchAddress(branch_name.c_str(), &ptr);
-            tree->GetEntry(entry);
-            return ptr ? *ptr : std::vector<T>{};
-        }
-
-        int read_int_branch(TTree *tree,
-                            const std::string &branch_name,
-                            Long64_t entry)
-        {
-            int value = 0;
-            tree->SetBranchAddress(branch_name.c_str(), &value);
-            tree->GetEntry(entry);
-            return value;
-        }
-
-        const std::string &branch_for_plane(const Branches &branches,
-                                            const std::string &plane,
-                                            EventDisplay::Mode mode)
-        {
-            if (mode == EventDisplay::Mode::kDetector)
-            {
-                if (plane == "U") return branches.det_u;
-                if (plane == "V") return branches.det_v;
-                return branches.det_w;
-            }
-
-            if (plane == "U") return branches.sem_u;
-            if (plane == "V") return branches.sem_v;
-            return branches.sem_w;
-        }
-
-        TCanvas *draw_one(const EventListIO &eventlist,
-                          const std::string &sample_key,
-                          Long64_t entry,
-                          const std::string &plane,
-                          EventDisplay::Mode mode,
-                          const Branches &branches,
-                          const EventDisplay::Options &options)
-        {
-            TTree *tree = eventlist.selected_tree(sample_key);
-            if (!tree)
-                throw std::runtime_error("plot_utils::event_display::draw_one: missing selected tree");
-            if (entry < 0 || entry >= tree->GetEntries())
-                throw std::runtime_error("plot_utils::event_display::draw_one: entry out of range");
-
-            const int run = read_int_branch(tree, branches.run, entry);
-            const int sub = read_int_branch(tree, branches.sub, entry);
-            const int evt = read_int_branch(tree, branches.evt, entry);
-
-            const std::string id = plane + "_" + std::to_string(run) + "_" +
-                                   std::to_string(sub) + "_" + std::to_string(evt);
-            const std::string title =
-                std::string(mode == EventDisplay::Mode::kDetector ? "Detector" : "Semantic") +
-                " Image, Plane " + plane +
-                " - Run " + std::to_string(run) +
-                ", Subrun " + std::to_string(sub) +
-                ", Event " + std::to_string(evt);
-
-            if (mode == EventDisplay::Mode::kDetector)
-            {
-                EventDisplay::DetectorData data =
-                    read_vector_branch<float>(tree, branch_for_plane(branches, plane, mode), entry);
-                EventDisplay display({id, title, mode}, options, std::move(data));
-                TCanvas *canvas = new TCanvas(id.c_str(), title.c_str(),
-                                              options.canvas_size, options.canvas_size);
-                display.draw(*canvas);
-                return canvas;
-            }
-
-            std::vector<unsigned char> raw =
-                read_vector_branch<unsigned char>(tree, branch_for_plane(branches, plane, mode), entry);
-            EventDisplay::SemanticData data;
-            data.reserve(raw.size());
-            for (unsigned char value : raw)
-                data.push_back(static_cast<int>(value));
-            EventDisplay display({id, title, mode}, options, std::move(data));
-            TCanvas *canvas = new TCanvas(id.c_str(), title.c_str(),
-                                          options.canvas_size, options.canvas_size);
-            display.draw(*canvas);
-            return canvas;
-        }
-    }
 }
-
