@@ -3,6 +3,7 @@ set(AMARANTIN_IO_SOURCES
   src/DatasetIO.cc
   src/EventListIO.cc
   src/EventListSelection.cc
+  src/SnapshotService.cc
   src/detail/RunDatabaseService.cc
   src/SampleIO.cc
 )
@@ -12,6 +13,7 @@ set(AMARANTIN_IO_PUBLIC_HEADERS
   include/DatasetIO.hh
   include/EventListIO.hh
   include/EventListSelection.hh
+  include/SnapshotService.hh
   include/SampleIO.hh
 )
 

@@ -5,6 +5,14 @@
 
 namespace
 {
+    std::string join_and(const std::string &lhs, const std::string &rhs)
+    {
+        if (lhs.empty())
+            return rhs;
+        if (rhs.empty())
+            return lhs;
+        return "(" + lhs + ") && (" + rhs + ")";
+    }
 }
 
 const char *EventListSelection::preset_name(Preset preset)
@@ -126,43 +134,47 @@ std::string EventListSelection::expression(Preset preset,
     if (preset == Preset::kTrigger)
         return trigger_expr;
 
-    std::string slice_expr;
+    std::string slice_base_expr;
     if (has_column(columns, slice_branch()))
     {
-        slice_expr = slice_branch();
+        slice_base_expr = slice_branch();
     }
     else if (has_column(columns, "sel_slice"))
     {
-        slice_expr = "sel_slice";
+        slice_base_expr = "sel_slice";
     }
     else
     {
         require_column(columns, "num_slices", "slice preset");
         require_column(columns, "topological_score", "slice preset");
-        slice_expr = "(num_slices == " + std::to_string(config.slice_required_count) +
-                     ") && (topological_score > " + std::to_string(config.slice_min_topology_score) + ")";
+        slice_base_expr = "(num_slices == " + std::to_string(config.slice_required_count) +
+                          ") && (topological_score > " + std::to_string(config.slice_min_topology_score) + ")";
     }
+    const std::string slice_expr = join_and(trigger_expr, slice_base_expr);
 
     if (preset == Preset::kSlice)
         return slice_expr;
 
-    std::string fiducial_expr;
+    std::string fiducial_base_expr;
     if (has_column(columns, fiducial_branch()))
     {
-        fiducial_expr = fiducial_branch();
+        fiducial_base_expr = fiducial_branch();
     }
     else if (has_column(columns, "sel_fiducial"))
     {
-        fiducial_expr = "sel_fiducial";
+        fiducial_base_expr = "sel_fiducial";
     }
     else if (has_column(columns, "in_reco_fiducial"))
     {
-        fiducial_expr = "in_reco_fiducial";
+        fiducial_base_expr = "in_reco_fiducial";
     }
     else
     {
         throw std::runtime_error("EventListSelection: fiducial preset requires sel_fiducial or in_reco_fiducial");
     }
+    const std::string fiducial_expr = has_column(columns, fiducial_branch())
+                                          ? fiducial_base_expr
+                                          : join_and(slice_expr, fiducial_base_expr);
 
     if (preset == Preset::kFiducial)
         return fiducial_expr;
@@ -170,9 +182,9 @@ std::string EventListSelection::expression(Preset preset,
     if (has_column(columns, muon_branch()))
         return muon_branch();
     if (has_column(columns, "sel_muon"))
-        return "sel_muon";
+        return join_and(trigger_expr, "sel_muon");
     if (has_column(columns, "selection_pass"))
-        return "(selection_pass > 0)";
+        return join_and(fiducial_expr, "(selection_pass > 0)");
 
     throw std::runtime_error("EventListSelection: muon preset requires sel_muon or selection_pass");
 }

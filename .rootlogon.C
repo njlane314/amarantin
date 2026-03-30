@@ -4,21 +4,17 @@
     const TString macro_dir = root_dir + "/macro";
     const TString plot_include_dir = root_dir + "/plot/include";
     const TString plot_macro_dir = root_dir + "/plot/macro";
-    const TString snapshot_include_dir = root_dir + "/snapshot/include";
-    const TString snapshot_macro_dir = root_dir + "/snapshot/macro";
+    const TString io_macro_dir = root_dir + "/io/macro";
     const TString lib_dir = root_dir + "/build/lib";
     const TString lib_path = lib_dir + "/libIO.so";
-    const TString snapshot_lib_path = lib_dir + "/libSnapshot.so";
 
     gInterpreter->AddIncludePath(include_dir.Data());
     gInterpreter->AddIncludePath(macro_dir.Data());
     gInterpreter->AddIncludePath(plot_include_dir.Data());
     gInterpreter->AddIncludePath(plot_macro_dir.Data());
-    gInterpreter->AddIncludePath(snapshot_include_dir.Data());
-    gInterpreter->AddIncludePath(snapshot_macro_dir.Data());
+    gInterpreter->AddIncludePath(io_macro_dir.Data());
     gSystem->AddDynamicPath(lib_dir.Data());
     gSystem->Load(lib_path.Data());
-    gSystem->Load(snapshot_lib_path.Data());
 
     gInterpreter->Declare(R"cpp(
         #include <algorithm>
