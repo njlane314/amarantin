@@ -4,7 +4,6 @@ set(AMARANTIN_FIT_SOURCES
 
 set(AMARANTIN_FIT_PUBLIC_HEADERS
   SignalStrengthFit.hh
-  XsecFit.hh
 )
 
 add_library(Fit SHARED
