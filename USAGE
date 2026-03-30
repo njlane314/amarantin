@@ -143,6 +143,10 @@ Example:
 The mk_eventlist program reads a persistent DatasetIO file, chains the
 underlying per-sample job ROOT files, applies a TTreeFormula selection, and
 writes a persistent EventListIO file with one selected-event tree per sample.
+For non-data samples it resolves `__w_norm__` from the embedded DatasetIO
+run/subrun normalization table using the event-tree `run` and `subRun`
+branches, resolves `__w_cv__` from the central-value physics weights, and
+persists `__w__ = __w_norm__ * __w_cv__` plus `__w2__`.
 
 Basic mk_channel usage
 ----------------------

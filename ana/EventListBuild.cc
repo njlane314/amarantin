@@ -5,9 +5,11 @@
 
 #include <cmath>
 #include <limits>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <TChain.h>
@@ -17,10 +19,13 @@
 
 namespace
 {
+    constexpr const char *kEventWeightNormalisationBranch = "__w_norm__";
+    constexpr const char *kEventWeightCentralValueBranch = "__w_cv__";
     constexpr const char *kEventWeightBranch = "__w__";
     constexpr const char *kEventWeightSquaredBranch = "__w2__";
     constexpr const char *kAnalysisChannelBranch = "__analysis_channel__";
     constexpr const char *kSignalBranch = "__is_signal__";
+    using RunSubrunKey = std::pair<int, int>;
 
     cuts::Config cuts_config_for(const ana::BuildConfig &config)
     {
@@ -127,42 +132,112 @@ namespace
         return w;
     }
 
-    double compute_nominal_weight(const DatasetIO::Sample &sample,
-                                  bool has_weight_spline_times_tune,
-                                  float weight_spline_times_tune,
-                                  float weight_spline,
-                                  float weight_tune,
-                                  bool has_ppfx_cv,
-                                  float ppfx_cv,
-                                  bool has_rootino_fix,
-                                  double rootino_fix)
+    std::string sample_context(const std::string &sample_key,
+                               const DatasetIO::Sample &sample)
+    {
+        if (!sample.sample.empty() && sample.sample != sample_key)
+            return sample_key + " (" + sample.sample + ")";
+        if (!sample_key.empty())
+            return sample_key;
+        if (!sample.sample.empty())
+            return sample.sample;
+        return "<unknown sample>";
+    }
+
+    std::map<RunSubrunKey, DatasetIO::RunSubrunNormalisation>
+    build_normalisation_lookup(const std::string &sample_key,
+                               const DatasetIO::Sample &sample)
+    {
+        if (sample.run_subrun_normalisations.empty())
+        {
+            throw std::runtime_error("ana::build_event_list: sample " +
+                                     sample_context(sample_key, sample) +
+                                     " is missing the embedded run/subrun normalisation surface");
+        }
+
+        std::map<RunSubrunKey, DatasetIO::RunSubrunNormalisation> lookup;
+        for (const auto &entry : sample.run_subrun_normalisations)
+        {
+            const RunSubrunKey key{entry.run, entry.subrun};
+            const auto inserted = lookup.emplace(key, entry);
+            if (!inserted.second)
+            {
+                throw std::runtime_error("ana::build_event_list: sample " +
+                                         sample_context(sample_key, sample) +
+                                         " has duplicate run/subrun normalisation entries for (" +
+                                         std::to_string(entry.run) + ", " +
+                                         std::to_string(entry.subrun) + ")");
+            }
+        }
+
+        return lookup;
+    }
+
+    double resolved_normalisation(const std::string &sample_key,
+                                  const DatasetIO::Sample &sample,
+                                  const std::map<RunSubrunKey, DatasetIO::RunSubrunNormalisation> &lookup,
+                                  int run,
+                                  int subrun)
     {
         if (is_data_origin(sample))
             return 1.0;
 
-        const double normalisation =
-            (sample.normalisation > 0.0 && std::isfinite(sample.normalisation))
-                ? sample.normalisation
-                : 1.0;
+        const auto it = lookup.find(RunSubrunKey{run, subrun});
+        if (it == lookup.end())
+        {
+            throw std::runtime_error("ana::build_event_list: sample " +
+                                     sample_context(sample_key, sample) +
+                                     " is missing run/subrun normalisation for (" +
+                                     std::to_string(run) + ", " +
+                                     std::to_string(subrun) + ")");
+        }
 
-        if (is_external_origin(sample))
-            return normalisation;
+        const double value = it->second.normalisation;
+        if (!std::isfinite(value) || value < 0.0)
+        {
+            throw std::runtime_error("ana::build_event_list: sample " +
+                                     sample_context(sample_key, sample) +
+                                     " has invalid run/subrun normalisation for (" +
+                                     std::to_string(run) + ", " +
+                                     std::to_string(subrun) + ")");
+        }
+        return value;
+    }
 
-        if (!is_mc_origin(sample))
-            return normalisation;
+    double compute_central_value_weight(const DatasetIO::Sample &sample,
+                                        bool has_weight_spline_times_tune,
+                                        float weight_spline_times_tune,
+                                        float weight_spline,
+                                        float weight_tune,
+                                        bool has_ppfx_cv,
+                                        float ppfx_cv,
+                                        bool has_rootino_fix,
+                                        double rootino_fix)
+    {
+        if (is_data_origin(sample) || is_external_origin(sample) || !is_mc_origin(sample))
+            return 1.0;
 
         const double weight_cv =
             has_weight_spline_times_tune
                 ? sanitise_weight(weight_spline_times_tune)
                 : sanitise_weight(weight_spline) * sanitise_weight(weight_tune);
 
-        double out = normalisation * weight_cv;
+        double out = weight_cv;
 
         if (sample.beam == DatasetIO::Sample::Beam::kNuMI)
             out *= has_ppfx_cv ? sanitise_weight(ppfx_cv) : 1.0;
 
         out *= has_rootino_fix ? sanitise_weight(rootino_fix) : 1.0;
 
+        if (!std::isfinite(out) || out < 0.0)
+            return 0.0;
+        return out;
+    }
+
+    double compute_nominal_weight(double event_weight_normalisation,
+                                  double event_weight_central_value)
+    {
+        const double out = event_weight_normalisation * event_weight_central_value;
         if (!std::isfinite(out) || out < 0.0)
             return 0.0;
         return out;
@@ -219,7 +294,8 @@ namespace
         return values->front();
     }
 
-    std::unique_ptr<TTree> copy_selected_tree(const DatasetIO::Sample &sample,
+    std::unique_ptr<TTree> copy_selected_tree(const std::string &sample_key,
+                                              const DatasetIO::Sample &sample,
                                               const std::string &event_tree_name,
                                               const std::string &selection_expr,
                                               const cuts::Config &cuts_config)
@@ -281,12 +357,15 @@ namespace
                                   columns,
                                   cuts_config,
                                   chain);
+        const auto normalisation_lookup = build_normalisation_lookup(sample_key, sample);
 
         float weight_spline = 1.0f;
         float weight_tune = 1.0f;
         float weight_spline_times_tune = 1.0f;
         float ppfx_cv = 1.0f;
         double rootino_fix = 1.0;
+        Int_t run = 0;
+        Int_t subrun = 0;
         int nu_pdg = 0;
         int int_ccnc = -1;
         bool is_nu_mu_cc = false;
@@ -304,6 +383,8 @@ namespace
         const bool has_weight_spline_times_tune = chain.GetBranch("weightSplineTimesTune") != nullptr;
         const bool has_ppfx_cv = chain.GetBranch("ppfx_cv") != nullptr;
         const bool has_rootino_fix = chain.GetBranch("RootinoFix") != nullptr;
+        const bool has_run = chain.GetBranch("run") != nullptr;
+        const bool has_subrun = chain.GetBranch("subRun") != nullptr;
         const bool has_nu_pdg = chain.GetBranch("nu_pdg") != nullptr;
         const bool has_int_ccnc = chain.GetBranch("int_ccnc") != nullptr;
         const bool has_is_nu_mu_cc = chain.GetBranch("is_nu_mu_cc") != nullptr;
@@ -315,6 +396,13 @@ namespace
         const bool has_g4_lambda_pi_p = chain.GetBranch("g4_lambda_pi_p") != nullptr;
         const bool has_g4_lambda_decay_sep = chain.GetBranch("g4_lambda_decay_sep") != nullptr;
 
+        if (!has_run || !has_subrun)
+        {
+            throw std::runtime_error("ana::build_event_list: event tree " + event_tree_name +
+                                     " for sample " + sample_context(sample_key, sample) +
+                                     " must expose run and subRun branches");
+        }
+
         if (has_weight_spline)
             chain.SetBranchAddress("weightSpline", &weight_spline);
         if (has_weight_tune)
@@ -325,6 +413,8 @@ namespace
             chain.SetBranchAddress("ppfx_cv", &ppfx_cv);
         if (has_rootino_fix)
             chain.SetBranchAddress("RootinoFix", &rootino_fix);
+        chain.SetBranchAddress("run", &run);
+        chain.SetBranchAddress("subRun", &subrun);
         if (has_nu_pdg)
             chain.SetBranchAddress("nu_pdg", &nu_pdg);
         if (has_int_ccnc)
@@ -346,6 +436,8 @@ namespace
         if (has_g4_lambda_decay_sep)
             chain.SetBranchAddress("g4_lambda_decay_sep", &g4_lambda_decay_sep);
 
+        double event_weight_normalisation = 1.0;
+        double event_weight_central_value = 1.0;
         double event_weight = 1.0;
         double event_weight_squared = 1.0;
         bool pass_trigger = false;
@@ -354,6 +446,12 @@ namespace
         bool pass_muon = false;
         int analysis_channel = channels::to_int(channels::Channel::kUnknown);
         bool is_signal = false;
+        selected->Branch(kEventWeightNormalisationBranch,
+                         &event_weight_normalisation,
+                         (std::string(kEventWeightNormalisationBranch) + "/D").c_str());
+        selected->Branch(kEventWeightCentralValueBranch,
+                         &event_weight_central_value,
+                         (std::string(kEventWeightCentralValueBranch) + "/D").c_str());
         selected->Branch(kEventWeightBranch, &event_weight, (std::string(kEventWeightBranch) + "/D").c_str());
         selected->Branch(kEventWeightSquaredBranch,
                          &event_weight_squared,
@@ -455,15 +553,22 @@ namespace
                     is_signal = false;
                 }
 
-                event_weight = compute_nominal_weight(sample,
-                                                      has_weight_spline_times_tune,
-                                                      weight_spline_times_tune,
-                                                      weight_spline,
-                                                      weight_tune,
-                                                      has_ppfx_cv,
-                                                      ppfx_cv,
-                                                      has_rootino_fix,
-                                                      rootino_fix);
+                event_weight_normalisation = resolved_normalisation(sample_key,
+                                                                    sample,
+                                                                    normalisation_lookup,
+                                                                    static_cast<int>(run),
+                                                                    static_cast<int>(subrun));
+                event_weight_central_value = compute_central_value_weight(sample,
+                                                                          has_weight_spline_times_tune,
+                                                                          weight_spline_times_tune,
+                                                                          weight_spline,
+                                                                          weight_tune,
+                                                                          has_ppfx_cv,
+                                                                          ppfx_cv,
+                                                                          has_rootino_fix,
+                                                                          rootino_fix);
+                event_weight = compute_nominal_weight(event_weight_normalisation,
+                                                      event_weight_central_value);
                 event_weight_squared = event_weight * event_weight;
                 selected->Fill();
             }
@@ -544,7 +649,8 @@ namespace ana
             }
 
             std::unique_ptr<TTree> selected =
-                copy_selected_tree(sample,
+                copy_selected_tree(key,
+                                   sample,
                                    config.event_tree_name,
                                    effective_selection_expr,
                                    cuts_config);

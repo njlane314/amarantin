@@ -29,7 +29,9 @@ Public surface
 --------------
 EventListBuild.hh
   Defines ana::BuildConfig and ana::build_event_list(...), the main
-  DatasetIO -> EventListIO translation entry point.
+  DatasetIO -> EventListIO translation entry point. It resolves event-level
+  `__w_norm__`, `__w_cv__`, `__w__`, and `__w2__` from the embedded
+  DatasetIO run/subrun normalization surface plus the event-tree CV weights.
 
 SampleDef.hh
   Defines ana::SampleDef plus read_sample_defs(...) and
@@ -60,6 +62,6 @@ The intended ana/ responsibility is:
 
   DatasetIO metadata + chained trees
       ->
-  selection / derived columns / optional snapshots
+  selection / derived columns / resolved event weights / optional snapshots
       ->
   EventListIO

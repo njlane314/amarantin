@@ -177,6 +177,9 @@ Build one canonical two-lane systematics cache:
     output.eventlist.root input.dataset.root
 
 Notes:
+  `mk_eventlist` resolves `__w_norm__` from the embedded DatasetIO run/subrun
+  normalization surface, `__w_cv__` from the central-value event-weight
+  branches, and persists `__w__ = __w_norm__ * __w_cv__` plus `__w2__`.
   `--cache-detvars` drives the detector lane from alternate EventListIO samples.
   `--cache-genie`, `--cache-flux`, and `--cache-reint` drive the reweighting
   lane from branches on the nominal sample.

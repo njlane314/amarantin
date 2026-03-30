@@ -301,7 +301,7 @@ legacy wrapper paths.
       beam, polarity, and campaign payload
 
 #### Milestone 5: `mk_eventlist` Uses Embedded Normalization Maps
-- status: todo
+- status: done
 - hypothesis: if `mk_eventlist` resolves nominal event weights from the
   embedded run/subrun normalization table and persists `__w_norm__`,
   `__w_cv__`, `__w__`, and `__w2__`, then downstream code can stop
@@ -326,6 +326,22 @@ legacy wrapper paths.
   - missing normalization-table lookups fail
   - nominal event weights are derived from the logical normalization map, not
     a sample-wide scalar shortcut
+- verification results:
+  - local checks passed:
+    - `git diff --check -- ana/EventListBuild.cc io/EventListIO.cc io/bits/DERIVED ana/README COMMANDS USAGE`
+    - `bash -n tools/run-macro`
+  - Docker verification passed in a fresh Linux build tree:
+    - `docker build -t amarantin-dev .`
+    - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/m5-docker -DCMAKE_BUILD_TYPE=Release && cmake --build .build/m5-docker --target IO Ana mk_eventlist --parallel && .build/m5-docker/bin/mk_eventlist --help'`
+    - `mk_eventlist --help` printed the expected usage and then followed its
+      existing invalid-arguments exit path
+    - a focused synthetic `DatasetIO -> EventListIO` smoke confirmed:
+      - `__w_norm__`, `__w_cv__`, `__w__`, and `__w2__` are written with the
+        expected resolved values
+      - copied `EventListIO` sample metadata now retains the run/subrun
+        normalisation table
+      - missing `run` / `subRun` branches fail loudly
+      - missing run/subrun lookup entries fail loudly
 
 #### Milestone 6: Extract `mk_dist`
 - status: todo

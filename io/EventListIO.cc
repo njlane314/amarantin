@@ -18,6 +18,72 @@ namespace
         return sample.nominal.empty() ? key : sample.nominal;
     }
 
+    void write_run_subrun_normalisations(TDirectory *sample_dir,
+                                         const std::vector<DatasetIO::RunSubrunNormalisation> &entries)
+    {
+        sample_dir->cd();
+
+        TTree tree("run_subrun_normalisation", "");
+        Int_t run = 0;
+        Int_t subrun = 0;
+        Double_t generated_exposure = 0.0;
+        Double_t target_exposure = 0.0;
+        Double_t normalisation = 1.0;
+        tree.Branch("run", &run, "run/I");
+        tree.Branch("subrun", &subrun, "subrun/I");
+        tree.Branch("generated_exposure", &generated_exposure, "generated_exposure/D");
+        tree.Branch("target_exposure", &target_exposure, "target_exposure/D");
+        tree.Branch("normalisation", &normalisation, "normalisation/D");
+
+        for (const auto &entry : entries)
+        {
+            run = entry.run;
+            subrun = entry.subrun;
+            generated_exposure = entry.generated_exposure;
+            target_exposure = entry.target_exposure;
+            normalisation = entry.normalisation;
+            tree.Fill();
+        }
+
+        tree.Write("run_subrun_normalisation", TObject::kOverwrite);
+    }
+
+    std::vector<DatasetIO::RunSubrunNormalisation> read_run_subrun_normalisations(TDirectory *sample_dir)
+    {
+        auto *tree = dynamic_cast<TTree *>(sample_dir->Get("run_subrun_normalisation"));
+        if (!tree)
+            return {};
+
+        Int_t run = 0;
+        Int_t subrun = 0;
+        Double_t generated_exposure = 0.0;
+        Double_t target_exposure = 0.0;
+        Double_t normalisation = 1.0;
+        tree->SetBranchAddress("run", &run);
+        tree->SetBranchAddress("subrun", &subrun);
+        tree->SetBranchAddress("generated_exposure", &generated_exposure);
+        tree->SetBranchAddress("target_exposure", &target_exposure);
+        tree->SetBranchAddress("normalisation", &normalisation);
+
+        std::vector<DatasetIO::RunSubrunNormalisation> entries;
+        const Long64_t n = tree->GetEntries();
+        entries.reserve(static_cast<std::size_t>(n));
+        for (Long64_t i = 0; i < n; ++i)
+        {
+            tree->GetEntry(i);
+
+            DatasetIO::RunSubrunNormalisation entry;
+            entry.run = static_cast<int>(run);
+            entry.subrun = static_cast<int>(subrun);
+            entry.generated_exposure = static_cast<double>(generated_exposure);
+            entry.target_exposure = static_cast<double>(target_exposure);
+            entry.normalisation = static_cast<double>(normalisation);
+            entries.push_back(entry);
+        }
+
+        return entries;
+    }
+
     void write_sample_metadata(TDirectory *meta_dir, const DatasetIO::Sample &sample)
     {
         utils::write_named(meta_dir, "sample", sample.sample);
@@ -140,6 +206,7 @@ void EventListIO::write_sample(const std::string &sample_key,
     TDirectory *subruns_dir = utils::must_dir(sample_dir, "subruns", true);
 
     write_sample_metadata(sample_meta_dir, sample);
+    write_run_subrun_normalisations(sample_dir, sample.run_subrun_normalisations);
 
     events_dir->cd();
     selected_tree->SetName("selected");
@@ -183,14 +250,17 @@ DatasetIO::Sample EventListIO::sample(const std::string &sample_key) const
     sample.subrun_pot_sum = utils::read_param<double>(meta_dir, "subrun_pot_sum");
     sample.db_tortgt_pot_sum = utils::read_param<double>(meta_dir, "db_tortgt_pot_sum");
     sample.normalisation = utils::read_param<double>(meta_dir, "normalisation");
+    sample.run_subrun_normalisations = read_run_subrun_normalisations(sample_dir);
 
     sample.nominal = utils::read_named_or(meta_dir, "nominal", utils::read_named_or(meta_dir, "nominal_key"));
     sample.tag = utils::read_named_or(meta_dir, "tag", utils::read_named_or(meta_dir, "variant_name"));
     sample.role = utils::read_named_or(meta_dir, "role", utils::read_named_or(meta_dir, "workflow_role"));
     sample.defname = utils::read_named_or(meta_dir, "defname", utils::read_named_or(meta_dir, "source_def"));
     sample.campaign = utils::read_named_or(meta_dir, "campaign");
-    if (sample.normalisation_mode.empty() && sample.normalisation > 0.0)
-        sample.normalisation_mode = "scalar";
+    if (sample.normalisation_mode.empty())
+        sample.normalisation_mode = sample.run_subrun_normalisations.empty()
+                                        ? ((sample.normalisation > 0.0) ? "scalar" : std::string())
+                                        : "run_subrun_pot";
 
     return sample;
 }

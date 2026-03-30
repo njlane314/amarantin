@@ -117,13 +117,25 @@ Framework-owned event-weight columns
 
 EventListIO always writes:
 
+  __w_norm__                       double
+  __w_cv__                         double
   __w__                            double
   __w2__                           double
 
 Meaning:
 
+  __w_norm__
+    Resolved per-event base normalisation derived from the embedded
+    DatasetIO run/subrun normalisation table. For data samples this stays 1.0
+    so selected yields remain raw event counts.
+
+  __w_cv__
+    Central-value physics weight applied on top of __w_norm__.
+
   __w__
-    Canonical nominal event weight for downstream use.
+    Canonical nominal event weight for downstream use:
+
+      __w__ = __w_norm__ * __w_cv__
 
   __w2__
     Square of __w__, provided as a convenience for weighted variance-like
@@ -132,13 +144,18 @@ Meaning:
 Current nominal-weight policy:
 
   data samples
+    __w_norm__ = 1.0
+    __w_cv__ = 1.0
     __w__ = 1.0
 
   external samples
-    __w__ = sample normalisation
+    __w_norm__ = resolved run/subrun normalisation
+    __w_cv__ = 1.0
+    __w__ = __w_norm__
 
   MC-like samples
-    __w__ starts from sample normalisation and then applies central-value
+    __w_norm__ = resolved run/subrun normalisation
+    __w_cv__ applies central-value
     physics weights when present:
 
       weightSplineTimesTune
@@ -148,6 +165,7 @@ Current nominal-weight policy:
 
   Bad or non-positive component weights are sanitised back to 1.0.
   A bad final value is clamped to 0.0.
+  Missing run/subrun branches or run/subrun lookups fail the build.
 
 Framework-owned selection helper columns
 ----------------------------------------
@@ -398,6 +416,8 @@ Practical guidance
 For analysis and plotting inside this repository, the most important derived
 columns to treat as stable are:
 
+  __w_norm__
+  __w_cv__
   __w__
   __w2__
   __pass_trigger__
@@ -410,6 +430,8 @@ columns to treat as stable are:
 For training snapshots, it is reasonable to export both upstream physics
 branches and selected framework-owned helper columns, especially:
 
+  __w_norm__
+  __w_cv__
   __w__
   __w2__
   sample_id

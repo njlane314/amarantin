@@ -2,6 +2,81 @@
 
 ## Current milestone
 - status: done
+- subsystem: `ana/` + `io/` event-list weighting seam
+- design rule from `DESIGN.md`: keep event-list construction in `ana/`, keep
+  persistence in `io/`, and make downstream row-wise surfaces explicit rather
+  than reconstructing old workflow assumptions later
+
+## What changed
+- moved nominal event weighting in `ana::build_event_list(...)` off the old
+  sample-wide scalar shortcut and onto the embedded DatasetIO run/subrun
+  normalization table
+- `mk_eventlist` now requires event-tree `run` and `subRun` branches and
+  fails if a selected event has no matching run/subrun normalization entry
+- split the persisted event-weight surface into:
+  - `__w_norm__`
+  - `__w_cv__`
+  - `__w__`
+  - `__w2__`
+- copied the run/subrun normalization table through `EventListIO` so the
+  row-wise debug surface can inspect the same normalization metadata later
+- updated `io/bits/DERIVED`, `ana/README`, `COMMANDS`, and `USAGE` so the
+  documented event-list contract matches the persisted surface
+
+## Why this is simpler
+- one normalization source now exists for row-wise event weighting:
+  the DatasetIO run/subrun table already built upstream
+- downstream code no longer needs to guess whether `__w__` came from a local
+  run/subrun map or a sample-level scalar
+- the selected tree exposes the normalization split directly, so debugging
+  does not need another wrapper or a second reconstruction path
+- `EventListIO` now carries the same normalization metadata that `ana`
+  consumed, which keeps the build/debug surface honest
+
+## Verification
+- local checks:
+  - `git diff --check -- ana/EventListBuild.cc io/EventListIO.cc io/bits/DERIVED ana/README COMMANDS USAGE`
+  - `bash -n tools/run-macro`
+- Docker checks:
+  - focused Linux rebuild of `IO`, `Ana`, and `mk_eventlist`
+  - `mk_eventlist --help` usage smoke
+  - synthetic success smoke confirming expected `__w_norm__`, `__w_cv__`,
+    `__w__`, and `__w2__` values
+  - synthetic failure smoke for missing `run` / `subRun`
+  - synthetic failure smoke for missing run/subrun lookup entries
+- results:
+  - `mk_eventlist` now resolves nominal event weights from the embedded
+    run/subrun map for non-data samples
+  - data remains unit-weighted so downstream data yields stay raw counts
+  - copied `EventListIO` sample metadata now retains the run/subrun
+    normalization table used during the build step
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - remove the last sample-wide-scalar shortcut from the canonical
+    `DatasetIO -> EventListIO` build path
+- shell branches removed: 0
+- docs/build artifacts removed: stale scalar-weight wording in the EventListIO
+  derived-column contract
+- approximate LOC delta: additive validation and explicit weight-surface
+  columns in exchange for deleting the old implicit scalar assumption
+
+## Decisions
+- keep data unit-weighted in `__w__` so existing row-wise and downstream data
+  yields stay count-like even though the run/subrun normalization table is
+  still required and copied through the build
+- persist the run/subrun normalization table directly in `EventListIO` sample
+  storage instead of inventing a second debug-only metadata format
+
+## Remaining hotspots
+- `mk_eventlist` still owns the legacy `--cache-*` path, so the preferred
+  cache-building workflow is not yet split cleanly into `mk_dist`
+- `EventListIO` sample metadata is still a partial copy of `DatasetIO::Sample`
+  rather than one obviously shared persistence helper
+
+## Current milestone
+- status: done
 - subsystem: `app/` + generated dataset workflow seam
 - design rule from `DESIGN.md`: keep workflows in `app/`, keep logical sample
   fan-in out of downstream seams, and make scope inputs explicit instead of
