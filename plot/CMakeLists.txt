@@ -1,11 +1,11 @@
 set(AMARANTIN_PLOT_SOURCES
-  src/EventDisplay.cc
-  src/EventListPlotting.cc
+  EventDisplay.cc
+  EventListPlotting.cc
 )
 
 set(AMARANTIN_PLOT_PUBLIC_HEADERS
-  include/EventDisplay.hh
-  include/EventListPlotting.hh
+  EventDisplay.hh
+  EventListPlotting.hh
 )
 
 add_library(Plot SHARED
@@ -17,7 +17,7 @@ target_compile_features(Plot PUBLIC cxx_std_17)
 
 target_include_directories(Plot
   PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/amarantin>
 )
 

@@ -2,48 +2,57 @@
 
 ## Current milestone
 - status: done
-- subsystem: `syst/`
-- design rule from `DESIGN.md`: add abstractions only when they delete complexity
+- subsystem: library layout
+- design rule from `DESIGN.md`: keep module layout flat
 
 ## What changed
-- folded `SystematicsCacheBuilder` into `Systematics`
-- moved `CacheRequest`, `CacheBuildOptions`, and `build_systematics_cache(...)` into [`syst/include/Systematics.hh`](/Users/user/programs/amarantin/syst/include/Systematics.hh)
-- moved the implementation into [`syst/src/Systematics.cc`](/Users/user/programs/amarantin/syst/src/Systematics.cc)
-- reduced [`syst/include/SystematicsCacheBuilder.hh`](/Users/user/programs/amarantin/syst/include/SystematicsCacheBuilder.hh) to a compatibility shim that just includes `Systematics.hh`
-- removed [`syst/src/SystematicsCacheBuilder.cc`](/Users/user/programs/amarantin/syst/src/SystematicsCacheBuilder.cc) from the build
+- moved public headers and their main `.cc` files out of per-library `include/` and `src/` directories and into each module root
+- kept only `io/detail/` as the shared private helper area
+- updated CMake include paths so each library exports its module root directly
+- moved `SnapshotService` out of `io/` and into `ana/`
+- `IO` no longer builds or installs [`SnapshotService.hh`](/Users/user/programs/amarantin/ana/SnapshotService.hh)
+- `Ana` now owns [`SnapshotService.hh`](/Users/user/programs/amarantin/ana/SnapshotService.hh) and [`SnapshotService.cc`](/Users/user/programs/amarantin/ana/SnapshotService.cc)
+- updated the architecture docs so they describe snapshots as `ana` functionality instead of `io` functionality
 
 ## Why this is simpler
-- the preferred API shape now matches the repo rule of plain data plus namespace functions
-- `SystematicsCacheBuilder` was not a real second subsystem; now the cache-building surface lives with the rest of the systematics API
-- include compatibility is preserved, so the fold does not force a migration
-- one compiled source file is gone and the public surface is flatter
+- `rg EventListIO` or `rg Systematics` now lands on the public header and main implementation in the same directory
+- each library root describes the real public surface directly instead of splitting it across two parallel trees
+- `detail/` now means one thing: shared private helper code
+- the `IO` library boundary now matches the repo rule instead of fighting it
+- the root persistence library is more boring, which is exactly what it should be
+- snapshot/export logic now sits beside the other analysis-side transformation code
+- the public header name stays the same, so users do not need a source-level migration
 
 ## Verification
 - configure/build commands:
-- `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target Syst Plot mk_eventlist --parallel && bash tools/run-macro cache_systematics && ./build/bin/mk_eventlist --help || true'`
+- `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && bash tools/run-macro mk_snapshot && ./build/bin/mk_eventlist --help || true'`
+- `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target IO Ana mk_eventlist --parallel && bash tools/run-macro mk_snapshot && ./build/bin/mk_eventlist --help || true'`
 - target-only commands:
 - shell checks:
+- `bash -n tools/run-macro tools/overnight-minimality-pass.sh tools/mklist.sh`
 - smoke checks:
-  - `bash tools/run-macro cache_systematics`
+  - `bash tools/run-macro mk_snapshot`
   - `mk_eventlist --help`
 - results:
-  - `Syst`, `Plot`, and `mk_eventlist` built successfully in Docker
-  - macro smoke check passed and reached the entry point:
-    `Processing plot/macro/cache_systematics.C...`
-    `cache_systematics: read_path is required`
+  - `IO`, `Ana`, and `mk_eventlist` built successfully in Docker
+  - snapshot macro smoke check passed and reached the entry point:
+    `Processing ana/macro/mk_snapshot.C...`
+    `mk_snapshot: read_path is required`
   - CLI smoke check passed and printed usage
+  - after the layout move, a full Docker build still passed and the macro/CLI smoke checks still worked
 
 ## Reduction ledger
-- files deleted: 1 (`syst/src/SystematicsCacheBuilder.cc`)
-- wrappers removed: `SystematicsCacheBuilder` no longer exists as a separate compiled layer
+- files deleted: 2 from `io/` (`io/include/SnapshotService.hh`, `io/src/SnapshotService.cc`)
+- wrappers removed: `SnapshotService` is no longer an `IO` export
 - shell branches removed:
 - docs/build artifacts removed: 0
-- approximate LOC delta: `SystematicsCacheBuilder` folded into `Systematics`, with one source file deleted and one header reduced to a shim
+- approximate LOC delta: net neutral in code size, but sharper module ownership
 
 ## Decisions
-- keep `SystematicsCacheBuilder.hh` as a compatibility shim
-- prefer `Systematics.hh` as the main public entry point for `syst/`
-- accept an additive public API when it reduces repetition and preserves behavior
+- keep the public header name `SnapshotService.hh`
+- treat snapshot/export as `ana`, not `io`
+- accept file moves when they make the module boundary materially clearer
+- prefer flat module roots over `include/` + `src/` splits for this repo size
+- keep `detail/` only for shared private helpers, not as a second public surface
 
 ## Remaining hotspots
-- `io/include/SnapshotService.hh`

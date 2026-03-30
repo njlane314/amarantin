@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 readonly ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
-readonly -a MACRO_DIRS=("io/macro" "plot/macro")
+readonly -a MACRO_DIRS=("io/macro" "ana/macro" "plot/macro")
 cd "${ROOT_DIR}"
 
 usage() {
@@ -29,6 +29,7 @@ Examples:
 
 Available names are discovered from:
   io/macro
+  ana/macro
   plot/macro
 EOF
 }

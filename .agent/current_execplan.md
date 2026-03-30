@@ -149,6 +149,30 @@ Verification:
   - one source file is removed from the build
   - `Syst`, `Plot`, and `mk_eventlist` build and the macro/CLI smoke checks still respond normally
 
+### Milestone 7
+- status: done
+- hypothesis: if `io/` is to be strict, `SnapshotService` must leave `IO` entirely; moving it to `Ana` should make the module boundary match the architecture docs without changing the public header name or the snapshot macro path
+- files / symbols touched:
+  - `io/CMakeLists.txt`
+  - `ana/CMakeLists.txt`
+  - `io/include/SnapshotService.hh`
+  - `io/src/SnapshotService.cc`
+  - `ana/include/SnapshotService.hh`
+  - `ana/src/SnapshotService.cc`
+  - `AGENTS.md`
+  - `DESIGN.md`
+  - `docs/START_PROMPT.md`
+  - `docs/minimality-log.md`
+  - `io/DERIVED`
+- expected behavior risk: low
+- verification commands:
+  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target IO Ana mk_eventlist --parallel && bash tools/run-macro mk_snapshot && ./build/bin/mk_eventlist --help || true'`
+- acceptance criteria:
+  - `IO` no longer builds or installs `SnapshotService`
+  - `Ana` owns `SnapshotService`
+  - snapshot macro path still works
+  - `mk_eventlist` still builds and responds normally
+
 ## 7. Public-surface check
 - compatibility impact:
   - Milestone 1: none intended
@@ -157,6 +181,7 @@ Verification:
   - Milestone 4: additive namespace API in `AnalysisChannels.hh`; existing class kept as a compatibility wrapper
   - Milestone 5: additive namespace API in `Systematics.hh`; existing class kept as a compatibility wrapper
   - Milestone 6: `SystematicsCacheBuilder.hh` becomes a compatibility include shim; declarations move into `Systematics.hh`
+  - Milestone 7: `SnapshotService.hh` moves from `io/` to `ana/`; the header name remains the same but ownership and installed target change
 - migration note:
   - Milestone 1: non-goal; keep current CLI behavior
   - Milestone 2: internal and new code should prefer `snapshot::...`; existing `SnapshotService::...` remains valid
@@ -164,6 +189,7 @@ Verification:
   - Milestone 4: internal and new code should prefer `analysis_channels::...`; existing `AnalysisChannels::...` remains valid
   - Milestone 5: internal and new code should prefer free `syst::...` functions; existing `syst::SystematicsEngine::...` remains valid
   - Milestone 6: internal and new code should include `Systematics.hh`; existing includes of `SystematicsCacheBuilder.hh` remain valid
+  - Milestone 7: new code should treat snapshotting as `ana` functionality; include compatibility remains because headers install into the common include prefix
 - reviewer sign-off: not required; no installed surface was removed
 
 ## 8. Reduction ledger
@@ -175,6 +201,7 @@ Verification:
   - `AnalysisChannels` no longer serves as the only real API shape internally
   - `SystematicsEngine` no longer serves as the only real API shape internally
   - `SystematicsCacheBuilder` is no longer a separate compiled layer
+  - `SnapshotService` is no longer part of the `IO` library
 - shell branches removed: several duplicated literal-coercion branches folded behind shared checks
 - stale docs removed: 0
 - targets or dependencies removed: 0
@@ -185,6 +212,32 @@ Verification:
   - `AnalysisChannels` touched in 2 files, net larger, but with a flatter internal call path
   - `SystematicsEngine` touched in 4 files, net larger, but with a flatter internal call path
   - `SystematicsCacheBuilder` folded into `Systematics`, with 1 source file deleted
+  - `SnapshotService` moved from `io/` to `ana/`, leaving `IO` with only IO classes plus low-level persistence helpers
+
+### Milestone 8
+- status: done
+- hypothesis: for a repo this size, co-locating public headers and their main
+  `.cc` files in each module root is easier to grep and flatter than carrying
+  parallel `include/` and `src/` trees
+- files / symbols touched:
+  - `io/CMakeLists.txt`
+  - `ana/CMakeLists.txt`
+  - `syst/CMakeLists.txt`
+  - `plot/CMakeLists.txt`
+  - module-root `*.hh` and `*.cc` files in `io/`, `ana/`, `syst/`, and `plot/`
+  - `.rootlogon.C`
+  - `DESIGN.md`
+  - `AGENTS.md`
+  - `docs/START_PROMPT.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: low to medium
+- verification commands:
+  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && bash tools/run-macro mk_snapshot && ./build/bin/mk_eventlist --help || true'`
+- acceptance criteria:
+  - no library keeps a public `include/` or implementation `src/` split
+  - each module exports its root as the build include path
+  - private shared helpers stay under `detail/`
+  - full build and representative smoke checks still pass
 
 ## 9. Decision log
 - Keep the milestone inside `tools/run-macro`.
@@ -195,7 +248,9 @@ Verification:
 - Keep header-only classification logic header-only if the API stays small and self-contained.
 - For wrappers returning types with forward declarations, keep the wrapper definitions out of public headers.
 - If a header/source pair only carries one function plus two small structs, prefer folding it into the main module surface and leaving a shim include.
+- If `io/` exports anything that is not a persistence class or low-level persistence helper, move it out rather than documenting the mismatch.
+- For this repo size, prefer flat module roots over mirrored `include/` and `src/` trees.
 
 ## 10. Stop conditions
 - stop after the current verified loop
-- do not broaden beyond `SystematicsCacheBuilder` in this pass
+- do not broaden beyond the current layout cleanup in this pass

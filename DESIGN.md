@@ -24,9 +24,15 @@ is cheap to change.
 4. Keep module boundaries sharp.
    Current intended split:
    - `io/`: file format and persistence
-   - `ana/`: event-list construction, selection, sample definitions
+   - `ana/`: event-list construction, selection, sample definitions, snapshots
    - `syst/`: systematic calculations and cache construction
    - `plot/`: rendering only
+
+6. Keep module layout flat.
+   Within each library, keep public headers and their main `.cc` files
+   together in the module root. Use a small `detail/` subdirectory only for
+   shared private helpers. Avoid `include/` + `src/` directory ceremony unless
+   the module genuinely outgrows the flat layout.
 
 5. Add abstractions only when they delete complexity.
    A new type or library should remove more concepts than it adds. If it only

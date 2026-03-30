@@ -1,14 +1,16 @@
 set(AMARANTIN_ANA_SOURCES
-  src/EventListBuilder.cc
-  src/SampleDef.cc
-  src/EventListSelection.cc
+  EventListBuilder.cc
+  SnapshotService.cc
+  SampleDef.cc
+  EventListSelection.cc
 )
 
 set(AMARANTIN_ANA_PUBLIC_HEADERS
-  include/AnalysisChannels.hh
-  include/EventListBuilder.hh
-  include/EventListSelection.hh
-  include/SampleDef.hh
+  AnalysisChannels.hh
+  EventListBuilder.hh
+  EventListSelection.hh
+  SampleDef.hh
+  SnapshotService.hh
 )
 
 add_library(Ana SHARED
@@ -20,7 +22,7 @@ target_compile_features(Ana PUBLIC cxx_std_17)
 
 target_include_directories(Ana
   PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/amarantin>
 )
 

@@ -14,7 +14,7 @@ Before editing, read these files in this order:
 - `io/`
   - persistence only; ROOT object layout, sample / dataset / event-list I/O
 - `ana/`
-  - event-list construction, selection logic, sample definitions
+  - event-list construction, selection logic, sample definitions, snapshots
 - `syst/`
   - systematic calculations and cache construction
 - `plot/`
@@ -65,9 +65,9 @@ Prefer the style already present in:
 
 ### Medium risk
 1. Audit static-only public utility headers such as:
-   - `io/include/SnapshotService.hh`
-   - `ana/include/EventListSelection.hh`
-   - `ana/include/AnalysisChannels.hh`
+   - `ana/SnapshotService.hh`
+   - `ana/EventListSelection.hh`
+   - `ana/AnalysisChannels.hh`
 2. Only change those APIs if a migration is explicitly approved.
 
 ### Lower priority

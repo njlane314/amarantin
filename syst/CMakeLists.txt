@@ -1,10 +1,10 @@
 set(AMARANTIN_SYST_SOURCES
-  src/Systematics.cc
+  Systematics.cc
 )
 
 set(AMARANTIN_SYST_PUBLIC_HEADERS
-  include/Systematics.hh
-  include/SystematicsCacheBuilder.hh
+  Systematics.hh
+  SystematicsCacheBuilder.hh
 )
 
 add_library(Syst SHARED
@@ -18,7 +18,7 @@ target_compile_features(Syst PUBLIC cxx_std_17)
 
 target_include_directories(Syst
   PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/amarantin>
 )
 

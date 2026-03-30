@@ -11,8 +11,8 @@ described in NTUPLE.
 The main derived persistent object is EventListIO.
 
 EventListIO copies selected entries from the upstream event tree and adds a
-small framework-owned set of helper columns. SnapshotService can then produce
-flat training trees from those selected event lists.
+small framework-owned set of helper columns. The snapshot helpers in `ana`
+can then produce flat training trees from those selected event lists.
 
 In the current code layout:
 
@@ -24,6 +24,9 @@ In the current code layout:
 
   ana::build_event_list
     builds selected event lists and helper columns into EventListIO
+
+  snapshot::...
+    builds flat export trees from EventListIO selected trees
 
   syst::build_systematics_cache
     computes and persists rebinnable systematics caches into EventListIO
@@ -261,13 +264,13 @@ Each sample also carries a copied subrun tree at:
 This is copied unchanged from the upstream source files named in the
 corresponding DatasetIO sample.
 
-SnapshotService outputs
------------------------
+Snapshot outputs
+----------------
 
-SnapshotService builds flat training/export trees from EventListIO selected
+The snapshot helpers in `ana` build flat training/export trees from EventListIO selected
 trees.
 
-SnapshotSpec fields:
+snapshot::Spec fields:
 
   tree_name
   columns
@@ -275,7 +278,7 @@ SnapshotSpec fields:
   overwrite_if_exists
   include_sample_id
 
-snapshot_sample(...)
+snapshot::snapshot_sample(...)
 --------------------
 
 Produces one tree per sample with name:
@@ -285,14 +288,14 @@ Produces one tree per sample with name:
 The tree contains exactly the requested columns, evaluated from the selected
 event tree for that sample.
 
-snapshot_merged(...)
+snapshot::snapshot_merged(...)
 -------------------
 
 Produces one merged tree with name:
 
   <tree_name>
 
-If include_sample_id is true, SnapshotService defines and snapshots:
+If include_sample_id is true, the snapshot helpers define and snapshots:
 
   sample_id                         int
 
