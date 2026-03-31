@@ -534,6 +534,9 @@ namespace
         const bool has_int_ccnc = chain.GetBranch("int_ccnc") != nullptr;
         const bool has_is_nu_mu_cc = chain.GetBranch("is_nu_mu_cc") != nullptr;
         const bool has_truth_in_fiducial = chain.GetBranch("nu_vtx_in_fv") != nullptr;
+        const bool has_truth_vtx_sce_x = chain.GetBranch("nu_vtx_sce_x") != nullptr;
+        const bool has_truth_vtx_sce_y = chain.GetBranch("nu_vtx_sce_y") != nullptr;
+        const bool has_truth_vtx_sce_z = chain.GetBranch("nu_vtx_sce_z") != nullptr;
         const bool has_truth_vtx_x = chain.GetBranch("nu_vtx_x") != nullptr;
         const bool has_truth_vtx_y = chain.GetBranch("nu_vtx_y") != nullptr;
         const bool has_truth_vtx_z = chain.GetBranch("nu_vtx_z") != nullptr;
@@ -601,11 +604,17 @@ namespace
             chain.SetBranchAddress("is_nu_mu_cc", &is_nu_mu_cc);
         if (has_truth_in_fiducial)
             chain.SetBranchAddress("nu_vtx_in_fv", &truth_in_fiducial);
-        if (has_truth_vtx_x)
+        if (has_truth_vtx_sce_x)
+            chain.SetBranchAddress("nu_vtx_sce_x", &truth_vtx_x);
+        else if (has_truth_vtx_x)
             chain.SetBranchAddress("nu_vtx_x", &truth_vtx_x);
-        if (has_truth_vtx_y)
+        if (has_truth_vtx_sce_y)
+            chain.SetBranchAddress("nu_vtx_sce_y", &truth_vtx_y);
+        else if (has_truth_vtx_y)
             chain.SetBranchAddress("nu_vtx_y", &truth_vtx_y);
-        if (has_truth_vtx_z)
+        if (has_truth_vtx_sce_z)
+            chain.SetBranchAddress("nu_vtx_sce_z", &truth_vtx_z);
+        else if (has_truth_vtx_z)
             chain.SetBranchAddress("nu_vtx_z", &truth_vtx_z);
         if (has_mu_p)
             chain.SetBranchAddress("mu_p", &mu_p);
@@ -743,6 +752,8 @@ namespace
                                      truth_vtx_z,
                                      mu_p,
                                      contained_fraction);
+                const bool truth_in_canonical_fiducial =
+                    signal_definition.truth_vertex_in_fv(truth);
                 const ana::SignalDefinition::LambdaTruthCandidate lambda_candidate =
                     has_g4_all_lambda_pdg
                         ? first_passing_lambda_candidate(
@@ -790,7 +801,7 @@ namespace
                 {
                     passes_signal_definition = signal_definition.passes(truth, lambda_candidate);
                     event_category_code = event_category::to_int(
-                        event_category::classify(truth_in_fiducial,
+                        event_category::classify(truth_in_canonical_fiducial,
                                                  nu_pdg,
                                                  int_ccnc,
                                                  n_protons,

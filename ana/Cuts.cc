@@ -1,5 +1,7 @@
 #include "Cuts.hh"
+#include "SignalDefinition.hh"
 
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -31,6 +33,21 @@ namespace
         if (!has_column(columns, name))
             throw std::runtime_error(std::string("cuts: missing required column for ") +
                                      context + ": " + name);
+    }
+
+    std::string fiducial_expression_from_reco_sce()
+    {
+        const auto &box = ana::SignalDefinition::canonical_fiducial_box();
+        std::ostringstream os;
+        os << "(reco_neutrino_vertex_sce_x >= " << (box.active_min_x + box.x_start) << ")";
+        os << " && (reco_neutrino_vertex_sce_x <= " << (box.active_max_x - box.x_end) << ")";
+        os << " && (reco_neutrino_vertex_sce_y >= " << (box.active_min_y + box.y_start) << ")";
+        os << " && (reco_neutrino_vertex_sce_y <= " << (box.active_max_y - box.y_end) << ")";
+        os << " && (reco_neutrino_vertex_sce_z >= " << (box.active_min_z + box.z_start) << ")";
+        os << " && (reco_neutrino_vertex_sce_z <= " << (box.active_max_z - box.z_end) << ")";
+        os << " && ((reco_neutrino_vertex_sce_z <= " << box.excluded_z_min << ")";
+        os << " || (reco_neutrino_vertex_sce_z >= " << box.excluded_z_max << "))";
+        return os.str();
     }
 }
 
@@ -155,9 +172,15 @@ namespace cuts
         {
             fiducial_base_expr = "in_reco_fiducial";
         }
+        else if (has_column(columns, "reco_neutrino_vertex_sce_x") &&
+                 has_column(columns, "reco_neutrino_vertex_sce_y") &&
+                 has_column(columns, "reco_neutrino_vertex_sce_z"))
+        {
+            fiducial_base_expr = fiducial_expression_from_reco_sce();
+        }
         else
         {
-            throw std::runtime_error("cuts: fiducial preset requires sel_fiducial or in_reco_fiducial");
+            throw std::runtime_error("cuts: fiducial preset requires sel_fiducial, in_reco_fiducial, or reco_neutrino_vertex_sce_{x,y,z}");
         }
         const std::string fiducial_expr = has_column(columns, fiducial_branch())
                                               ? fiducial_base_expr

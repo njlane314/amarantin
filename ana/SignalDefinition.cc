@@ -16,6 +16,8 @@ namespace
            << box.x_start << "," << box.x_end << ","
            << box.y_start << "," << box.y_end << ","
            << box.z_start << "," << box.z_end << ")";
+        os << ";excluded_z=("
+           << box.excluded_z_min << "," << box.excluded_z_max << ")";
         return os.str();
     }
 }
@@ -26,6 +28,11 @@ namespace ana
     {
         static const SignalDefinition signal_definition;
         return signal_definition;
+    }
+
+    const SignalDefinition::FiducialBox &SignalDefinition::canonical_fiducial_box()
+    {
+        return canonical().truth_vertex_fv_;
     }
 
     SampleSelectionRule sample_selection_rule(const DatasetIO::Sample &sample)
@@ -46,12 +53,26 @@ namespace ana
     {
         if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
             return false;
-        return x > (box.active_min_x + box.x_start) &&
-               x < (box.active_max_x - box.x_end) &&
-               y > (box.active_min_y + box.y_start) &&
-               y < (box.active_max_y - box.y_end) &&
-               z > (box.active_min_z + box.z_start) &&
-               z < (box.active_max_z - box.z_end);
+        const bool in_outer_box =
+            x >= (box.active_min_x + box.x_start) &&
+            x <= (box.active_max_x - box.x_end) &&
+            y >= (box.active_min_y + box.y_start) &&
+            y <= (box.active_max_y - box.y_end) &&
+            z >= (box.active_min_z + box.z_start) &&
+            z <= (box.active_max_z - box.z_end);
+        if (!in_outer_box)
+            return false;
+
+        if (std::isfinite(box.excluded_z_min) &&
+            std::isfinite(box.excluded_z_max) &&
+            box.excluded_z_min < box.excluded_z_max &&
+            z > box.excluded_z_min &&
+            z < box.excluded_z_max)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     bool SignalDefinition::truth_vertex_in_fv(const TruthInput &truth) const

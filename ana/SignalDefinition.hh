@@ -25,12 +25,14 @@ namespace ana
             float active_max_y = 116.5f;
             float active_min_z = 0.0f;
             float active_max_z = 1036.8f;
-            float x_start = 10.0f;
-            float x_end = 10.0f;
-            float y_start = 15.0f;
-            float y_end = 15.0f;
-            float z_start = 10.0f;
-            float z_end = 50.0f;
+            float x_start = 5.0f;
+            float x_end = 5.35f;
+            float y_start = 6.5f;
+            float y_end = 6.5f;
+            float z_start = 20.0f;
+            float z_end = 50.8f;
+            float excluded_z_min = 675.0f;
+            float excluded_z_max = 775.0f;
         };
 
         struct TruthInput
@@ -68,19 +70,19 @@ namespace ana
 
     public:
         static const SignalDefinition &canonical();
-
-        bool passes(const TruthInput &truth,
-                    const LambdaTruthCandidate &candidate) const;
-        std::string describe() const;
-
-    private:
-        SignalDefinition() = default;
-
+        static const FiducialBox &canonical_fiducial_box();
         static bool in_fiducial(float x,
                                 float y,
                                 float z,
                                 const FiducialBox &box);
+
+        bool passes(const TruthInput &truth,
+                    const LambdaTruthCandidate &candidate) const;
         bool truth_vertex_in_fv(const TruthInput &truth) const;
+        std::string describe() const;
+
+    private:
+        SignalDefinition() = default;
 
     private:
         FiducialBox truth_vertex_fv_;
