@@ -35,7 +35,7 @@ Rows with kind `data` fill the observed bins automatically. Without manifest
 data rows, pass `--data-bins` or use `--allow-zero-data` when an empty
 observation is intentional.
 
-For programmatic use, `app/mk_xsec_fit.cc` remains the reference path behind
+For programmatic use, `app/mk_fit.cc` remains the reference path behind
 the `mk_fit` CLI for turning cached `DistributionIO::Spectrum` payloads into
 one `fit::Channel`.
 

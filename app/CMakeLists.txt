@@ -2,8 +2,8 @@ add_executable(mk_sample mk_sample.cc)
 add_executable(mk_dataset mk_dataset.cc)
 add_executable(mk_eventlist mk_eventlist.cc)
 add_executable(mk_dist mk_dist.cc)
-add_executable(mk_fit mk_xsec_fit.cc)
-add_executable(mk_sbnfit_cov mk_sbnfit_cov.cc)
+add_executable(mk_fit mk_fit.cc)
+add_executable(mk_sbnfit_cov mk_cov.cc)
 
 target_link_libraries(mk_sample
   PRIVATE

@@ -1,5 +1,90 @@
 # ExecPlan
 
+## ExecPlan Addendum: App Source File Rename Cleanup
+
+### 1. Objective
+Make the `app/` source filenames match the public CLI names more closely by
+renaming the two remaining mismatched entrypoint files.
+
+### 2. Constraints
+- Preserve installed executable names in this pass.
+- Keep the rename limited to source filenames and direct references to them.
+- Leave historical log entries untouched where they describe earlier
+  milestones.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer fewer concepts per workflow
+- make grep-based navigation easier
+
+This pass does not change workflow behavior; it just removes two misleading
+source filenames from the active tree.
+
+### 4. System map
+- `app/CMakeLists.txt`
+- `app/mk_fit.cc`
+- `app/mk_cov.cc`
+- `fit/README`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### file naming
+- rename `app/mk_xsec_fit.cc` to `app/mk_fit.cc`
+- rename `app/mk_sbnfit_cov.cc` to `app/mk_cov.cc`
+
+### 6. Milestones
+
+#### Milestone A: Apply the app source-file rename
+- status: done
+- hypothesis: matching the source filenames to the CLI names reduces friction
+  when navigating the app entrypoints
+- files / symbols touched:
+  - `app/CMakeLists.txt`
+  - `app/mk_fit.cc`
+  - `app/mk_cov.cc`
+  - `fit/README`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/CMakeLists.txt app/mk_fit.cc app/mk_cov.cc fit/README`
+  - `rg -n "app/mk_xsec_fit\\.cc|app/mk_sbnfit_cov\\.cc" -S app fit/README`
+- acceptance criteria:
+  - the app build references only `mk_fit.cc` and `mk_cov.cc`
+  - active docs no longer point at the old source filenames
+- verification results:
+  - focused `git diff --check` passed for the rename-pass files
+  - the focused `rg` sweep found no remaining active references in `app/` or
+    `fit/README`
+
+### 7. Public-surface check
+- compatibility impact:
+  - none; installed executable names stay `mk_fit` and `mk_sbnfit_cov`
+- reviewer sign-off:
+  - explicit user approval received in-thread for the source-file rename
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale source filenames removed from the active tree:
+  - `app/mk_xsec_fit.cc`
+  - `app/mk_sbnfit_cov.cc`
+- approximate LOC delta: near-neutral; pure file rename plus small reference
+  updates
+
+### 9. Decision log
+- keep the executable target name `mk_sbnfit_cov` unchanged in this pass even
+  though the source file becomes `mk_cov.cc`
+- update only active references to the source paths; historical log entries may
+  continue to mention the old filenames
+
+### 10. Stop conditions
+- stop after the source filenames, build file, and active path references are
+  aligned
+- do not expand the pass into a CLI rename for `mk_sbnfit_cov`
+
 ## ExecPlan Addendum: Systematics File Layout Cleanup
 
 ### 1. Objective

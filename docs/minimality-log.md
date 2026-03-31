@@ -2,6 +2,57 @@
 
 ## Current milestone
 - status: done
+- subsystem: `app/` source filename cleanup
+- design rule from `DESIGN.md`: keep workflow entrypoints easy to grep and
+  avoid extra naming drift between the CLI and the source tree
+
+## What changed
+- renamed the remaining mismatched app entrypoint sources:
+  - `app/mk_xsec_fit.cc` -> `app/mk_fit.cc`
+  - `app/mk_sbnfit_cov.cc` -> `app/mk_cov.cc`
+- updated `app/CMakeLists.txt` to build `mk_fit` from `mk_fit.cc` and
+  `mk_sbnfit_cov` from `mk_cov.cc`
+- updated the active source-path reference in `fit/README`
+
+## Why this is simpler
+- the `app/` tree now matches the public `mk_fit` name directly
+- the fit and covariance entrypoints are easier to find without remembering old
+  compatibility filenames
+- the remaining longer compatibility name is now confined to the installed
+  `mk_sbnfit_cov` executable, not duplicated in the source path as well
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/CMakeLists.txt app/mk_fit.cc app/mk_cov.cc fit/README`
+-  `rg -n "app/mk_xsec_fit\\.cc|app/mk_sbnfit_cov\\.cc" -S app fit/README`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed for the rename-pass files
+  - the focused `rg` sweep found no remaining active references in `app/` or
+    `fit/README`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - near-neutral; pure file rename plus small build/doc updates
+
+## Decisions
+- keep the executable target and installed binary name `mk_sbnfit_cov`
+  unchanged in this pass
+- leave historical references below untouched where they describe earlier
+  milestones
+
+## Remaining hotspots
+- the executable name `mk_sbnfit_cov` is still longer than the renamed source
+  file `mk_cov.cc`; that is an intentional compatibility choice for this pass
+
+## Current milestone
+- status: done
 - subsystem: `syst/` file layout naming cleanup
 - design rule from `DESIGN.md`: keep module boundaries sharp, delete generic
   helper buckets, and prefer names that match actual responsibilities
