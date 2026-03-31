@@ -107,6 +107,12 @@ namespace
                !process.detector_templates.empty();
     }
 
+    bool has_detector_shift_sources(const fit::Process &process)
+    {
+        return process.detector_source_count > 0 &&
+               !process.detector_shift_vectors.empty();
+    }
+
     double detector_template_value(const fit::Process &process,
                                    int template_index,
                                    int bin)
@@ -121,6 +127,22 @@ namespace
         if (index >= process.detector_templates.size())
             throw std::runtime_error("fit::detector_template_value: detector template payload is truncated");
         return process.detector_templates[index];
+    }
+
+    double detector_shift_value(const fit::Process &process,
+                                int source_index,
+                                int bin)
+    {
+        if (!has_detector_shift_sources(process))
+            throw std::runtime_error("fit::detector_shift_value: process has no detector shift sources");
+        if (source_index < 0 || source_index >= process.detector_source_count)
+            throw std::runtime_error("fit::detector_shift_value: source_index out of range");
+
+        const std::size_t index =
+            static_cast<std::size_t>(source_index * process.nominal.size() + static_cast<std::size_t>(bin));
+        if (index >= process.detector_shift_vectors.size())
+            throw std::runtime_error("fit::detector_shift_value: detector shift payload is truncated");
+        return process.detector_shift_vectors[index];
     }
 
     bool has_detector_envelope(const fit::Process &process)
@@ -184,16 +206,28 @@ namespace
         return name;
     }
 
-    std::string detector_name(const fit::Process &process, int template_index)
+    std::string detector_source_name(const fit::Process &process, int source_index)
     {
-        if (template_index >= 0 &&
-            static_cast<std::size_t>(template_index) < process.detector_sample_keys.size() &&
-            !process.detector_sample_keys[static_cast<std::size_t>(template_index)].empty())
+        if (source_index >= 0 &&
+            static_cast<std::size_t>(source_index) < process.detector_source_labels.size() &&
+            !process.detector_source_labels[static_cast<std::size_t>(source_index)].empty())
         {
-            return "detector:" + process.detector_sample_keys[static_cast<std::size_t>(template_index)];
+            return "detector:" + process.detector_source_labels[static_cast<std::size_t>(source_index)];
         }
 
-        return "detector:" + process.name + ":template" + std::to_string(template_index);
+        if (source_index >= 0 &&
+            static_cast<std::size_t>(source_index) < process.detector_sample_keys.size() &&
+            !process.detector_sample_keys[static_cast<std::size_t>(source_index)].empty())
+        {
+            return "detector:" + process.detector_sample_keys[static_cast<std::size_t>(source_index)];
+        }
+
+        return "detector:" + process.name + ":source" + std::to_string(source_index);
+    }
+
+    std::string detector_template_name(const fit::Process &process, int template_index)
+    {
+        return detector_source_name(process, template_index);
     }
 
     std::string detector_group_name(const fit::Process &process)
@@ -281,11 +315,24 @@ namespace
                 if (process.detector_templates.size() != expected)
                     throw std::runtime_error("fit::validate_problem: detector template payload is truncated");
             }
+            if (has_detector_shift_sources(process))
+            {
+                const std::size_t expected =
+                    static_cast<std::size_t>(process.detector_source_count) * nbins;
+                if (process.detector_shift_vectors.size() != expected)
+                    throw std::runtime_error("fit::validate_problem: detector shift payload is truncated");
+            }
             if (has_detector_templates(process) &&
                 !process.detector_sample_keys.empty() &&
                 static_cast<int>(process.detector_sample_keys.size()) != process.detector_template_count)
             {
                 throw std::runtime_error("fit::validate_problem: detector_sample_keys size does not match detector_template_count");
+            }
+            if (has_detector_shift_sources(process) &&
+                !process.detector_source_labels.empty() &&
+                static_cast<int>(process.detector_source_labels.size()) != process.detector_source_count)
+            {
+                throw std::runtime_error("fit::validate_problem: detector_source_labels size does not match detector_source_count");
             }
         }
 
@@ -314,6 +361,14 @@ namespace
                             throw std::runtime_error("fit::validate_problem: family nuisance term mode_index out of range");
                         break;
                     }
+                    case fit::SourceKind::kDetectorShift:
+                        if (!has_detector_shift_sources(*process) ||
+                            term.index < 0 ||
+                            term.index >= process->detector_source_count)
+                        {
+                            throw std::runtime_error("fit::validate_problem: detector shift nuisance term out of range");
+                        }
+                        break;
                     case fit::SourceKind::kDetectorTemplate:
                         if (!has_detector_templates(*process) ||
                             term.index < 0 ||
@@ -358,6 +413,10 @@ namespace
                        family_mode_value(family, term.index, bin) *
                        theta;
             }
+            case fit::SourceKind::kDetectorShift:
+                return term.coefficient *
+                       detector_shift_value(process, term.index, bin) *
+                       theta;
             case fit::SourceKind::kDetectorTemplate:
             {
                 const double nominal = process.nominal.at(static_cast<std::size_t>(bin));
@@ -767,7 +826,9 @@ namespace
 
     bool process_has_detector_payload(const fit::Process &process)
     {
-        return has_detector_templates(process) || has_detector_envelope(process);
+        return has_detector_shift_sources(process) ||
+               has_detector_templates(process) ||
+               has_detector_envelope(process);
     }
 }
 
@@ -783,6 +844,8 @@ namespace fit
                 return "flux";
             case SourceKind::kReintMode:
                 return "reint";
+            case SourceKind::kDetectorShift:
+                return "detector_shift";
             case SourceKind::kDetectorTemplate:
                 return "detector_template";
             case SourceKind::kDetectorEnvelope:
@@ -855,11 +918,22 @@ namespace fit
                 }
             }
 
-            if (has_detector_templates(process))
+            if (has_detector_shift_sources(process))
+            {
+                for (int row = 0; row < process.detector_source_count; ++row)
+                {
+                    const std::string name = detector_source_name(process, row);
+                    const std::size_t nuisance_index =
+                        ensure_nuisance(problem, nuisance_indices, name);
+                    problem.nuisances[nuisance_index].terms.push_back(
+                        ShiftTerm{process.name, SourceKind::kDetectorShift, row, 1.0});
+                }
+            }
+            else if (has_detector_templates(process))
             {
                 for (int row = 0; row < process.detector_template_count; ++row)
                 {
-                    const std::string name = detector_name(process, row);
+                    const std::string name = detector_template_name(process, row);
                     const std::size_t nuisance_index =
                         ensure_nuisance(problem, nuisance_indices, name);
                     problem.nuisances[nuisance_index].terms.push_back(

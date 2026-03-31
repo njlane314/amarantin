@@ -33,7 +33,7 @@ namespace syst::detail
            << ";genie=" << options.enable_genie
            << ";flux=" << options.enable_flux
            << ";reint=" << options.enable_reint
-           << ";cov=" << options.persist_covariance
+           << ";cov=1"
            << ";hist=" << options.retain_universe_histograms
            << ";modes=" << options.enable_eigenmode_compression
            << ";maxmodes=" << options.max_eigenmodes

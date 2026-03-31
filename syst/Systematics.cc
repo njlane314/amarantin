@@ -154,11 +154,15 @@ namespace
         return out;
     }
 
-    syst::detail::CacheEntry build_cache_entry(TTree *nominal_tree,
+    syst::detail::CacheEntry build_cache_entry(EventListIO &eventlist,
+                                               const std::string &sample_key,
                                                const syst::HistogramSpec &fine_spec,
-                                               const syst::SystematicsOptions &options,
-                                               const std::vector<TTree *> &detector_trees)
+                                               const syst::SystematicsOptions &options)
     {
+        TTree *nominal_tree = eventlist.selected_tree(sample_key);
+        if (!nominal_tree)
+            throw std::runtime_error("SystematicsEngine: missing selected tree for sample " + sample_key);
+
         const syst::detail::SampleComputation nominal_sample =
             syst::detail::compute_sample(nominal_tree, fine_spec, options);
 
@@ -172,13 +176,61 @@ namespace
         entry.sumw2 = nominal_sample.sumw2;
 
         std::vector<std::vector<double>> detector_histograms;
-        detector_histograms.reserve(detector_trees.size());
-        for (TTree *tree : detector_trees)
+        if (!options.detector_sample_keys.empty())
         {
-            const syst::detail::SampleComputation variation =
-                syst::detail::compute_sample(tree, fine_spec, syst::SystematicsOptions{});
-            detector_histograms.push_back(variation.nominal);
+            const std::vector<syst::detail::DetectorSourceMatch> detector_sources =
+                syst::detail::resolve_detector_source_matches(eventlist,
+                                                              sample_key,
+                                                              options.detector_sample_keys);
+
+            detector_histograms.reserve(detector_sources.size());
+            entry.detector_source_labels.reserve(detector_sources.size());
+            entry.detector_cv_sample_keys.reserve(detector_sources.size());
+            entry.detector_sample_keys.reserve(detector_sources.size());
+            entry.detector_shift_vectors.assign(static_cast<std::size_t>(detector_sources.size() * fine_spec.nbins), 0.0);
+
+            for (std::size_t row = 0; row < detector_sources.size(); ++row)
+            {
+                const auto &source = detector_sources[row];
+
+                TTree *cv_tree = eventlist.selected_tree(source.cv_sample_key);
+                if (!cv_tree)
+                {
+                    throw std::runtime_error("SystematicsEngine: missing detector CV tree for sample " +
+                                             source.cv_sample_key);
+                }
+                TTree *varied_tree = eventlist.selected_tree(source.varied_sample_key);
+                if (!varied_tree)
+                {
+                    throw std::runtime_error("SystematicsEngine: missing detector variation tree for sample " +
+                                             source.varied_sample_key);
+                }
+
+                const syst::detail::SampleComputation cv_sample =
+                    syst::detail::compute_sample(cv_tree, fine_spec, syst::SystematicsOptions{});
+                const syst::detail::SampleComputation variation_sample =
+                    syst::detail::compute_sample(varied_tree, fine_spec, syst::SystematicsOptions{});
+
+                entry.detector_source_labels.push_back(source.source_label);
+                entry.detector_cv_sample_keys.push_back(source.cv_sample_key);
+                entry.detector_sample_keys.push_back(source.varied_sample_key);
+                detector_histograms.push_back(variation_sample.nominal);
+
+                for (int col = 0; col < fine_spec.nbins; ++col)
+                {
+                    entry.detector_shift_vectors[static_cast<std::size_t>(row * fine_spec.nbins + col)] =
+                        variation_sample.nominal[static_cast<std::size_t>(col)] -
+                        cv_sample.nominal[static_cast<std::size_t>(col)];
+                }
+            }
+
+            entry.detector_source_count = static_cast<int>(detector_sources.size());
+            entry.detector_covariance =
+                syst::detail::detector_covariance_from_shift_vectors(entry.detector_shift_vectors,
+                                                                     entry.detector_source_count,
+                                                                     fine_spec.nbins);
         }
+
         if (!detector_histograms.empty())
         {
             entry.detector_template_count = static_cast<int>(detector_histograms.size());
@@ -191,6 +243,17 @@ namespace
                         detector_histograms[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
                 }
             }
+        }
+        if (!entry.detector_covariance.empty())
+        {
+            const syst::Envelope detector =
+                syst::detail::detector_envelope_from_covariance(entry.nominal,
+                                                                entry.detector_covariance);
+            entry.detector_down = detector.down;
+            entry.detector_up = detector.up;
+        }
+        else if (!detector_histograms.empty())
+        {
             const syst::Envelope detector =
                 syst::detail::detector_envelope(entry.nominal, detector_histograms);
             entry.detector_down = detector.down;
@@ -233,7 +296,31 @@ namespace
                                                     entry.spec.xmax,
                                                     target_spec);
 
-        if (entry.detector_template_count > 0 && !entry.detector_templates.empty())
+        if (entry.detector_source_count > 0 && !entry.detector_shift_vectors.empty())
+        {
+            const std::vector<double> rebinned_shift_vectors =
+                syst::detail::rebin_detector_shift_vectors(entry, target_spec);
+            const std::vector<double> rebinned_covariance =
+                syst::detail::detector_covariance_from_shift_vectors(rebinned_shift_vectors,
+                                                                     entry.detector_source_count,
+                                                                     target_spec.nbins);
+            result.detector =
+                syst::detail::detector_envelope_from_covariance(result.nominal,
+                                                                rebinned_covariance);
+        }
+        else if (!entry.detector_covariance.empty())
+        {
+            const std::vector<double> rebinned_covariance =
+                syst::detail::rebin_covariance(entry.detector_covariance,
+                                               entry.spec.nbins,
+                                               entry.spec.xmin,
+                                               entry.spec.xmax,
+                                               target_spec);
+            result.detector =
+                syst::detail::detector_envelope_from_covariance(result.nominal,
+                                                                rebinned_covariance);
+        }
+        else if (entry.detector_template_count > 0 && !entry.detector_templates.empty())
         {
             const std::vector<std::vector<double>> detector_histograms =
                 syst::detail::rebin_detector_templates(entry, target_spec);
@@ -324,23 +411,9 @@ namespace syst
         }
 
         const HistogramSpec fine_spec = detail::fine_spec_for(spec, options);
-        TTree *nominal_tree = eventlist.selected_tree(sample_key);
-        if (!nominal_tree)
-            throw std::runtime_error("SystematicsEngine: missing selected tree for sample " + sample_key);
-
-        std::vector<TTree *> detector_trees;
-        detector_trees.reserve(options.detector_sample_keys.size());
-        for (const auto &detector_sample_key : options.detector_sample_keys)
-        {
-            if (detector_sample_key.empty())
-                continue;
-            detector_trees.push_back(eventlist.selected_tree(detector_sample_key));
-        }
-
-        detail::CacheEntry entry = build_cache_entry(nominal_tree, fine_spec, options, detector_trees);
+        detail::CacheEntry entry = build_cache_entry(eventlist, sample_key, fine_spec, options);
         entry.spec.sample_key = sample_key;
         entry.spec.cache_key = cache_key(spec, options);
-        entry.detector_sample_keys = options.detector_sample_keys;
 
         SystematicsResult result = result_from_cache(entry,
                                                      entry.spec.cache_key,
@@ -408,23 +481,9 @@ namespace syst
                                          sample_key + " key " + persistent_key);
             }
 
-            TTree *nominal_tree = eventlist.selected_tree(sample_key);
-            if (!nominal_tree)
-                throw std::runtime_error("SystematicsEngine: missing selected tree for sample " + sample_key);
-
-            std::vector<TTree *> detector_trees;
-            detector_trees.reserve(options.detector_sample_keys.size());
-            for (const auto &detector_sample_key : options.detector_sample_keys)
-            {
-                if (detector_sample_key.empty())
-                    continue;
-                detector_trees.push_back(eventlist.selected_tree(detector_sample_key));
-            }
-
-            entry = build_cache_entry(nominal_tree, fine_spec, options, detector_trees);
+            entry = build_cache_entry(eventlist, sample_key, fine_spec, options);
             entry.spec.sample_key = sample_key;
             entry.spec.cache_key = persistent_key;
-            entry.detector_sample_keys = options.detector_sample_keys;
 
             if (use_persistent_cache && can_write_persistent_cache)
             {
@@ -529,7 +588,7 @@ namespace syst
             sysopt.build_full_covariance = options.build_full_covariance;
             sysopt.retain_universe_histograms = options.retain_universe_histograms;
             sysopt.enable_eigenmode_compression = options.enable_eigenmode_compression;
-            sysopt.persist_covariance = options.persist_covariance;
+            sysopt.persist_covariance = true;
             sysopt.max_eigenmodes = options.max_eigenmodes;
             sysopt.eigenmode_fraction = options.eigenmode_fraction;
 

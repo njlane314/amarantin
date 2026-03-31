@@ -14,11 +14,18 @@ class TTree;
 namespace syst::detail
 {
     constexpr const char *kCentralWeightBranch = "__w__";
-    constexpr int kSystematicsCacheVersion = 2;
+    constexpr int kSystematicsCacheVersion = 4;
 
     using CacheEntry = DistributionIO::Spectrum;
     using FamilyCache = DistributionIO::Family;
     using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+
+    struct DetectorSourceMatch
+    {
+        std::string source_label;
+        std::string cv_sample_key;
+        std::string varied_sample_key;
+    };
 
     struct UniverseAccumulator
     {
@@ -74,11 +81,32 @@ namespace syst::detail
     std::vector<std::string> resolve_detector_sample_keys(EventListIO &eventlist,
                                                           const CacheRequest &request);
 
+    std::vector<DetectorSourceMatch> resolve_detector_source_matches(
+        EventListIO &eventlist,
+        const std::string &sample_key,
+        const std::vector<std::string> &detector_sample_keys);
+
     std::vector<std::vector<double>> rebin_detector_templates(const CacheEntry &entry,
                                                               const HistogramSpec &target_spec);
 
+    std::vector<double> rebin_detector_shift_vectors(const CacheEntry &entry,
+                                                     const HistogramSpec &target_spec);
+
+    std::vector<double> rebin_covariance(const std::vector<double> &source_covariance,
+                                         int source_nbins,
+                                         double source_xmin,
+                                         double source_xmax,
+                                         const HistogramSpec &target_spec);
+
+    std::vector<double> detector_covariance_from_shift_vectors(const std::vector<double> &shift_vectors,
+                                                               int source_count,
+                                                               int nbins);
+
     Envelope detector_envelope(const std::vector<double> &nominal,
                                const std::vector<std::vector<double>> &variations);
+
+    Envelope detector_envelope_from_covariance(const std::vector<double> &nominal,
+                                               const std::vector<double> &covariance);
 
     FamilyCache build_family_cache(const UniverseAccumulator &family,
                                    const std::vector<double> &nominal,

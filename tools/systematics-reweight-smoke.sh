@@ -137,15 +137,18 @@ int main(int argc, char **argv)
         EventListIO eventlist(argv[1], EventListIO::Mode::kRead);
         DistributionIO distfile(argv[2], DistributionIO::Mode::kUpdate);
         const syst::SystematicsResult result = syst::evaluate(eventlist, distfile, "beam", spec, options);
+        const DistributionIO::Spectrum cached = distfile.read("beam", syst::cache_key(spec, options));
 
         if (result.loaded_from_persistent_cache)
             throw std::runtime_error("reweight_smoke: first evaluation unexpectedly loaded from cache");
         if (!result.genie)
             throw std::runtime_error("reweight_smoke: missing GENIE result");
+        if (cached.genie.covariance.size() != 16)
+            throw std::runtime_error("reweight_smoke: canonical family covariance was not persisted");
         if (result.genie->universe_histograms.size() != 2)
             throw std::runtime_error("reweight_smoke: retained universe histograms missing");
         if (result.genie->covariance.size() != 4)
-            throw std::runtime_error("reweight_smoke: expected covariance reconstructed from retained universes");
+            throw std::runtime_error("reweight_smoke: expected rebinned covariance from canonical cache");
         if (!approx(result.genie->sigma[0], std::sqrt(0.5)) ||
             !approx(result.genie->sigma[1], std::sqrt(2.0)))
             throw std::runtime_error("reweight_smoke: unexpected sigma values");

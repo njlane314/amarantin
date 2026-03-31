@@ -440,9 +440,9 @@ nominal sample.
 Detector-systematic caching stores per-variation fine templates so envelopes
 can be rebuilt after rebinning.
 
-Universe-systematic caching stores covariance and compressed eigenmodes so
-rebinned covariance and per-bin RMS can be reconstructed without revisiting
-the event tree.
+Universe-systematic caching now treats covariance as the canonical persisted
+family payload and can also store compressed eigenmodes so rebinned covariance
+and per-bin RMS can be reconstructed without revisiting the event tree.
 
 Practical guidance
 ------------------

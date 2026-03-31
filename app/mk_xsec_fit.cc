@@ -15,6 +15,23 @@
 
 namespace
 {
+    constexpr const char *kProgramName = "mk_fit";
+
+    std::string cli_prefix()
+    {
+        return std::string(kProgramName) + ": ";
+    }
+
+    std::string cli_error(const std::string &message)
+    {
+        return cli_prefix() + message;
+    }
+
+    bool has_cli_prefix(const std::string &message)
+    {
+        return message.rfind(cli_prefix(), 0) == 0;
+    }
+
     enum class InputMode
     {
         kLegacy,
@@ -68,7 +85,8 @@ namespace
 
     void print_usage(std::ostream &os)
     {
-        os << "usage: mk_xsec_fit [--signal-process <name>] [--output <path>] "
+        os << "usage: " << kProgramName
+           << " [--signal-process <name>] [--output <path>] "
               "[--mu-start <value>] [--mu-lower <value>] [--mu-upper <value>] "
               "[--max-iterations <n>] [--max-function-calls <n>] "
               "[--scan-points <n>] [--strategy <n>] [--print-level <n>] "
@@ -77,7 +95,8 @@ namespace
               "[--background-cache <key>] [--allow-zero-data] "
               "<input.dists.root> <signal-sample-key> <background-sample-key> "
               "<channel-key>\n"
-              "   or: mk_xsec_fit [fit flags] [--selection <expr>] "
+              "   or: " << kProgramName
+           << " [fit flags] [--selection <expr>] "
               "[--data-bins <csv>] [--manifest <fit.manifest>] "
               "[--allow-zero-data] <input.dists.root> <channel-key>\n";
     }
@@ -85,7 +104,7 @@ namespace
     [[noreturn]] void print_usage_and_throw()
     {
         print_usage(std::cerr);
-        throw std::runtime_error("mk_xsec_fit: invalid arguments");
+        throw std::runtime_error(cli_error("invalid arguments"));
     }
 
     std::string trim_copy(const std::string &input)
@@ -137,7 +156,7 @@ namespace
             return fit::ProcessKind::kBackground;
         if (key == "data")
             return fit::ProcessKind::kData;
-        throw std::runtime_error("mk_xsec_fit: manifest kind must be signal, background, or data");
+        throw std::runtime_error(cli_error("manifest kind must be signal, background, or data"));
     }
 
     std::string pick_cache_key(const DistributionIO &dist,
@@ -147,13 +166,13 @@ namespace
         if (!requested_key.empty())
         {
             if (!dist.has(sample_key, requested_key))
-                throw std::runtime_error("mk_xsec_fit: requested cache key is not present for sample");
+                throw std::runtime_error(cli_error("requested cache key is not present for sample"));
             return requested_key;
         }
 
         const std::vector<std::string> keys = dist.dist_keys(sample_key);
         if (keys.empty())
-            throw std::runtime_error("mk_xsec_fit: no cached distributions found for sample");
+            throw std::runtime_error(cli_error("no cached distributions found for sample"));
         return keys.front();
     }
 
@@ -180,7 +199,7 @@ namespace
         }
 
         if (static_cast<int>(out.size()) != expected_nbins)
-            throw std::runtime_error("mk_xsec_fit: data bin count does not match cached histogram binning");
+            throw std::runtime_error(cli_error("data bin count does not match cached histogram binning"));
         return out;
     }
 
@@ -192,20 +211,20 @@ namespace
             reference.spec.xmin != candidate.spec.xmin ||
             reference.spec.xmax != candidate.spec.xmax)
         {
-            throw std::runtime_error("mk_xsec_fit: " + context +
-                                     " does not share histogram binning with the fit reference");
+            throw std::runtime_error(cli_error(context +
+                                               " does not share histogram binning with the fit reference"));
         }
 
         if (reference.spec.branch_expr != candidate.spec.branch_expr)
         {
-            throw std::runtime_error("mk_xsec_fit: " + context +
-                                     " does not share branch_expr with the fit reference");
+            throw std::runtime_error(cli_error(context +
+                                               " does not share branch_expr with the fit reference"));
         }
 
         if (reference.spec.selection_expr != candidate.spec.selection_expr)
         {
-            throw std::runtime_error("mk_xsec_fit: " + context +
-                                     " does not share selection_expr with the fit reference");
+            throw std::runtime_error(cli_error(context +
+                                               " does not share selection_expr with the fit reference"));
         }
     }
 
@@ -218,7 +237,7 @@ namespace
         if (cached.empty())
             return requested;
         if (requested != cached)
-            throw std::runtime_error("mk_xsec_fit: requested selection does not match cached distributions");
+            throw std::runtime_error(cli_error("requested selection does not match cached distributions"));
         return cached;
     }
 
@@ -227,7 +246,7 @@ namespace
                            const std::string &context)
     {
         if (target.size() != source.size())
-            throw std::runtime_error("mk_xsec_fit: " + context + " has incompatible bin payload size");
+            throw std::runtime_error(cli_error(context + " has incompatible bin payload size"));
 
         for (std::size_t i = 0; i < target.size(); ++i)
             target[i] += source[i];
@@ -241,9 +260,12 @@ namespace
         process.name = name;
         process.kind = kind;
         process.source_keys = {spectrum.spec.sample_key};
+        process.detector_source_labels = spectrum.detector_source_labels;
         process.detector_sample_keys = spectrum.detector_sample_keys;
         process.nominal = spectrum.nominal;
         process.sumw2 = spectrum.sumw2;
+        process.detector_shift_vectors = spectrum.detector_shift_vectors;
+        process.detector_source_count = spectrum.detector_source_count;
         process.detector_down = spectrum.detector_down;
         process.detector_up = spectrum.detector_up;
         process.detector_templates = spectrum.detector_templates;
@@ -260,7 +282,7 @@ namespace
     {
         std::ifstream input(path);
         if (!input)
-            throw std::runtime_error("mk_xsec_fit: failed to open manifest: " + path);
+            throw std::runtime_error(cli_error("failed to open manifest: " + path));
 
         std::vector<ManifestRow> rows;
         std::string line;
@@ -275,8 +297,9 @@ namespace
             const std::vector<std::string> fields = split_fields(trimmed);
             if (fields.size() < 3 || fields.size() > 4)
             {
-                throw std::runtime_error("mk_xsec_fit: expected 3 or 4 fields in manifest at line " +
-                                         std::to_string(line_number) + " in " + path);
+                throw std::runtime_error(
+                    cli_error("expected 3 or 4 fields in manifest at line " +
+                              std::to_string(line_number) + " in " + path));
             }
 
             ManifestRow row;
@@ -287,11 +310,13 @@ namespace
             row.line_number = line_number;
 
             if (row.name.empty())
-                throw std::runtime_error("mk_xsec_fit: empty process name in manifest at line " +
-                                         std::to_string(line_number));
+                throw std::runtime_error(
+                    cli_error("empty process name in manifest at line " +
+                              std::to_string(line_number)));
             if (row.sample_key.empty())
-                throw std::runtime_error("mk_xsec_fit: empty sample key in manifest at line " +
-                                         std::to_string(line_number));
+                throw std::runtime_error(
+                    cli_error("empty sample key in manifest at line " +
+                              std::to_string(line_number)));
 
             rows.push_back(std::move(row));
         }
@@ -312,8 +337,8 @@ namespace
             {
                 if (std::find(seen_process_names.begin(), seen_process_names.end(), row.name) != seen_process_names.end())
                 {
-                    throw std::runtime_error("mk_xsec_fit: duplicate non-data process name in manifest: " +
-                                             row.name);
+                    throw std::runtime_error(
+                        cli_error("duplicate non-data process name in manifest: " + row.name));
                 }
                 seen_process_names.push_back(row.name);
             }
@@ -352,7 +377,7 @@ namespace
         channel.data = parse_bins_csv(options.data_bins_csv,
                                       signal.spec.nbins,
                                       options.allow_zero_data,
-                                      "mk_xsec_fit: data-bins is required unless --allow-zero-data is set");
+                                      "data-bins is required unless --allow-zero-data is set");
         channel.processes.push_back(
             make_process(signal, options.signal_process, fit::ProcessKind::kSignal));
         channel.processes.push_back(
@@ -365,7 +390,7 @@ namespace
     {
         const std::vector<ManifestRow> rows = read_manifest(options.manifest_path);
         if (rows.empty())
-            throw std::runtime_error("mk_xsec_fit: manifest does not contain any fit inputs");
+            throw std::runtime_error(cli_error("manifest does not contain any fit inputs"));
 
         const std::vector<LoadedSource> sources = load_manifest_sources(dist, rows);
         const DistributionIO::Spectrum &reference = sources.front().spectrum;
@@ -402,12 +427,12 @@ namespace
         }
 
         if (channel.processes.empty())
-            throw std::runtime_error("mk_xsec_fit: manifest must include at least one signal or background row");
+            throw std::runtime_error(cli_error("manifest must include at least one signal or background row"));
 
         if (have_observed_data)
         {
             if (!options.data_bins_csv.empty())
-                throw std::runtime_error("mk_xsec_fit: data-bins cannot be combined with manifest data rows");
+                throw std::runtime_error(cli_error("data-bins cannot be combined with manifest data rows"));
             channel.data = std::move(observed_data);
         }
         else
@@ -415,7 +440,7 @@ namespace
             channel.data = parse_bins_csv(options.data_bins_csv,
                                           reference.spec.nbins,
                                           options.allow_zero_data,
-                                          "mk_xsec_fit: data-bins is required unless the manifest contains data rows or --allow-zero-data is set");
+                                          "data-bins is required unless the manifest contains data rows or --allow-zero-data is set");
         }
 
         return channel;
@@ -678,7 +703,7 @@ namespace
             if (options.legacy_process_flags_used)
             {
                 throw std::runtime_error(
-                    "mk_xsec_fit: --manifest cannot be combined with legacy signal/background-specific cache flags");
+                    cli_error("--manifest cannot be combined with legacy signal/background-specific cache flags"));
             }
             if (argc - i != 2)
                 print_usage_and_throw();
@@ -698,7 +723,7 @@ namespace
         }
 
         if (options.signal_process.empty())
-            throw std::runtime_error("mk_xsec_fit: signal-process must not be empty");
+            throw std::runtime_error(cli_error("signal-process must not be empty"));
         return options;
     }
 }
@@ -719,7 +744,7 @@ int main(int argc, char **argv)
         if (!options.allow_zero_data && all_zero_bins(channel.data))
         {
             throw std::runtime_error(
-                "mk_xsec_fit: observed bins are all zero; pass --allow-zero-data to fit an empty observation intentionally");
+                cli_error("observed bins are all zero; pass --allow-zero-data to fit an empty observation intentionally"));
         }
 
         fit::Problem problem =
@@ -745,9 +770,9 @@ int main(int argc, char **argv)
         {
             std::ofstream out(options.output_path);
             if (!out)
-                throw std::runtime_error("mk_xsec_fit: failed to open output file");
+                throw std::runtime_error(cli_error("failed to open output file"));
             out << report;
-            std::cout << "mk_xsec_fit: wrote " << options.output_path
+            std::cout << kProgramName << ": wrote " << options.output_path
                       << " from " << options.dist_path
                       << " channel " << options.channel_key;
             if (options.mode == InputMode::kManifest)
@@ -761,9 +786,10 @@ int main(int argc, char **argv)
     }
     catch (const std::exception &e)
     {
-        if (std::string(e.what()).empty())
+        const std::string message = e.what();
+        if (message.empty())
             return 0;
-        std::cerr << "mk_xsec_fit: " << e.what() << "\n";
+        std::cerr << (has_cli_prefix(message) ? message : cli_error(message)) << "\n";
         return 1;
     }
 }

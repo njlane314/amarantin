@@ -55,7 +55,12 @@ public:
         Spec spec;
         std::vector<double> nominal;
         std::vector<double> sumw2;
+        std::vector<std::string> detector_source_labels;
+        std::vector<std::string> detector_cv_sample_keys;
         std::vector<std::string> detector_sample_keys;
+        std::vector<double> detector_shift_vectors;
+        int detector_source_count = 0;
+        std::vector<double> detector_covariance;
         std::vector<double> detector_down;
         std::vector<double> detector_up;
         std::vector<double> detector_templates;

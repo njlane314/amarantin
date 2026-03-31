@@ -28,7 +28,8 @@ Primary executables
   * build/bin/mk_dataset
   * build/bin/mk_eventlist
   * build/bin/mk_dist
-  * build/bin/mk_xsec_fit
+  * build/bin/mk_fit
+  * build/bin/mk_sbnfit_cov
 
 Canonical build path
 --------------------
@@ -73,7 +74,8 @@ Build selected targets
   cmake --build build --target mk_dataset
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
-  cmake --build build --target mk_xsec_fit
+  cmake --build build --target mk_fit
+  cmake --build build --target mk_sbnfit_cov
 
 Sample workflow
 ---------------
@@ -193,6 +195,19 @@ Notes:
   `--no-overwrite` keeps existing matching cache entries instead of
   rebuilding them.
 
+Export one cached spectrum as an SBNFit-style fractional covariance ROOT file
+  build/bin/mk_sbnfit_cov \
+    --matrix-name frac_covariance \
+    build/dists/run1-numi-fhc.root \
+    beam-s0 \
+    build/exports/beam-s0.frac_cov.root
+
+Notes:
+  `mk_sbnfit_cov` exports one cached `DistributionIO::Spectrum` at a time.
+  It writes a ROOT matrix named `frac_covariance` by default for SBNFit-style
+  consumers, plus `abs_covariance`, component covariance matrices when
+  available, and a nominal histogram.
+
 Fit workflow
 ------------
 Run one native xsec fit directly from cached DistributionIO inputs and print
@@ -204,13 +219,13 @@ the fit report
   dirt background dirt
   obs data beam-data
   EOF
-  build/bin/mk_xsec_fit \
+  build/bin/mk_fit \
     --manifest muon_region.fit.manifest \
     output.dists.root \
     muon_region
 
 Run one quick two-process fit with explicit observed bins
-  build/bin/mk_xsec_fit \
+  build/bin/mk_fit \
     --signal-process signal \
     --data-bins "12,10,9,7,6,5,4,3,2,1" \
     output.dists.root \
@@ -219,7 +234,7 @@ Run one quick two-process fit with explicit observed bins
     muon_region
 
 If the fit intentionally carries an all-zero observed spectrum
-  build/bin/mk_xsec_fit \
+  build/bin/mk_fit \
     --allow-zero-data \
     output.dists.root \
     beam-s0 \
@@ -227,7 +242,7 @@ If the fit intentionally carries an all-zero observed spectrum
     muon_region
 
 Run one native xsec fit with explicit signal process and write a text report
-  build/bin/mk_xsec_fit \
+  build/bin/mk_fit \
     --signal-process signal \
     --output muon_region.fit.txt \
     --manifest muon_region.fit.manifest \
@@ -235,7 +250,7 @@ Run one native xsec fit with explicit signal process and write a text report
     muon_region
 
 Notes:
-  `mk_xsec_fit` now consumes cached `DistributionIO` entries directly.
+  `mk_fit` now consumes cached `DistributionIO` entries directly.
   Manifest rows use the format:
     `process-name kind sample-key [cache-key]`
   `data` rows fill the observed bins automatically.
@@ -287,7 +302,7 @@ Notes
   duplicate sample rows. The older repeated-key merge behavior remains
   available only through the legacy context-string path.
 
-`mk_dist`, `mk_xsec_fit`
+`mk_dist`, `mk_fit`
   Are the preferred scripted cache / fit entrypoints.
   Older helper macros such as `cache_systematics.C` may remain useful for ad
   hoc ROOT sessions, but they are no longer the documented workflow.

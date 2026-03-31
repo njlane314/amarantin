@@ -168,7 +168,12 @@ DistributionIO::Spectrum DistributionIO::read(const std::string &sample_key,
 
     std::vector<double> *nominal = nullptr;
     std::vector<double> *sumw2 = nullptr;
+    std::vector<std::string> *detector_source_labels = nullptr;
+    std::vector<std::string> *detector_cv_sample_keys = nullptr;
     std::vector<std::string> *detector_sample_keys = nullptr;
+    std::vector<double> *detector_shift_vectors = nullptr;
+    int detector_source_count = 0;
+    std::vector<double> *detector_covariance = nullptr;
     std::vector<double> *detector_down = nullptr;
     std::vector<double> *detector_up = nullptr;
     std::vector<double> *detector_templates = nullptr;
@@ -205,11 +210,26 @@ DistributionIO::Spectrum DistributionIO::read(const std::string &sample_key,
 
     payload->SetBranchAddress("nominal", &nominal);
     payload->SetBranchAddress("sumw2", &sumw2);
-    payload->SetBranchAddress("detector_sample_keys", &detector_sample_keys);
-    payload->SetBranchAddress("detector_template_count", &detector_template_count);
-    payload->SetBranchAddress("detector_down", &detector_down);
-    payload->SetBranchAddress("detector_up", &detector_up);
-    payload->SetBranchAddress("detector_templates", &detector_templates);
+    if (payload->GetBranch("detector_source_labels"))
+        payload->SetBranchAddress("detector_source_labels", &detector_source_labels);
+    if (payload->GetBranch("detector_cv_sample_keys"))
+        payload->SetBranchAddress("detector_cv_sample_keys", &detector_cv_sample_keys);
+    if (payload->GetBranch("detector_sample_keys"))
+        payload->SetBranchAddress("detector_sample_keys", &detector_sample_keys);
+    if (payload->GetBranch("detector_shift_vectors"))
+        payload->SetBranchAddress("detector_shift_vectors", &detector_shift_vectors);
+    if (payload->GetBranch("detector_source_count"))
+        payload->SetBranchAddress("detector_source_count", &detector_source_count);
+    if (payload->GetBranch("detector_covariance"))
+        payload->SetBranchAddress("detector_covariance", &detector_covariance);
+    if (payload->GetBranch("detector_template_count"))
+        payload->SetBranchAddress("detector_template_count", &detector_template_count);
+    if (payload->GetBranch("detector_down"))
+        payload->SetBranchAddress("detector_down", &detector_down);
+    if (payload->GetBranch("detector_up"))
+        payload->SetBranchAddress("detector_up", &detector_up);
+    if (payload->GetBranch("detector_templates"))
+        payload->SetBranchAddress("detector_templates", &detector_templates);
     payload->SetBranchAddress("total_down", &total_down);
     payload->SetBranchAddress("total_up", &total_up);
 
@@ -250,7 +270,12 @@ DistributionIO::Spectrum DistributionIO::read(const std::string &sample_key,
 
     spectrum.nominal = nominal ? *nominal : std::vector<double>{};
     spectrum.sumw2 = sumw2 ? *sumw2 : std::vector<double>{};
+    spectrum.detector_source_labels = detector_source_labels ? *detector_source_labels : std::vector<std::string>{};
+    spectrum.detector_cv_sample_keys = detector_cv_sample_keys ? *detector_cv_sample_keys : std::vector<std::string>{};
     spectrum.detector_sample_keys = detector_sample_keys ? *detector_sample_keys : std::vector<std::string>{};
+    spectrum.detector_shift_vectors = detector_shift_vectors ? *detector_shift_vectors : std::vector<double>{};
+    spectrum.detector_source_count = detector_source_count;
+    spectrum.detector_covariance = detector_covariance ? *detector_covariance : std::vector<double>{};
     spectrum.detector_template_count = detector_template_count;
     spectrum.detector_down = detector_down ? *detector_down : std::vector<double>{};
     spectrum.detector_up = detector_up ? *detector_up : std::vector<double>{};
@@ -306,7 +331,12 @@ void DistributionIO::write(const std::string &sample_key,
 
     std::vector<double> nominal = spectrum.nominal;
     std::vector<double> sumw2 = spectrum.sumw2;
+    std::vector<std::string> detector_source_labels = spectrum.detector_source_labels;
+    std::vector<std::string> detector_cv_sample_keys = spectrum.detector_cv_sample_keys;
     std::vector<std::string> detector_sample_keys = spectrum.detector_sample_keys;
+    std::vector<double> detector_shift_vectors = spectrum.detector_shift_vectors;
+    int detector_source_count = spectrum.detector_source_count;
+    std::vector<double> detector_covariance = spectrum.detector_covariance;
     int detector_template_count = spectrum.detector_template_count;
     std::vector<double> detector_down = spectrum.detector_down;
     std::vector<double> detector_up = spectrum.detector_up;
@@ -345,7 +375,12 @@ void DistributionIO::write(const std::string &sample_key,
     TTree payload("payload", "Distribution payload");
     payload.Branch("nominal", &nominal);
     payload.Branch("sumw2", &sumw2);
+    payload.Branch("detector_source_labels", &detector_source_labels);
+    payload.Branch("detector_cv_sample_keys", &detector_cv_sample_keys);
     payload.Branch("detector_sample_keys", &detector_sample_keys);
+    payload.Branch("detector_shift_vectors", &detector_shift_vectors);
+    payload.Branch("detector_source_count", &detector_source_count);
+    payload.Branch("detector_covariance", &detector_covariance);
     payload.Branch("detector_template_count", &detector_template_count);
     payload.Branch("detector_down", &detector_down);
     payload.Branch("detector_up", &detector_up);

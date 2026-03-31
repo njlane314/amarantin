@@ -36,6 +36,7 @@ Executables
   * mk_eventlist
   * mk_dist
   * mk_xsec_fit
+  * mk_sbnfit_cov
 
 Prerequisites
 -------------
@@ -79,6 +80,7 @@ Build only selected targets
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
   cmake --build build --target mk_xsec_fit
+  cmake --build build --target mk_sbnfit_cov
 
 Install
 -------
@@ -148,6 +150,7 @@ Typical installed outputs are:
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_eventlist
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dist
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_xsec_fit
+  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_sbnfit_cov
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libIO.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libAna.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libSyst.<shared-library>
@@ -186,6 +189,7 @@ After a successful build, the build tree should contain:
   build/bin/mk_eventlist
   build/bin/mk_dist
   build/bin/mk_xsec_fit
+  build/bin/mk_sbnfit_cov
   build/lib/
 
 A simple smoke test is:

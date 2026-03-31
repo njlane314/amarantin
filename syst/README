@@ -5,6 +5,9 @@ Overview
 --------
 syst/ turns selected EventListIO rows into bin-wise uncertainty summaries.
 
+For the longer-term covariance-first target state and migration plan informed
+by `hive`, see `syst/VISION.md`.
+
 It does not decide the event selection that created the event list, and it
 does not render plots. Its job is:
 
@@ -109,9 +112,9 @@ For each enabled family, syst/:
 - fills one histogram per universe using the central weight `__w__` multiplied
   by the decoded universe weight
 - builds a covariance matrix from the universe histograms
+- persists that covariance as the canonical family payload
 - derives:
   - per-bin `sigma`
-  - optional full covariance payload
   - optional eigenmode compression
   - a derived envelope built from `nominal +/- sigma`
 
@@ -157,10 +160,9 @@ If `genie`, `flux`, or `reint` are enabled:
 - stay on the nominal tree
 - read the corresponding multi-universe weight branch
 - refill the same binned observable once per universe
-- convert the universe set into covariance-like summaries
+- convert the universe set into a covariance-first family summary
 - derive:
   - per-bin `sigma`
-  - optional covariance
   - optional eigenmode compression
   - a simple envelope from `nominal +/- sigma`
 
@@ -219,7 +221,7 @@ The cached `DistributionIO::Spectrum` holds:
 - detector sample keys
 - detector templates and detector envelope
 - family `sigma`
-- optional family covariance
+- family covariance
 - optional family eigenvalues and eigenmodes
 - optional retained universe histograms
 - combined `total_down` / `total_up`
@@ -245,8 +247,8 @@ stored summaries:
 - eigenmodes
 - retained universe histograms
 
-If a cache contains only per-bin `sigma`, that payload is only exact at the
-cached binning itself.
+Covariance is now the canonical persisted family payload. Older caches that
+contain only per-bin `sigma` remain limited to the cached binning itself.
 
 What lives where
 ----------------
@@ -271,7 +273,7 @@ Systematics.hh
 
   SystematicsOptions
     Controls cache policy, enabled families, detector sample keys, covariance
-    retention, and eigenmode compression.
+    construction, retained universes, and eigenmode compression.
 
   SystematicsResult
     Holds nominal bins, detector envelope, optional universe-family payloads

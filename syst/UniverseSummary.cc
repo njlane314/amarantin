@@ -47,6 +47,175 @@ namespace
         }
         return out;
     }
+
+    std::vector<double> flatten_covariance(const Eigen::MatrixXd &covariance)
+    {
+        std::vector<double> out(static_cast<std::size_t>(covariance.rows() * covariance.cols()), 0.0);
+        for (Eigen::Index row = 0; row < covariance.rows(); ++row)
+        {
+            for (Eigen::Index col = 0; col < covariance.cols(); ++col)
+            {
+                out[static_cast<std::size_t>(row * covariance.cols() + col)] = covariance(row, col);
+            }
+        }
+        return out;
+    }
+
+    std::vector<double> sigma_from_covariance(const Eigen::MatrixXd &covariance)
+    {
+        std::vector<double> sigma(static_cast<std::size_t>(covariance.rows()), 0.0);
+        for (Eigen::Index row = 0; row < covariance.rows(); ++row)
+            sigma[static_cast<std::size_t>(row)] = std::sqrt(std::max(0.0, covariance(row, row)));
+        return sigma;
+    }
+
+    std::vector<int> select_fractional_modes(const Eigen::VectorXd &eigenvalues,
+                                             int max_modes,
+                                             double fraction)
+    {
+        const double total_variance = std::max(0.0, eigenvalues.cwiseMax(0.0).sum());
+
+        std::vector<int> selected;
+        double captured = 0.0;
+        for (int idx = static_cast<int>(eigenvalues.size()) - 1; idx >= 0; --idx)
+        {
+            const double value = std::max(0.0, eigenvalues(idx));
+            if (value <= 0.0)
+                continue;
+
+            selected.push_back(idx);
+            captured += value;
+            if ((max_modes > 0 && static_cast<int>(selected.size()) >= max_modes) ||
+                (total_variance > 0.0 && captured / total_variance >= fraction))
+            {
+                break;
+            }
+        }
+        return selected;
+    }
+
+    std::vector<int> select_top_modes(const Eigen::VectorXd &eigenvalues,
+                                      int mode_count)
+    {
+        std::vector<int> selected;
+        if (mode_count <= 0)
+            return selected;
+
+        for (int idx = static_cast<int>(eigenvalues.size()) - 1; idx >= 0; --idx)
+        {
+            const double value = std::max(0.0, eigenvalues(idx));
+            if (value <= 0.0)
+                continue;
+
+            selected.push_back(idx);
+            if (static_cast<int>(selected.size()) >= mode_count)
+                break;
+        }
+        return selected;
+    }
+
+    void fill_modes_from_indices(const Eigen::VectorXd &eigenvalues,
+                                 const Eigen::MatrixXd &eigenvectors,
+                                 const std::vector<int> &selected,
+                                 int nrows,
+                                 int &eigen_rank,
+                                 std::vector<double> &out_eigenvalues,
+                                 std::vector<double> &out_eigenmodes)
+    {
+        eigen_rank = static_cast<int>(selected.size());
+        out_eigenvalues.clear();
+        out_eigenmodes.clear();
+        if (selected.empty())
+            return;
+
+        out_eigenvalues.reserve(selected.size());
+        out_eigenmodes.assign(static_cast<std::size_t>(nrows) * selected.size(), 0.0);
+        for (std::size_t col = 0; col < selected.size(); ++col)
+        {
+            const int idx = selected[col];
+            const double value = std::max(0.0, eigenvalues(idx));
+            out_eigenvalues.push_back(value);
+            const Eigen::VectorXd mode = eigenvectors.col(idx) * std::sqrt(value);
+            for (int row = 0; row < nrows; ++row)
+                out_eigenmodes[static_cast<std::size_t>(row * selected.size() + col)] = mode(row);
+        }
+    }
+
+    void fill_fractional_modes_from_covariance(const Eigen::MatrixXd &covariance,
+                                               int max_modes,
+                                               double fraction,
+                                               int &eigen_rank,
+                                               std::vector<double> &out_eigenvalues,
+                                               std::vector<double> &out_eigenmodes)
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(covariance);
+        if (solver.info() != Eigen::Success)
+            throw std::runtime_error("SystematicsEngine: eigenmode compression failed");
+
+        const Eigen::VectorXd eigenvalues = solver.eigenvalues();
+        const Eigen::MatrixXd eigenvectors = solver.eigenvectors();
+        const std::vector<int> selected =
+            select_fractional_modes(eigenvalues, max_modes, fraction);
+        fill_modes_from_indices(eigenvalues,
+                                eigenvectors,
+                                selected,
+                                static_cast<int>(covariance.rows()),
+                                eigen_rank,
+                                out_eigenvalues,
+                                out_eigenmodes);
+    }
+
+    void fill_rank_limited_modes_from_covariance(const Eigen::MatrixXd &covariance,
+                                                 int mode_count,
+                                                 int &eigen_rank,
+                                                 std::vector<double> &out_eigenvalues,
+                                                 std::vector<double> &out_eigenmodes)
+    {
+        if (mode_count <= 0)
+        {
+            eigen_rank = 0;
+            out_eigenvalues.clear();
+            out_eigenmodes.clear();
+            return;
+        }
+
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(covariance);
+        if (solver.info() != Eigen::Success)
+            throw std::runtime_error("SystematicsEngine: eigenmode compression failed");
+
+        const Eigen::VectorXd eigenvalues = solver.eigenvalues();
+        const Eigen::MatrixXd eigenvectors = solver.eigenvectors();
+        const std::vector<int> selected = select_top_modes(eigenvalues, mode_count);
+        fill_modes_from_indices(eigenvalues,
+                                eigenvectors,
+                                selected,
+                                static_cast<int>(covariance.rows()),
+                                eigen_rank,
+                                out_eigenvalues,
+                                out_eigenmodes);
+    }
+
+    Eigen::MatrixXd covariance_from_universe_histograms(const std::vector<std::vector<double>> &universes,
+                                                        const std::vector<double> &nominal)
+    {
+        const int nbins = static_cast<int>(nominal.size());
+        Eigen::MatrixXd covariance = Eigen::MatrixXd::Zero(nbins, nbins);
+        if (universes.empty())
+            return covariance;
+
+        const Eigen::Map<const Eigen::VectorXd> nominal_vec(nominal.data(), nbins);
+        for (const auto &universe_histogram : universes)
+        {
+            if (static_cast<int>(universe_histogram.size()) != nbins)
+                throw std::runtime_error("SystematicsEngine: retained universe histogram size does not match nominal bins");
+            const Eigen::Map<const Eigen::VectorXd> universe_vec(universe_histogram.data(), nbins);
+            const Eigen::VectorXd delta = universe_vec - nominal_vec;
+            covariance += delta * delta.transpose();
+        }
+
+        covariance /= static_cast<double>(universes.size());
+        return covariance;
+    }
 }
 
 namespace syst::detail
@@ -73,57 +242,17 @@ namespace syst::detail
         const MatrixRowMajor deltas = universes.colwise() - nominal_vec;
         const Eigen::MatrixXd covariance =
             (deltas * deltas.transpose()) / static_cast<double>(family.n_universes);
-        const Eigen::VectorXd sigma =
-            covariance.diagonal().cwiseMax(0.0).cwiseSqrt();
-        for (int bin = 0; bin < nbins; ++bin)
-            out.sigma[static_cast<std::size_t>(bin)] = sigma(bin);
-
-        if (options.persist_covariance)
-        {
-            out.covariance.resize(static_cast<std::size_t>(nbins * nbins));
-            for (int row = 0; row < nbins; ++row)
-            {
-                for (int col = 0; col < nbins; ++col)
-                    out.covariance[static_cast<std::size_t>(row * nbins + col)] = covariance(row, col);
-            }
-        }
+        out.sigma = sigma_from_covariance(covariance);
+        out.covariance = flatten_covariance(covariance);
 
         if (options.enable_eigenmode_compression)
         {
-            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(covariance);
-            if (solver.info() != Eigen::Success)
-                throw std::runtime_error("SystematicsEngine: eigenmode compression failed");
-
-            const Eigen::VectorXd eigenvalues = solver.eigenvalues();
-            const Eigen::MatrixXd eigenvectors = solver.eigenvectors();
-            const double total_variance = std::max(0.0, eigenvalues.cwiseMax(0.0).sum());
-
-            std::vector<int> selected;
-            double captured = 0.0;
-            for (int idx = static_cast<int>(eigenvalues.size()) - 1; idx >= 0; --idx)
-            {
-                const double value = std::max(0.0, eigenvalues(idx));
-                if (value <= 0.0)
-                    continue;
-                selected.push_back(idx);
-                captured += value;
-                if ((options.max_eigenmodes > 0 && static_cast<int>(selected.size()) >= options.max_eigenmodes) ||
-                    (total_variance > 0.0 && captured / total_variance >= options.eigenmode_fraction))
-                    break;
-            }
-
-            out.eigen_rank = static_cast<int>(selected.size());
-            out.eigenvalues.reserve(selected.size());
-            out.eigenmodes.assign(static_cast<std::size_t>(nbins) * selected.size(), 0.0);
-            for (std::size_t col = 0; col < selected.size(); ++col)
-            {
-                const int idx = selected[col];
-                const double value = std::max(0.0, eigenvalues(idx));
-                out.eigenvalues.push_back(value);
-                const Eigen::VectorXd mode = eigenvectors.col(idx) * std::sqrt(value);
-                for (int row = 0; row < nbins; ++row)
-                    out.eigenmodes[static_cast<std::size_t>(row * selected.size() + col)] = mode(row);
-            }
+            fill_fractional_modes_from_covariance(covariance,
+                                                  options.max_eigenmodes,
+                                                  options.eigenmode_fraction,
+                                                  out.eigen_rank,
+                                                  out.eigenvalues,
+                                                  out.eigenmodes);
         }
         return out;
     }
@@ -157,7 +286,33 @@ namespace syst::detail
         if (retain_universe_histograms)
             out.universe_histograms = unpack_universe_histograms(family, entry.spec.nbins, &rebin);
 
-        if (!family.eigenmodes.empty() && family.eigen_rank > 0)
+        if (!family.covariance.empty())
+        {
+            const Eigen::Map<const MatrixRowMajor> covariance(family.covariance.data(),
+                                                              entry.spec.nbins,
+                                                              entry.spec.nbins);
+            const Eigen::MatrixXd rebinned = rebin * covariance * rebin.transpose();
+            out.covariance = flatten_covariance(rebinned);
+            out.sigma = sigma_from_covariance(rebinned);
+            fill_rank_limited_modes_from_covariance(rebinned,
+                                                    family.eigen_rank,
+                                                    out.eigen_rank,
+                                                    out.eigenvalues,
+                                                    out.eigenmodes);
+        }
+        else if (!out.universe_histograms.empty())
+        {
+            const Eigen::MatrixXd covariance =
+                covariance_from_universe_histograms(out.universe_histograms, nominal);
+            out.covariance = flatten_covariance(covariance);
+            out.sigma = sigma_from_covariance(covariance);
+            fill_rank_limited_modes_from_covariance(covariance,
+                                                    family.eigen_rank,
+                                                    out.eigen_rank,
+                                                    out.eigenvalues,
+                                                    out.eigenmodes);
+        }
+        else if (!family.eigenmodes.empty() && family.eigen_rank > 0)
         {
             const Eigen::Map<const MatrixRowMajor> modes(family.eigenmodes.data(),
                                                          entry.spec.nbins,
@@ -179,27 +334,7 @@ namespace syst::detail
             if (build_full_covariance)
             {
                 const Eigen::MatrixXd covariance = rebinned_modes * rebinned_modes.transpose();
-                out.covariance.resize(static_cast<std::size_t>(target_spec.nbins * target_spec.nbins), 0.0);
-                for (int row = 0; row < target_spec.nbins; ++row)
-                {
-                    for (int col = 0; col < target_spec.nbins; ++col)
-                        out.covariance[static_cast<std::size_t>(row * target_spec.nbins + col)] = covariance(row, col);
-                }
-            }
-        }
-        else if (!family.covariance.empty())
-        {
-            const Eigen::Map<const MatrixRowMajor> covariance(family.covariance.data(),
-                                                              entry.spec.nbins,
-                                                              entry.spec.nbins);
-            const Eigen::MatrixXd rebinned = rebin * covariance * rebin.transpose();
-            out.covariance.resize(static_cast<std::size_t>(target_spec.nbins * target_spec.nbins), 0.0);
-            out.sigma.assign(static_cast<std::size_t>(target_spec.nbins), 0.0);
-            for (int row = 0; row < target_spec.nbins; ++row)
-            {
-                out.sigma[static_cast<std::size_t>(row)] = std::sqrt(std::max(0.0, rebinned(row, row)));
-                for (int col = 0; col < target_spec.nbins; ++col)
-                    out.covariance[static_cast<std::size_t>(row * target_spec.nbins + col)] = rebinned(row, col);
+                out.covariance = flatten_covariance(covariance);
             }
         }
         else

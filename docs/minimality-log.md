@@ -2,63 +2,76 @@
 
 ## Current milestone
 - status: done
-- subsystem: `syst/` HIVE-informed covariance-first planning
-- design rule from `DESIGN.md`: keep module boundaries sharp and prefer plain
-  data plus explicit workflow/data-flow contracts over framework-heavy
-  orchestration
+- subsystem: `syst/` reweight-family covariance canonicalization
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep `io/`
+  persistence-only, and make the core data flow easier to follow by treating
+  one persisted covariance matrix as the family truth
 
 ## What changed
-- added `syst/VISION.md` as a local target-state document for importing the
-  good parts of `hive` systematics handling
-- wrote down the intended covariance-first contract for:
-  - detector systematics
-  - reweight-family systematics
-  - statistical covariance
-  - rebinning and collapse
-- recorded the main review equations and open convention questions
-- reset the active exec-plan tracking toward a staged systematics-import path
-- linked `syst/README` to the new local vision document
+- made `syst/UniverseSummary.cc` persist family covariance unconditionally as
+  the canonical cache payload for GENIE, flux, and reinteraction families
+- changed rebinned family readback to prefer exact covariance, then retained
+  universes, and only then fall back to old eigenmode-only caches
+- derived sigma and any rebinned compressed modes from the exact rebinned
+  covariance instead of rebuilding the family result primarily from cached
+  compressed modes
+- froze the canonical cache key on `cov=1`, bumped the systematics cache schema
+  version to `4`, and kept the old `persist_covariance` option only as a
+  compatibility surface
+- updated the reweight smoke so it now checks that canonical family covariance
+  is actually written to the cache
 
 ## Why this is simpler
-- the next implementation pass now has one explicit target math contract
-- the repo can import `hive`'s useful covariance ideas without importing its
-  XML and shell machinery
-- detector envelopes and total envelopes are now documented as derived views,
-  which sharpens the boundary between plotting convenience and canonical
-  systematics state
+- one family cache payload is now the source of truth instead of an optional
+  covariance branch shadowing sigma and compressed modes
+- exact rebinned covariance no longer depends on whether the cached family also
+  carried compressed eigenmodes
+- older no-covariance caches still have a bounded fallback path, but the new
+  default no longer encourages building fresh sigma-only family caches
 
 ## Verification
 - configure/build commands:
+-  `cmake -S . -B .build/milestone-e -DCMAKE_BUILD_TYPE=Release`
 - target-only commands:
+-  `cmake --build build-docker-plot-check --target Syst --parallel`
 - shell checks:
-  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/README syst/VISION.md`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/UniverseSummary.cc syst/Systematics.cc syst/Support.cc syst/bits/Detail.hh syst/README io/bits/DERIVED tools/systematics-reweight-smoke.sh`
+-  `bash -n tools/systematics-reweight-smoke.sh`
 - smoke checks:
 - results:
-  - planning/doc pass only
-  - build and smoke verification remain blocked in this environment because
-    `root-config` is not on `PATH`
+  - tracked-file `git diff --check` passed
+  - `bash -n tools/systematics-reweight-smoke.sh` passed
+  - `cmake -S . -B .build/milestone-e -DCMAKE_BUILD_TYPE=Release` failed in
+    this environment because `ROOT` is not available and `root-config` is not
+    on `PATH`
+  - `cmake --build build-docker-plot-check --target Syst --parallel` was not a
+    usable compile check because that auxiliary build tree was configured under
+    `/work/build-docker-plot-check` and now fails the CMake path consistency
+    guard
+  - runtime smoke checks remain deferred because no trustworthy configured ROOT
+    build is available
 
 ## Reduction ledger
 - files deleted: 0
-- wrappers removed: 0
+- wrappers removed:
+  - the optional-payload distinction where family covariance could silently be
+    dropped while sigma and compressed modes remained
 - shell branches removed: 0
 - docs/build artifacts removed: 0
-- approximate LOC delta: small additive doc pass centered on one new
-  `syst/VISION.md`
+- approximate LOC delta:
+  - one focused reweight-family cleanup pass plus doc/test updates
+  - no new framework layer or extra app surface
 
 ## Decisions
 - make covariance the canonical imported semantic from `hive`
-- keep absolute covariance as the preferred canonical math object pending
-  review
+- keep absolute covariance as the canonical persisted form
 - keep detector and total envelopes as derived summaries only
-- keep `hive` XML/env/shell orchestration out of scope
+- keep `amarantin` as the covariance builder
 
 ## Remaining hotspots
-- confirm universe covariance normalization convention
-- confirm detector-source independence / pairing rules
-- decide whether `DistributionIO` should persist absolute covariance only or
-  both absolute and fractional forms
-- teach `fit/` to consume covariance-first payloads in a later milestone
+- if you want a true stacked multi-process SBNFit export, the next step needs
+  an explicit contract for cross-process family correlations rather than
+  guessing them from per-process caches
 
 ## Current milestone
 - status: done
@@ -1934,3 +1947,67 @@
 - local ROOT macros such as `plot_channel.C`, `fit_channel.C`, `scan_mu.C`,
   and `write_channel.C` still depend on `ChannelIO`, but they are no longer on
   the installed or documented workflow path
+
+---
+
+## Current milestone
+- status: done
+- subsystem: `ana/` EventList sample-partition policy boundary
+- design rule from `DESIGN.md`: keep module boundaries sharp, prefer plain
+  data and namespace functions, and keep analysis-specific policy out of
+  generic workflow plumbing
+
+## What changed
+- removed the inline overlay/signal `count_strange` split from
+  `ana/EventListBuild.cc`
+- introduced one plain-data `ana::SampleSelectionRule` surface in
+  `ana/SignalDefinition.hh`
+- moved the canonical analysis-specific EventList sample-partition rule into
+  `ana/SignalDefinition.cc`
+- updated `ana/README` to name `SignalDefinition` as the owner of that policy
+- corrected `io/bits/DERIVED` so it describes the rule as owned by the
+  canonical `ana` EventList build policy rather than by `EventListIO`
+
+## Why this is simpler
+- `EventListBuild` is back to generic work: chain setup, selection assembly,
+  branch validation, and persistence
+- the analysis-specific rule is now in one grep-friendly home instead of being
+  mixed into generic builder control flow
+- future changes can either replace that one policy function or generalise it
+  without rediscovering hidden origin-specific branches in the builder
+
+## Verification
+- local checks:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/EventListBuild.cc ana/SignalDefinition.hh ana/SignalDefinition.cc ana/README io/bits/DERIVED`
+- targeted build checks:
+  - attempted `cmake --build build --target Ana mk_eventlist --parallel`
+- results:
+  - tracked-file `git diff --check` passed
+  - the targeted rebuild is blocked because the existing `build/` tree invokes
+    `/usr/bin/cmake`, which is not present in this environment
+  - a fresh configure/build was not attempted because local ROOT discovery is
+    unavailable here: `root-config` is not on `PATH`, and the previously
+    cached `/opt/root/bin/root-config` path no longer exists
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - inline analysis-specific overlay/signal filtering branches from
+    `ana/EventListBuild.cc`
+- shell branches removed: 0
+- docs/build artifacts removed:
+  - stale wording that implied `EventListIO` owned sample orthogonalisation
+- approximate LOC delta:
+  - code files in scope: `+40 / -24`
+  - plus additive tracking-log updates
+
+## Decisions
+- keep this pass behavior-preserving and local to the EventList build path
+- centralise the current rule before adding any configurability
+- treat the overlay/signal `count_strange` split as analysis policy, not
+  generic EventList-builder policy
+
+## Remaining hotspots
+- if you want true generalisation rather than better ownership, the next step
+  is a `BuildConfig`-level sample-filter policy surface instead of another
+  hardcoded analysis helper

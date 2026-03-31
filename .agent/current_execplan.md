@@ -93,49 +93,117 @@ framework.
   - the migration path is staged without committing to `hive` orchestration
 
 #### Milestone B: Extend the cache schema toward covariance-first detector payloads
-- status: pending
+- status: done
 - hypothesis: detector source shifts plus covariance are a better canonical
   cache surface than detector envelope alone
 - files / symbols touched:
   - `io/DistributionIO.hh`
   - `io/DistributionIO.cc`
-  - `syst/Systematics.hh`
   - `syst/Systematics.cc`
   - `syst/Detector.cc`
   - `syst/bits/Detail.hh`
 - expected behavior risk: moderate
 - verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh io/DistributionIO.cc syst/Systematics.hh syst/Systematics.cc syst/Detector.cc syst/bits/Detail.hh`
   - focused CMake builds if ROOT is available
   - detector/reweight smoke checks if ROOT is available
 - acceptance criteria:
   - detector covariance survives cache write/read
   - detector envelope becomes a derived view, not the only detector payload
+  - detector source matching uses source-local detector CV samples where
+    available instead of nominal-wide detector envelopes
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh io/DistributionIO.cc syst/Systematics.hh syst/Systematics.cc syst/Detector.cc syst/bits/Detail.hh` passed
+  - the existing `build/` tree was stale and invoked `/usr/bin/cmake`, which is absent in this environment
+  - a fresh `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release` retry confirmed the tree issue but is still blocked by missing local dependencies (`/usr/include/sqlite3.h` and `nlohmann/json.hpp`)
+  - detector/reweight smoke checks remain deferred because a trustworthy configured ROOT build is not available here
 
 #### Milestone C: Teach fit-side assembly to consume covariance-first payloads
-- status: pending
+- status: done
 - hypothesis: a fit path built from covariance-derived modes or source shifts
   is simpler and more faithful than sigma/envelope fallbacks
 - files / symbols touched:
   - `fit/SignalStrengthFit.hh`
   - `fit/SignalStrengthFit.cc`
   - `app/mk_xsec_fit.cc`
+  - `fit/README`
 - expected behavior risk: moderate
 - verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc fit/README app/mk_xsec_fit.cc`
   - focused CMake builds if ROOT is available
   - fit-side smoke checks once covariance payloads exist
 - acceptance criteria:
   - fit semantics no longer depend primarily on envelope survival
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc fit/README app/mk_xsec_fit.cc` passed
+  - `cmake --build build --target Fit mk_xsec_fit --parallel` did not provide a trustworthy compile check here; the current `build/` tree is inconsistent and returned `make: *** No rule to make target 'Fit'.  Stop.`
+  - a fresh configure remains blocked in this environment by missing local dependencies (`/usr/include/sqlite3.h` and `nlohmann/json.hpp`)
+  - fit-side runtime smoke checks remain deferred because no trustworthy configured local build is available
+
+#### Milestone D: Add a thin SBNFit-style covariance export surface
+- status: done
+- hypothesis: one small edge CLI that exports fractional covariance from the
+  persisted covariance-first cache is simpler than pushing SBNFit-format
+  concerns back into `syst/` or `io/`
+- files / symbols touched:
+  - `app/mk_sbnfit_cov.cc`
+  - `app/CMakeLists.txt`
+  - `COMMANDS`
+  - `INSTALL`
+  - `USAGE`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc app/CMakeLists.txt COMMANDS INSTALL USAGE`
+  - focused CMake builds if ROOT is available
+- acceptance criteria:
+  - one CLI can export a cached spectrum as SBNFit-style fractional covariance
+  - the export is derived from the persisted covariance-first payloads
+  - SBNFit-format details stay in `app/`, not in core `syst/` math
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc app/CMakeLists.txt COMMANDS INSTALL USAGE` passed
+  - `cmake --build build --target mk_sbnfit_cov --parallel` did not provide a trustworthy compile check here; the current `build/` tree is inconsistent and returned `make: *** No rule to make target 'mk_sbnfit_cov'.  Stop.`
+  - a fresh configure remains blocked in this environment by missing local dependencies (`/usr/include/sqlite3.h` and `nlohmann/json.hpp`)
+
+#### Milestone E: Make reweight families covariance-canonical
+- status: done
+- hypothesis: family covariance should be the one persisted reweight truth, with
+  sigma and any compressed modes derived from that matrix instead of treating
+  covariance as optional metadata
+- files / symbols touched:
+  - `syst/UniverseSummary.cc`
+  - `syst/Support.cc`
+  - `syst/Systematics.cc`
+  - `syst/bits/Detail.hh`
+  - `syst/README`
+  - `io/bits/DERIVED`
+  - `tools/systematics-reweight-smoke.sh`
+- expected behavior risk: moderate
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/UniverseSummary.cc syst/Systematics.cc syst/Support.cc syst/bits/Detail.hh syst/README io/bits/DERIVED tools/systematics-reweight-smoke.sh`
+  - `bash -n tools/systematics-reweight-smoke.sh`
+  - `cmake -S . -B .build/milestone-e -DCMAKE_BUILD_TYPE=Release`
+  - `cmake --build build-docker-plot-check --target Syst --parallel`
+- acceptance criteria:
+  - family covariance is always persisted as the canonical cache payload
+  - rebinned family results prefer exact covariance over compressed modes when
+    both survive
+  - older no-covariance family caches still have an explicit fallback path
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/UniverseSummary.cc syst/Systematics.cc syst/Support.cc syst/bits/Detail.hh syst/README io/bits/DERIVED tools/systematics-reweight-smoke.sh` passed
+  - `bash -n tools/systematics-reweight-smoke.sh` passed
+  - `cmake -S . -B .build/milestone-e -DCMAKE_BUILD_TYPE=Release` failed in this environment because `ROOT` is not available and `root-config` is not on `PATH`
+  - `cmake --build build-docker-plot-check --target Syst --parallel` was not a usable check because that auxiliary build tree was configured under `/work/build-docker-plot-check` and now fails the CMake path consistency guard
 
 ### 7. Public-surface check
 - compatibility impact:
-  - this planning pass is docs-only
-  - later cache-schema work will require an explicit `DistributionIO` version
-    bump and migration note
+  - `DistributionIO` cache schema version is now `4`
+  - persisted reweight family covariance is now canonical; old caches should be rebuilt
+  - public headers remain in place; `persist_covariance` survives only as a compatibility knob and no longer changes the canonical persisted family payload
 - migration note or explicit non-goal:
   - non-goal: import `hive` XML templates or large CLI mode switchboards
   - non-goal: move persistence ownership out of `io/`
 - reviewer sign-off: user requested a HIVE-informed `syst/` plan/vision before
-  implementation
+  implementation and then asked to continue milestone-by-milestone
 
 ### 8. Reduction ledger
 - files deleted: 0
@@ -143,7 +211,7 @@ framework.
 - shell branches removed: 0
 - stale docs removed: 0
 - targets or dependencies removed: 0
-- approximate LOC delta: docs-only planning pass; small additive change
+- approximate LOC delta: one additive family-covariance cleanup pass; no new framework or orchestration layer
 
 ### 9. Decision log
 - import `hive`'s covariance semantics, not its orchestration machinery
@@ -2652,3 +2720,227 @@ from the installed public header surface.
   `mk_eventlist --cache-*` or `mk_channel`
 - stop before rewriting local channel-oriented ROOT macros that are no longer
   part of the documented native path
+
+## ExecPlan Addendum: Analysis-Specific EventList Sample Partition Policy
+
+### 1. Objective
+Move the sample-partition rule used during EventList construction out of the
+generic builder internals and into one explicit `ana/` analysis-policy home.
+
+The concrete target is the current overlay/signal `count_strange` split:
+
+- keep the behavior unchanged
+- stop hardcoding that analysis-specific rule in `ana/EventListBuild.cc`
+- make the policy easier to find and easier to replace later
+
+### 2. Constraints
+- Preserve the current `mk_eventlist` CLI surface and default behavior.
+- Preserve the current EventList output selection semantics.
+- Keep `io/` persistence-only.
+- Do not widen this pass into configurable CLI policy plumbing.
+- Leave unrelated dirty-worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep module boundaries sharp
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+This pass should remove analysis-specific branching from the generic builder,
+not add a framework.
+
+### 4. System map
+- event-list build path:
+  - `ana/EventListBuild.cc`
+  - `ana/EventListBuild.hh`
+- analysis-specific policy home:
+  - `ana/SignalDefinition.hh`
+  - `ana/SignalDefinition.cc`
+  - `ana/README`
+- derived-format documentation:
+  - `io/bits/DERIVED`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- move origin-specific EventList filtering out of the builder and into one
+  explicit analysis-owned policy surface
+
+#### wrapper collapse
+- prefer one plain-data rule description over ad hoc `if` branches embedded in
+  the generic selection builder
+
+#### doc / build cleanup
+- document the policy owner in `ana/README` and fix `io/bits/DERIVED` so it
+  points at `ana` rather than implying the persistence layer owns the rule
+
+### 6. Milestones
+
+#### Milestone A: Centralise the EventList sample-partition rule
+- status: done
+- hypothesis: one analysis-owned rule surface is easier to grep and keeps the
+  generic EventList builder focused on chaining, formulas, and persistence
+- files / symbols touched:
+  - `ana/EventListBuild.cc`
+  - `ana/SignalDefinition.hh`
+  - `ana/SignalDefinition.cc`
+  - `ana/README`
+  - `io/bits/DERIVED`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/EventListBuild.cc ana/SignalDefinition.hh ana/SignalDefinition.cc ana/README io/bits/DERIVED`
+  - focused `Ana` / `mk_eventlist` builds if a valid ROOT build tree is available
+- acceptance criteria:
+  - `EventListBuild.cc` no longer contains the overlay/signal `count_strange`
+    rule inline
+  - the canonical rule lives in one explicit `ana/` policy home
+  - docs name the analysis layer as the owner of that policy
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/EventListBuild.cc ana/SignalDefinition.hh ana/SignalDefinition.cc ana/README io/bits/DERIVED` passed
+  - focused rebuild attempt `cmake --build build --target Ana mk_eventlist --parallel` is blocked because the existing `build/` tree invokes `/usr/bin/cmake`, which is absent in this environment
+  - a fresh configure was not attempted because local ROOT discovery is also unavailable here (`root-config` is not on `PATH`, and the previously cached `/opt/root/bin/root-config` no longer exists)
+
+### 7. Public-surface check
+- compatibility impact:
+  - non-behavioral internal refactor unless the new helper is reused
+    externally
+- migration note or explicit non-goal:
+  - non-goal: add a new `mk_eventlist` policy flag in this pass
+  - non-goal: change the current overlay/signal split semantics
+- reviewer sign-off:
+  - user requested that analysis-specific assumptions stop living in generic
+    event-list builder code
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - inline analysis-specific overlay/signal filtering branches in
+    `ana/EventListBuild.cc`
+- shell branches removed: 0
+- stale docs removed:
+  - wording that implied EventListIO owned the sample-partition rule
+- targets or dependencies removed: 0
+- approximate LOC delta: code path reduced locally in `ana/EventListBuild.cc`
+  with small additive tracking/docs changes in this pass
+
+### 9. Decision log
+- prefer moving the rule into one explicit `ana/` home before adding any
+  configurability
+- keep this pass behavior-preserving and local to the EventList build path
+
+### 10. Stop conditions
+- stop once the builder no longer owns the hardcoded origin-specific rule
+- stop before adding CLI/config plumbing for configurable sample-partition
+  policies
+
+## ExecPlan Addendum: Rename `mk_xsec_fit` To `mk_fit`
+
+### 1. Objective
+Shorten the native fit CLI surface from `mk_xsec_fit` to `mk_fit` and make
+that shorter name the canonical documented executable.
+
+### 2. Constraints
+- Preserve fit behavior, flags, positional arguments, and report format.
+- Keep the direct `DistributionIO -> fit` workflow unchanged apart from the
+  executable name.
+- Preserve library/module boundaries and keep the change local to `app/` and
+  the documented workflow surface.
+- Avoid unnecessary source-file rename churn; the executable name is the goal.
+- Leave unrelated dirty-worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- add abstractions only when they delete complexity
+- keep code cheap to change
+
+This pass is a surface simplification, not a behavior change.
+
+### 4. System map
+- fit CLI target and implementation:
+  - `app/CMakeLists.txt`
+  - `app/mk_xsec_fit.cc`
+- top-level workflow docs:
+  - `COMMANDS`
+  - `USAGE`
+  - `INSTALL`
+  - `fit/README`
+  - `VISION.md`
+  - `INVARIANTS.md`
+  - `docs/repo-internals.puml`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- keep the executable rename at the CLI/build surface without widening into a
+  source-file rename or fit-library refactor
+
+#### doc / build cleanup
+- make one canonical executable name appear in build targets, help output, and
+  current workflow docs
+
+### 6. Milestones
+
+#### Milestone A: Rename the fit CLI surface to `mk_fit`
+- status: in_progress
+- hypothesis: a shorter executable name is easier to type and teach, and the
+  change stays small if it is limited to the target name plus current docs
+- files / symbols touched:
+  - `app/CMakeLists.txt`
+  - `app/mk_xsec_fit.cc`
+  - `COMMANDS`
+  - `USAGE`
+  - `INSTALL`
+  - `fit/README`
+  - `VISION.md`
+  - `INVARIANTS.md`
+  - `docs/repo-internals.puml`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: low to moderate
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/CMakeLists.txt app/mk_xsec_fit.cc COMMANDS USAGE INSTALL fit/README VISION.md INVARIANTS.md docs/repo-internals.puml`
+  - Docker rebuild of `mk_fit` if the local image/toolchain path is available
+- acceptance criteria:
+  - the CMake app target is `mk_fit`
+  - CLI help and status/error messages say `mk_fit`
+  - current docs teach `mk_fit` as the canonical fit executable
+
+### 7. Public-surface check
+- compatibility impact:
+  - non-additive executable rename from `mk_xsec_fit` to `mk_fit`
+- migration note or explicit non-goal:
+  - migration note: update scripts, docs, and command history from
+    `mk_xsec_fit` to `mk_fit`
+  - non-goal: rename `app/mk_xsec_fit.cc` in this pass
+- reviewer sign-off:
+  - user explicitly requested the executable rename
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed:
+  - pending: current workflow docs still naming `mk_xsec_fit`
+- targets or dependencies removed:
+  - pending: `mk_xsec_fit` target name
+- approximate LOC delta: expected small doc/build-surface rename
+
+### 9. Decision log
+- rename the executable target and user-facing strings without renaming the
+  source file path
+- keep the old name out of the current documented workflow once this pass
+  lands
+
+### 10. Stop conditions
+- stop once the current fit CLI surface consistently says `mk_fit`
+- stop before widening the pass into history rewriting or broader fit-library
+  cleanup

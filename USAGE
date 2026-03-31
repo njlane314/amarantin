@@ -15,8 +15,9 @@ The usual workflow is:
   4. Optionally assemble multiple persistent samples into one DatasetIO file
   5. Build persistent EventListIO files from DatasetIO using event-tree selections
   6. Optionally run mk_dist to create cached DistributionIO requests
-  7. Optionally run the native xsec fit directly from cached DistributionIO inputs
-  8. Optionally drive many sample builds through samples-dag.mk
+  7. Optionally export one cached spectrum as an SBNFit-style covariance matrix
+  8. Optionally run the native xsec fit directly from cached DistributionIO inputs
+  9. Optionally drive many sample builds through samples-dag.mk
 
 Basic build workflow
 --------------------
@@ -188,6 +189,35 @@ The supported kinds are:
     data
 
 The current manifest mode expects unique non-data process names.
+
+Basic mk_sbnfit_cov usage
+-------------------------
+
+General form:
+
+    build/bin/mk_sbnfit_cov [--cache-key <key>] [--matrix-name <name>] [--nominal-name <name>] input.dists.root sample-key output.root
+
+Example:
+
+    build/bin/mk_sbnfit_cov \
+      --matrix-name frac_covariance \
+      build/dists/run1-numi-fhc.root \
+      beam-s0 \
+      build/exports/beam-s0.frac_cov.root
+
+The mk_sbnfit_cov program reads one cached `DistributionIO::Spectrum`,
+reconstructs the available systematic absolute covariance components
+(`detector`, `genie`, `flux`, `reint`), derives fractional covariance from the
+cached nominal prediction, and writes a ROOT file containing:
+
+  * a fractional covariance matrix named `frac_covariance` by default
+  * an absolute covariance matrix named `abs_covariance`
+  * component covariance matrices when available
+  * a nominal histogram named `nominal_prediction` by default
+
+This export is intentionally one cached spectrum at a time. It is a thin
+boundary-format adapter for SBNFit-style consumers, not a replacement for the
+canonical covariance-first cache stored in `DistributionIO`.
 
 Creating a sample list
 ----------------------
