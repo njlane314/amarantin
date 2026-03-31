@@ -89,16 +89,16 @@ Render the richer sample catalog into generated make/manifest files
   bash tools/render-sample-catalog.sh
 
 Build all sample ROOT files from the generated sample catalog
-  make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
+  make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk samples
 
 Build all logical dataset ROOT files from the generated sample catalog
-  make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
+  make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk datasets
 
 Print all managed sample outputs
   make -f samples-dag.mk print-samples
 
 Print all managed dataset outputs
-  make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk print-datasets
+  make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk print-datasets
 
 Remove generated sample ROOT files and sample lists
   make -f samples-dag.mk samples-clean
@@ -130,12 +130,12 @@ Build a DatasetIO file and stamp sample definitions
 
 Build one logical DatasetIO file from an explicit scope plus manifest
   build/bin/mk_dataset \
-    --defs samples/generated/run1_fhc.sample.defs \
+    --defs cards/generated/run1_fhc.sample.defs \
     --campaign run1_fhc_v08_00_00_82 \
     --run run1 \
     --beam numi \
     --polarity fhc \
-    --manifest samples/generated/run1_fhc.dataset.manifest \
+    --manifest cards/generated/run1_fhc.dataset.manifest \
     build/datasets/run1_fhc.root
 
 Dataset manifest row format
@@ -342,7 +342,7 @@ Notes
   Older helper macros such as `cache_systematics.C` may remain useful for ad
   hoc ROOT sessions, but they are no longer the documented workflow.
 
-Generated `samples/generated/datasets.mk`
+Generated `cards/generated/datasets.mk`
   Also carries `dataset_defs.<dataset>`, `dataset_manifest.<dataset>`,
   `dataset_run.<dataset>`, `dataset_beam.<dataset>`,
   `dataset_polarity.<dataset>`, optional `dataset_campaign.<dataset>`, and one

@@ -1,5 +1,105 @@
 # ExecPlan
 
+## ExecPlan Addendum: Cards Directory Rename
+
+### 1. Objective
+Rename the checked-in sample-catalog workflow directory from `samples/` to
+`cards/` without changing the internal ROOT layout or build artifact paths.
+
+### 2. Constraints
+- Preserve `build/samples/` as the sample artifact output directory.
+- Preserve internal ROOT object paths like `samples/<sample-key>/...`.
+- Keep `samples-dag.mk` unchanged in this pass.
+- Update only active workflow paths and defaults that refer to the checked-in
+  catalog directory.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- prefer fewer concepts per workflow
+- keep workflows in `app/` and helper configuration nearby
+- make grep-based navigation easier
+
+This pass only renames the checked-in workflow inputs so the repo-local catalog
+directory has the reviewed old-school name.
+
+### 4. System map
+- `cards/README`
+- `cards/datasets.tsv`
+- `cards/catalog.tsv`
+- `cards/generated/*`
+- `tools/render-sample-catalog.sh`
+- `COMMANDS`
+- `USAGE`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### directory naming
+- rename `samples/` to `cards/`
+
+#### path defaults
+- update the render script defaults from `samples/...` to `cards/...`
+- update active workflow docs and generated include paths to `cards/generated`
+
+### 6. Milestones
+
+#### Milestone A: Apply the directory rename
+- status: done
+- hypothesis: the repo-local catalog directory becomes less ambiguous once it
+  stops sharing the generic `samples` name with build outputs and internal ROOT
+  paths
+- files / symbols touched:
+  - `cards/README`
+  - `cards/datasets.tsv`
+  - `cards/catalog.tsv`
+  - `cards/generated/*`
+  - `tools/render-sample-catalog.sh`
+  - `COMMANDS`
+  - `USAGE`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md tools/render-sample-catalog.sh COMMANDS USAGE cards/README cards/generated/datasets.mk`
+  - `rg -n "samples/generated|samples/catalog\\.tsv|samples/datasets\\.tsv" -S COMMANDS USAGE tools/render-sample-catalog.sh cards`
+  - `find cards -maxdepth 2 -type f | sort`
+- acceptance criteria:
+  - the checked-in workflow directory is named `cards/`
+  - active docs and defaults point at `cards/generated/...`
+  - `build/samples/` and internal ROOT `samples/...` paths are unchanged
+- verification results:
+  - focused `git diff --check` passed for the rename-pass files
+  - the focused `rg` sweep found no remaining active `samples/...` workflow
+    paths in the updated files
+  - `find cards -maxdepth 2 -type f | sort` shows the renamed catalog tree
+
+### 7. Public-surface check
+- compatibility impact:
+  - repo-local workflow paths changed from `samples/...` to `cards/...`
+  - build artifact paths and persisted ROOT paths are unchanged
+- reviewer sign-off:
+  - explicit user approval received in-thread for the directory rename
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale repo-local workflow paths removed:
+  - `samples/catalog.tsv`
+  - `samples/datasets.tsv`
+  - `samples/generated/*`
+- approximate LOC delta: near-neutral; mostly path updates plus one directory
+  rename
+
+### 9. Decision log
+- leave historical log entries below untouched where they describe earlier
+  milestones under the old directory name
+- keep `samples-dag.mk` and `build/samples/` unchanged in this pass
+
+### 10. Stop conditions
+- stop after the checked-in workflow directory and active docs/defaults use
+  `cards/`
+- do not expand the pass into a broader rename of build outputs or ROOT paths
+
 ## ExecPlan Addendum: App Source File Rename Cleanup
 
 ### 1. Objective

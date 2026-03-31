@@ -2,6 +2,60 @@
 
 ## Current milestone
 - status: done
+- subsystem: checked-in sample catalog directory rename
+- design rule from `DESIGN.md`: reduce naming ambiguity in workflow inputs and
+  keep build artifacts distinct from checked-in catalog declarations
+
+## What changed
+- renamed the checked-in workflow directory from `samples/` to `cards/`
+- updated `tools/render-sample-catalog.sh` defaults to read from `cards/` and
+  write `cards/generated/`
+- updated active workflow docs and generated include paths to use
+  `cards/generated/...`
+- left `build/samples/` and internal ROOT paths like `samples/<sample-key>/...`
+  unchanged
+
+## Why this is simpler
+- the checked-in catalog directory no longer shares the same generic name as
+  built sample ROOT outputs
+- `cards/` reads as repo-local workflow input, not artifact storage
+- the rename is narrow, so downstream persisted layout and build products stay
+  stable
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md tools/render-sample-catalog.sh COMMANDS USAGE cards/README cards/generated/datasets.mk`
+-  `rg -n "samples/generated|samples/catalog\\.tsv|samples/datasets\\.tsv" -S COMMANDS USAGE tools/render-sample-catalog.sh cards`
+-  `find cards -maxdepth 2 -type f | sort`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed for the rename-pass files
+  - the focused `rg` sweep found no remaining active workflow-path references
+    in the updated files
+  - `find cards -maxdepth 2 -type f | sort` shows the renamed catalog tree
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - near-neutral; mostly path updates plus one directory rename
+
+## Decisions
+- keep `samples-dag.mk` unchanged in this pass
+- keep `build/samples/` and internal ROOT `samples/...` paths unchanged
+- leave historical entries below untouched where they describe earlier
+  milestones under the old name
+
+## Remaining hotspots
+- the repo still has historical references below to `samples/...` because those
+  entries describe earlier milestones
+
+## Current milestone
+- status: done
 - subsystem: `app/` source filename cleanup
 - design rule from `DESIGN.md`: keep workflow entrypoints easy to grep and
   avoid extra naming drift between the CLI and the source tree

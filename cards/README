@@ -1,4 +1,4 @@
-Samples
+Cards
 
 Overview
 --------
@@ -70,7 +70,7 @@ Run:
 
   bash tools/render-sample-catalog.sh
 
-That writes plain-text generated files under `samples/generated/`:
+That writes plain-text generated files under `cards/generated/`:
 
   datasets.mk
     Richer include for `samples-dag.mk` with per-artifact list-generation
@@ -94,21 +94,21 @@ Generate the derived files:
 
 Build logical `SampleIO` files from the generated manifests:
 
-  make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
+  make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk samples
 
 Assemble all logical datasets described by the generated manifests:
 
-  make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
+  make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk datasets
 
 Or assemble one logical dataset directly:
 
   build/bin/mk_dataset \
-    --defs samples/generated/run1_fhc.sample.defs \
+    --defs cards/generated/run1_fhc.sample.defs \
     --campaign run1_fhc_v08_00_00_82 \
     --run run1 \
     --beam numi \
     --polarity fhc \
-    --manifest samples/generated/run1_fhc.dataset.manifest \
+    --manifest cards/generated/run1_fhc.dataset.manifest \
     build/datasets/run1_fhc.root
 
 Notes

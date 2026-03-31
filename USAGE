@@ -52,7 +52,7 @@ Example:
 
     build/bin/mk_sample \
       --sample beam \
-      --manifest samples/generated/run1_fhc.beam.sample.manifest \
+      --manifest cards/generated/run1_fhc.beam.sample.manifest \
       build/samples/run1_fhc/beam.root \
       overlay nominal numi fhc
 
@@ -84,12 +84,12 @@ Legacy transitional form:
 Example:
 
     build/bin/mk_dataset \
-      --defs samples/generated/run1_fhc.sample.defs \
+      --defs cards/generated/run1_fhc.sample.defs \
       --campaign run1_fhc_v08_00_00_82 \
       --run run1 \
       --beam numi \
       --polarity fhc \
-      --manifest samples/generated/run1_fhc.dataset.manifest \
+      --manifest cards/generated/run1_fhc.dataset.manifest \
       build/datasets/run1_fhc.root
 
 The mk_dataset program reads one or more persistent SampleIO ROOT files and
@@ -289,7 +289,7 @@ Once a list exists, build a sample ROOT file directly:
 
     build/bin/mk_sample \
       --sample beam \
-      --manifest samples/generated/run1_fhc.beam.sample.manifest \
+      --manifest cards/generated/run1_fhc.beam.sample.manifest \
       build/samples/run1_fhc/beam.root \
       overlay nominal numi fhc
 
@@ -319,12 +319,12 @@ Building a persistent dataset by hand
 Once one or more sample ROOT files already exist, build a DatasetIO file:
 
     build/bin/mk_dataset \
-      --defs samples/generated/run1_fhc.sample.defs \
+      --defs cards/generated/run1_fhc.sample.defs \
       --campaign run1_fhc_v08_00_00_82 \
       --run run1 \
       --beam numi \
       --polarity fhc \
-      --manifest samples/generated/run1_fhc.dataset.manifest \
+      --manifest cards/generated/run1_fhc.dataset.manifest \
       build/datasets/run1_fhc.root
 
 Reading the arguments from left to right:
@@ -533,8 +533,8 @@ list generation and sample ROOT production:
 For richer multi-run / multi-variation handling, there is also a flat catalog
 workflow under:
 
-    samples/datasets.tsv
-    samples/catalog.tsv
+    cards/datasets.tsv
+    cards/catalog.tsv
     tools/render-sample-catalog.sh
 
 The idea is to treat generated sample ROOT files as persistent build
@@ -578,10 +578,10 @@ Render the checked-in flat catalog into generated make and dataset files:
 
 This produces:
 
-    samples/generated/datasets.mk
-    samples/generated/run1_fhc.beam.sample.manifest
-    samples/generated/run1_fhc.sample.defs
-    samples/generated/run1_fhc.dataset.manifest
+    cards/generated/datasets.mk
+    cards/generated/run1_fhc.beam.sample.manifest
+    cards/generated/run1_fhc.sample.defs
+    cards/generated/run1_fhc.dataset.manifest
 
 The generated `datasets.mk` keeps shard-level `.list` generation and also
 declares one logical-sample manifest plus one logical `SampleIO` output per
@@ -609,11 +609,11 @@ Build all declared sample ROOT files:
 
 Build all declared sample ROOT files from the generated catalog:
 
-    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
+    make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk samples
 
 Build all declared logical dataset ROOT files from the generated catalog:
 
-    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
+    make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk datasets
 
 Print the sample outputs that would be managed:
 
@@ -634,9 +634,9 @@ When shard-level artifacts should merge into logical keys:
 
     bash tools/render-sample-catalog.sh
 
-    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
+    make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk samples
 
-    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
+    make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk datasets
 
 This keeps shard-level `SampleIO` files in the build layer, but exposes
 artifact `.list` files in the build layer and writes one logical `SampleIO`
@@ -724,7 +724,7 @@ Example:
     run_db=
     dataset=run1_fhc
     sample=beam
-    manifest=samples/generated/run1_fhc.beam.sample.manifest
+    manifest=cards/generated/run1_fhc.beam.sample.manifest
 
 In the legacy single-list path, the stamp instead records the source kind /
 source ref / source base that produced that one list file.
@@ -743,7 +743,7 @@ At the command line:
     build/bin/mk_sample \
       --run-db /path/to/run.db \
       --sample beam \
-      --manifest samples/generated/run1_fhc.beam.sample.manifest \
+      --manifest cards/generated/run1_fhc.beam.sample.manifest \
       build/samples/run1_fhc/beam.root \
       overlay nominal numi fhc
 
@@ -778,8 +778,8 @@ Then build and run:
     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     cmake --build build --parallel
     bash tools/render-sample-catalog.sh
-    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk samples
-    make -f samples-dag.mk DATASETS_FILE=samples/generated/datasets.mk datasets
+    make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk samples
+    make -f samples-dag.mk DATASETS_FILE=cards/generated/datasets.mk datasets
     build/bin/mk_eventlist \
       --event-tree EventSelectionFilter \
       --subrun-tree SubRun \

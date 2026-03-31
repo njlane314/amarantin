@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-catalog_path="${1:-samples/catalog.tsv}"
-datasets_path="${2:-samples/datasets.tsv}"
-out_dir="${3:-samples/generated}"
+catalog_path="${1:-cards/catalog.tsv}"
+datasets_path="${2:-cards/datasets.tsv}"
+out_dir="${3:-cards/generated}"
 samples_build_dir="${SAMPLES_BUILD_DIR:-build/samples}"
 default_pat="${SAMPLES_FILE_PATTERN:-nu_selection.root,nu_selection_data.root}"
 
