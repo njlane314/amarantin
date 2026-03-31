@@ -1,106 +1,112 @@
 # INVARIANTS
 
-This file records what must stay true while `amarantin` converges toward
-`VISION.md`.
+This file records the repository's hard constraints.
 
-It is not a task list. It is not a second design document. It is the stability
-contract for simplification and workflow changes.
+It is not a backlog.
+It is not a second `VISION.md`.
+It is not a restatement of every style preference from `DESIGN.md`.
 
-## Document roles
+Treat every item below as "do not change by accident."
+Unless an active ExecPlan explicitly approves an exception, these rules hold.
 
-- `DESIGN.md` is the source of truth for current architecture and style.
-- `INVARIANTS.md` records what must not change by accident.
-- `VISION.md` describes the intended end state.
-- `.agent/current_execplan.md` describes the current milestone and any approved
-  exceptions.
+## Document precedence
+
+- `DESIGN.md` is the source of truth for current architecture and coding style.
+- `INVARIANTS.md` records the stability contract around that design.
+- `VISION.md` describes the intended future state, not today's default rules.
+- `.agent/current_execplan.md` is where temporary exceptions, migration notes,
+  and acceptance criteria must be written before an invariant is broken on
+  purpose.
 - `docs/minimality-log.md` records what actually became smaller, flatter, or
   easier to grep.
 
-If these documents disagree, follow `DESIGN.md` for the current codebase until
-an explicit plan updates the repository's accepted rules.
+If these documents disagree, do not guess.
+Follow `DESIGN.md` for current code shape and use the active ExecPlan for any
+approved exception.
 
-Unless an ExecPlan explicitly approves a change, treat the items below as
-non-negotiable.
+## External surface invariants
 
-## Public surface invariants
-
-- CMake is the source of truth for configure, build, and install behavior.
+- CMake is the source of truth for configure, build, install, and exported
+  package behavior.
 - The supported build path is out-of-source:
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
-  followed by `cmake --build build --parallel`.
+  then
+  `cmake --build build --parallel`
 - Extra local build trees belong under `.build/`, not as new root-level
   `build-*` or `cmake-build-*` directories.
 - The repository remains a small C++17 / ROOT project with SQLite-backed run
   database support.
 - Installed library targets remain stable by default:
   `IO`, `Ana`, `Syst`, `Plot`, `Fit`.
-- Installed downstream CMake package targets remain under the
-  `amarantin::` namespace.
+- Installed downstream package targets remain under the `amarantin::`
+  namespace.
 - Installed public headers remain under
   `${CMAKE_INSTALL_INCLUDEDIR}/amarantin`.
-- Existing documented executables remain available by default:
-  `mk_sample`, `mk_dataset`, `mk_eventlist`, `mk_dist`, `mk_fit`,
-  `mk_cov`.
-- CLI evolution is additive-first. Add the new path before removing or
-  repurposing documented old flags, positional forms, or workflows.
-- External behavior is preserved by default. Any approved break needs an
-  explicit migration note in the active ExecPlan and matching doc updates.
+- Documented executables remain available by default:
+  `mk_sample`, `mk_dataset`, `mk_eventlist`, `mk_dist`, `mk_fit`, `mk_cov`.
+- External behavior is preserved by default. A break needs an explicit
+  migration note in the active ExecPlan and matching doc updates in the same
+  milestone.
+- CLI evolution is additive-first. Do not silently repurpose or remove a
+  documented flag, positional form, or workflow without an explicit migration
+  plan.
 
 ## Module boundary invariants
 
 - `io/` owns persistence only.
 - `io/` may open files, read objects, write objects, and define on-disk
   layout. It does not own selection logic, physics logic, systematic policy,
-  or workflow orchestration.
+  fit logic, or workflow orchestration.
 - `ana/` owns build-time analysis transforms, sample definitions, selections,
   and event-list construction.
 - `syst/` owns systematic calculations and cache construction.
 - `plot/` owns rendering only.
-- `fit/` owns fit-side assembly and signal-strength fit helpers.
+- `fit/` owns fit-side assembly and signal-strength fitting logic.
 - `app/` owns CLI parsing and workflow orchestration.
-- `tools/` stays short, direct shell glue. It must not become the hidden home
-  for analysis policy or persistence rules.
-- `samples-dag.mk` and `datasets.mk` are workflow declarations, not a place to
-  re-implement library responsibilities.
+- `tools/` stays short, direct shell glue. It must not become a hidden home
+  for physics policy, persistence rules, or long-lived workflow logic.
+- `samples-dag.mk` and `datasets.mk` are workflow declarations, not a second
+  implementation layer for library responsibilities.
 - Analysis or systematics logic must not move back into `io/`.
 - `plot/` must not become a generic utility bucket.
 
-## Workflow and data-contract invariants
+## Workflow and data invariants
 
 - The canonical persisted ladder stays explicit:
-  `SampleIO -> DatasetIO -> EventListIO -> DistributionIO -> plot/fit`.
+  `SampleIO -> DatasetIO -> EventListIO -> DistributionIO -> plot/fit`
 - `SampleIO` owns logical-sample identity, shard provenance, and the chosen
   normalization policy.
 - Sample building must make an explicit normalization decision. Normalization
   must not be an accidental side effect of whichever metadata happened to be
   present.
 - `DatasetIO` assembles already-logical samples into one analysis scope. It is
-  not the preferred long-term place where shard fan-in is invented or
-  reconstructed.
+  not the preferred place to reconstruct shard fan-in later.
 - `EventListIO` is the row-wise build and debug surface.
 - `DistributionIO` is the default persisted bin-wise downstream surface.
+- Downstream code should usually work from `EventListIO` or
+  `DistributionIO`, not reopen earlier workflow layers without a specific
+  reason.
 - Downstream code should usually use logical sample keys, not shard names.
-- Final or publication-style downstream work should normally use persisted
-  caches or final assembly objects, not reopen earlier workflow layers.
-- If a required normalization entry is missing, the correct default is to fail
-  loudly rather than silently inventing a fallback weight.
-- Debug side paths may exist, but they must stay clearly secondary to the
-  normal documented workflow.
+- If a required normalization entry is missing, fail loudly rather than
+  silently inventing a fallback weight.
+- Debug, compatibility, or exploratory side paths may exist, but they must
+  stay clearly secondary to the documented normal workflow.
 
-## Simplicity invariants
+## Code-shape invariants
 
-- Prefer plain data and namespace functions over service, manager, provider,
+- Prefer plain data and namespace functions over manager, service, provider,
   facade, or builder layers.
 - Add abstractions only when they delete more complexity than they add.
 - Keep workflows in `app/`.
 - Keep module layout flat. Public headers and their main `.cc` files stay in
   the module root, with a small `bits/` directory only for shared private
   helpers.
-- Favor one grepable function over wrapper stacks and helper ceremony.
-- Do not introduce rename churn or drive-by formatting as part of a
-  simplification pass.
-- After every feature or refactor pass, do a small deletion pass: remove stale
-  wrappers, dead includes, obsolete docs, and unused build scaffolding.
+- Favor grepable control flow over wrapper stacks and helper ceremony.
+- Do not introduce rename churn, compatibility scaffolding, or drive-by
+  formatting as part of an unrelated pass.
+- After every feature or refactor pass, do a deletion pass: remove stale
+  wrappers, dead includes, obsolete docs, dead options, unread payload fields,
+  and unused build scaffolding.
 
 ## Documentation invariants
 
@@ -110,6 +116,8 @@ non-negotiable.
 - If a debug or compatibility path remains, document it as a side path rather
   than letting it compete with the main story.
 - When the public contract changes, update the docs in the same milestone.
+- This file should stay short and contractual. Design rationale belongs in
+  `DESIGN.md`; future target state belongs in `VISION.md`.
 
 ## Verification invariants
 
@@ -121,15 +129,17 @@ non-negotiable.
   `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
   `cmake --build build --parallel`
 - When scope is local, use focused target builds and shell or CLI smoke checks
-  instead of skipping verification.
+  instead of skipping verification entirely.
 - A simplification pass is not done until the active milestone is complete or
   explicitly deferred, the relevant verification has run, and the minimality
-  log records what got smaller or simpler.
+  log records what actually got smaller or simpler.
 
 ## How to break an invariant on purpose
 
-- Name the exception explicitly in `.agent/current_execplan.md` before editing
-  code.
-- State the compatibility impact, migration note, and acceptance criteria.
-- Keep the exception scoped to one milestone.
-- Update this file once the repository accepts the new rule as permanent.
+1. Name the exception explicitly in `.agent/current_execplan.md` before
+   editing code.
+2. State the reason, compatibility impact, migration note, and acceptance
+   criteria.
+3. Keep the exception scoped to one milestone.
+4. Update `INVARIANTS.md` and/or `DESIGN.md` once the repository accepts the
+   new rule as permanent.
