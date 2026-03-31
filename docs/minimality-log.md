@@ -2,6 +2,65 @@
 
 ## Current milestone
 - status: done
+- subsystem: stacked `mk_sbnfit_cov` smoke coverage
+- design rule from `DESIGN.md`: keep verification focused at the workflow edge,
+  reuse persisted data surfaces directly, and avoid building a heavier harness
+  than the contract requires
+
+## What changed
+- added `tools/systematics-sbnfit-export-smoke.sh`
+- kept the smoke narrow and app-edge:
+  - write synthetic cached `DistributionIO::Spectrum` payloads directly
+  - run `mk_sbnfit_cov --manifest` on a good stacked manifest
+  - check exported detector, `genie_knobs`, total, and family covariance
+    content from the produced ROOT file
+  - check explicit rejection on mismatched multisim family metadata
+- taught the smoke invocation in `COMMANDS` and `INSTALL`
+
+## Why this is simpler
+- one short smoke script is cheaper to maintain than repeated ad hoc ROOT
+  inspection whenever the stacked export changes
+- writing cached spectra directly avoids rebuilding the full upstream analysis
+  chain just to verify one export contract
+- the script reuses existing build outputs instead of adding another harness or
+  test framework
+
+## Verification
+- configure/build commands:
+- target-only commands:
+-  runtime execution deferred because `ROOT` is not available locally
+- shell checks:
+-  `bash -n tools/systematics-sbnfit-export-smoke.sh`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md tools/systematics-sbnfit-export-smoke.sh COMMANDS INSTALL`
+- smoke checks:
+- results:
+  - `bash -n tools/systematics-sbnfit-export-smoke.sh` passed
+  - tracked-file `git diff --check` passed for the smoke-coverage touched files
+  - runtime execution remains blocked because `ROOT` is not available and
+    `root-config` is not on `PATH` in this environment
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - the need to validate the stacked export contract manually with one-off
+    ROOT inspection
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - one focused smoke script
+  - short workflow-doc mentions for that script
+
+## Decisions
+- keep the smoke at the `app/` export edge
+- reuse persisted `DistributionIO` payloads directly
+- check both successful stacked export and explicit rejection on mismatched
+  family metadata
+
+## Remaining hotspots
+- trustworthy runtime execution still requires a working local ROOT build tree
+
+## Current milestone
+- status: done
 - subsystem: explicit stacked multi-process SBNFit export
 - design rule from `DESIGN.md`: keep stacked export logic at the `app/` edge,
   reuse persisted covariance-facing payloads directly, and avoid guessing

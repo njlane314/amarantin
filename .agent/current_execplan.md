@@ -3320,3 +3320,125 @@ This pass should add one explicit export contract, not a new framework.
 - stop once `mk_sbnfit_cov` can export one explicit stacked contract and the
   docs teach it
 - stop before widening the pass into a broader SBNFit orchestration layer
+
+## ExecPlan Addendum: Stacked Export Smoke Coverage
+
+### 1. Objective
+Add one focused smoke script for the new stacked `mk_sbnfit_cov --manifest`
+contract so runtime verification is ready when a local ROOT build is available.
+
+### 2. Constraints
+- Keep the smoke focused on the stacked export contract, not broad systematics
+  regeneration.
+- Reuse `DistributionIO` payload writing directly instead of building a full
+  `EventListIO` or `syst/` fixture.
+- Leave unrelated dirty-worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- keep module boundaries sharp
+- add abstractions only when they delete complexity
+
+This pass should add one narrow verification tool, not a broader test
+framework.
+
+### 4. System map
+- smoke tool:
+  - `tools/systematics-sbnfit-export-smoke.sh`
+- export implementation under test:
+  - `app/mk_sbnfit_cov.cc`
+- workflow/docs:
+  - `COMMANDS`
+  - `INSTALL`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- verify stacked export at the `app/` edge by writing synthetic cached
+  `DistributionIO::Spectrum` payloads directly
+
+#### wrapper collapse
+- avoid a heavier harness or generated fixture tree when one short shell script
+  plus one compiled helper can exercise the contract
+
+#### doc / build cleanup
+- teach one direct smoke invocation instead of leaving the exporter unguarded
+
+### 6. Milestones
+
+#### Milestone A: Record the smoke-coverage pass
+- status: done
+- hypothesis: one explicit smoke target keeps the stacked export contract
+  easier to validate and easier to grep
+- files / symbols touched:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md`
+- acceptance criteria:
+  - the exec plan names the smoke coverage scope
+  - the minimality log points at this pass
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md` passed
+
+#### Milestone B: Add a focused stacked-export smoke script
+- status: done
+- hypothesis: a synthetic cached-spectrum fixture can validate shared labeled
+  source shifts, retained-universe family correlations, and rejection on
+  mismatched family metadata with less setup than a full end-to-end eventlist
+  build
+- files / symbols touched:
+  - `tools/systematics-sbnfit-export-smoke.sh`
+- expected behavior risk: low
+- verification commands:
+  - `bash -n tools/systematics-sbnfit-export-smoke.sh`
+- acceptance criteria:
+  - the script writes a small synthetic `DistributionIO` file
+  - the script exercises a successful stacked export and checks the exported
+    matrices
+  - the script checks that a mismatched multisim family contract is rejected
+- verification results:
+  - `bash -n tools/systematics-sbnfit-export-smoke.sh` passed
+  - runtime execution of the smoke remains deferred in this environment because `ROOT` is not available and `root-config` is not on `PATH`
+
+#### Milestone C: Teach the smoke invocation in the workflow docs
+- status: done
+- hypothesis: one short doc mention is enough to keep the new smoke discoverable
+- files / symbols touched:
+  - `COMMANDS`
+  - `INSTALL`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md COMMANDS INSTALL`
+- acceptance criteria:
+  - docs name the new smoke script
+  - the minimality log records the simplification
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md tools/systematics-sbnfit-export-smoke.sh COMMANDS INSTALL` passed
+
+### 7. Public-surface check
+- compatibility impact:
+  - additive verification script only
+- migration note or explicit non-goal:
+  - migration note: the export CLI surface stays unchanged
+  - non-goal: add a general test harness framework
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - the need to validate the stacked export contract manually with ad hoc ROOT
+    inspection
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta: one focused smoke tool plus short doc mentions
+
+### 9. Decision log
+- verify stacked detector and knob correlations from shared source labels
+- verify stacked multisim family correlations from retained universes
+- verify exporter rejection on mismatched family metadata

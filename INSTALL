@@ -211,6 +211,10 @@ A simple smoke test is:
 
   build/bin/mk_sample --help
 
+A focused stacked-export smoke, once the ROOT build is available, is:
+
+  tools/systematics-sbnfit-export-smoke.sh
+
 Runtime note for mk_sample
 --------------------------
 mk_sample accepts an optional SQLite run database path via `--run-db PATH`.

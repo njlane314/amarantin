@@ -240,6 +240,9 @@ Stacked export contract:
   If that exact family contract is unavailable, `mk_sbnfit_cov` rejects the
   stacked export instead of guessing a block-diagonal merge.
 
+Focused smoke for the stacked export contract
+  tools/systematics-sbnfit-export-smoke.sh
+
 Fit workflow
 ------------
 Run one native xsec fit directly from cached DistributionIO inputs and print
