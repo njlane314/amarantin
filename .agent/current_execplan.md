@@ -3184,3 +3184,139 @@ systematics framework.
   are integrated through cache, fit, export, and focused smoke coverage
 - stop before widening this pass into unrelated upstream ntuple cleanup or a
   broader CLI redesign
+
+## ExecPlan Addendum: Explicit Stacked SBNFit Export
+
+### 1. Objective
+Extend `mk_sbnfit_cov` so it can export a stacked multi-process covariance
+matrix from multiple cached `DistributionIO::Spectrum` entries without guessing
+cross-process correlations.
+
+### 2. Constraints
+- Keep the change at the app/export edge unless a small helper clearly deletes
+  complexity.
+- Do not redefine the core covariance math in `syst/`.
+- Do not silently assume block-diagonal family correlations across processes.
+- Preserve the current single-spectrum export mode.
+- Leave unrelated dirty-worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- keep module boundaries sharp
+- add abstractions only when they delete complexity
+
+This pass should add one explicit export contract, not a new framework.
+
+### 4. System map
+- stacked export implementation:
+  - `app/mk_sbnfit_cov.cc`
+- current workflow/docs:
+  - `COMMANDS`
+  - `USAGE`
+  - `INSTALL`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- keep stacked covariance assembly in `mk_sbnfit_cov` rather than pushing
+  SBNFit-specific stacking rules back into `syst/`
+
+#### wrapper collapse
+- reuse persisted detector source labels, GENIE knob source labels, and
+  retained universe histograms directly instead of inventing a second
+  intermediate file format
+
+#### doc / build cleanup
+- document one explicit manifest format and one explicit correlation contract
+  for stacked export
+
+### 6. Milestones
+
+#### Milestone A: Record the stacked-export contract
+- status: done
+- hypothesis: one explicit contract for stacked source/family correlations will
+  prevent accidental block-diagonal exports
+- files / symbols touched:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md`
+- acceptance criteria:
+  - the exec plan names the stacked-export contract and scope
+  - the minimality log points at this export pass
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md` passed
+
+#### Milestone B: Implement manifest-driven stacked export
+- status: done
+- hypothesis: `mk_sbnfit_cov` can stack spectra safely if it treats detector
+  and knob lanes as shared labeled source shifts, and multisim families as
+  shared universes only when retained universes survive
+- files / symbols touched:
+  - `app/mk_sbnfit_cov.cc`
+- expected behavior risk: moderate
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc`
+- acceptance criteria:
+  - `mk_sbnfit_cov` supports a manifest-driven stacked mode
+  - stacked detector and GENIE knob correlations are built only from explicit
+    shared source labels
+  - stacked GENIE / flux / reint family correlations are built only from
+    retained universes with matching branch name and universe count
+  - the tool rejects stacked exports when a required cross-process family
+    contract is not available
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc` passed
+  - `cmake --build build --target mk_sbnfit_cov --parallel` did not provide a trustworthy compile check here; the existing `build/` tree is stale and returned `make: *** No rule to make target 'mk_sbnfit_cov'.  Stop.`
+  - `cmake -S . -B .build/stacked-export -DCMAKE_BUILD_TYPE=Release` reached dependency discovery but failed in this environment because `ROOT` is not available and `root-config` is not on `PATH`
+
+#### Milestone C: Update docs and lightweight verification
+- status: done
+- hypothesis: current docs should teach the new manifest mode and explicit
+  correlation rules without expanding the core API surface
+- files / symbols touched:
+  - `COMMANDS`
+  - `USAGE`
+  - `INSTALL`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md COMMANDS USAGE INSTALL`
+  - focused CMake build if the local environment is usable
+- acceptance criteria:
+  - docs teach the stacked manifest mode
+  - docs state the strict correlation contract and rejection behavior
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md COMMANDS USAGE INSTALL` passed
+  - focused build verification remains blocked by the stale `build/` tree and missing local `ROOT` environment described above
+
+### 7. Public-surface check
+- compatibility impact:
+  - additive `mk_sbnfit_cov --manifest` workflow
+- migration note or explicit non-goal:
+  - migration note: the single-spectrum export mode remains unchanged
+  - non-goal: move stacked export logic into core `syst/`
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - the need to hand-assemble stacked SBNFit covariance files outside the repo
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta: moderate app-edge extension
+
+### 9. Decision log
+- stacked detector and GENIE knob correlations must come from shared source
+  labels
+- stacked multisim family correlations must come from retained universes, not
+  guessed from per-process covariance blocks
+
+### 10. Stop conditions
+- stop once `mk_sbnfit_cov` can export one explicit stacked contract and the
+  docs teach it
+- stop before widening the pass into a broader SBNFit orchestration layer

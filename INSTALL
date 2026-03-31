@@ -148,6 +148,14 @@ Runtime note for systematics cache builds
 present on the selected-event tree. The logical flux family prefers
 `weightsPPFX` and falls back to `weightsFlux`.
 
+Runtime note for SBNFit export
+------------------------------
+`mk_sbnfit_cov` now also supports `--manifest` to export a stacked
+multi-process covariance matrix. In that mode it correlates detector and
+`genie_knobs` lanes only by shared source labels, and correlates multisim
+families only when retained universes survive with matching family branch name
+and universe count across all contributing rows.
+
 Installed files
 ---------------
 Typical installed outputs are:

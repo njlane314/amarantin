@@ -197,6 +197,10 @@ General form:
 
     build/bin/mk_sbnfit_cov [--cache-key <key>] [--matrix-name <name>] [--nominal-name <name>] input.dists.root sample-key output.root
 
+or:
+
+    build/bin/mk_sbnfit_cov [--manifest <export.manifest>] [--matrix-name <name>] [--nominal-name <name>] input.dists.root output.root
+
 Example:
 
     build/bin/mk_sbnfit_cov \
@@ -204,6 +208,19 @@ Example:
       build/dists/run1-numi-fhc.root \
       beam-s0 \
       build/exports/beam-s0.frac_cov.root
+
+Stacked example:
+
+    cat > stack.export.manifest <<'EOF'
+    signal signal
+    beam_bkg beam-bkg
+    dirt dirt
+    EOF
+    build/bin/mk_sbnfit_cov \
+      --manifest stack.export.manifest \
+      --matrix-name frac_covariance \
+      build/dists/run1-numi-fhc.root \
+      build/exports/stacked.frac_cov.root
 
 The mk_sbnfit_cov program reads one cached `DistributionIO::Spectrum`,
 reconstructs the available systematic absolute covariance components
@@ -219,6 +236,23 @@ file containing:
 This export is intentionally one cached spectrum at a time. It is a thin
 boundary-format adapter for SBNFit-style consumers, not a replacement for the
 canonical covariance-first cache stored in `DistributionIO`.
+
+In stacked manifest mode, each row is:
+
+    label sample-key [cache-key]
+
+The output also includes a `stack_manifest` tree recording row order,
+sample/cache selection, and bin offsets in the concatenated vector.
+
+The stacked correlation contract is strict:
+
+  * `detector` and `genie_knobs` correlate across rows only by shared
+    persisted source labels
+  * `genie`, `flux`, and `reint` correlate across rows only when retained
+    universes survive on every contributing row with matching family branch
+    name and universe count
+  * if that exact family contract is unavailable, `mk_sbnfit_cov` rejects the
+    stacked export instead of guessing a block-diagonal merge
 
 Creating a sample list
 ----------------------

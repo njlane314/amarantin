@@ -216,6 +216,30 @@ Notes:
   When present, the exported components now include the optional
   `genie_knobs` covariance lane as well as detector and multisim families.
 
+Export one stacked multi-process SBNFit-style covariance from a manifest
+  cat > stack.export.manifest <<'EOF'
+  signal signal
+  beam_bkg beam-bkg
+  dirt dirt
+  EOF
+  build/bin/mk_sbnfit_cov \
+    --manifest stack.export.manifest \
+    --matrix-name frac_covariance \
+    build/dists/run1-numi-fhc.root \
+    build/exports/stacked.frac_cov.root
+
+Stack export manifest row format
+  label sample-key [cache-key]
+
+Stacked export contract:
+  detector and `genie_knobs` components correlate across rows only by shared
+  persisted source labels.
+  `genie`, `flux`, and `reint` correlate across rows only when retained
+  universes survive on every contributing row with matching family branch name
+  and universe count.
+  If that exact family contract is unavailable, `mk_sbnfit_cov` rejects the
+  stacked export instead of guessing a block-diagonal merge.
+
 Fit workflow
 ------------
 Run one native xsec fit directly from cached DistributionIO inputs and print

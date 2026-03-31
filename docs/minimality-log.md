@@ -2,80 +2,59 @@
 
 ## Current milestone
 - status: done
-- subsystem: EventWeight integration from selected-event branches through
-  systematics cache, fit, export, and focused smoke coverage
-- design rule from `DESIGN.md`: keep the selected-event surface direct, keep
-  systematics semantics explicit in `syst/`, and extend the existing
-  covariance-first data flow instead of adding a new wrapper layer
+- subsystem: explicit stacked multi-process SBNFit export
+- design rule from `DESIGN.md`: keep stacked export logic at the `app/` edge,
+  reuse persisted covariance-facing payloads directly, and avoid guessing
+  cross-process correlations
 
 ## What changed
-- added a new exec-plan addendum for the EventWeight integration pass
-- fixed the implementation sequence around the existing code boundaries:
-  branch-aware logical flux resolution first, then the optional GENIE knob-pair
-  lane through cache, fit, export, and smoke coverage
-- made the logical flux family branch-aware in `syst/`:
-  - prefer `weightsPPFX`
-  - otherwise fall back to `weightsFlux`
-- updated `syst/README` so the live family mapping matches that code path
-- added an optional paired GENIE knob lane driven by `weightsGenieUp` /
-  `weightsGenieDn`
-- persisted that lane additively as reviewed source labels, shift vectors, and
-  covariance on `DistributionIO::Spectrum`
-- taught the native fit builder to share those knob nuisances across processes
-  by source label when the payload survives
-- taught `mk_sbnfit_cov` to export the optional `genie_knobs` covariance
-  component
-- added focused smoke coverage for PPFX-vs-Flux resolution, paired GENIE knob
-  shifts, knob covariance persistence, and cache metadata mismatch rejection
-- updated current workflow docs for `mk_dist --genie-knobs` and the new export
-  component surface
+- taught `mk_sbnfit_cov` a manifest-driven stacked export mode at the `app/`
+  edge
+- kept the single-spectrum export path intact while adding:
+  - manifest parsing and stacked nominal assembly
+  - a `stack_manifest` tree that records row order, cache selection, and bin
+    offsets
+  - detector and `genie_knobs` stacked covariance assembly by explicit shared
+    source labels
+  - stacked multisim family covariance assembly only from retained universes
+    with matching branch name and universe count
+- updated `COMMANDS`, `USAGE`, and `INSTALL` to teach the new manifest mode
+  and strict rejection behavior
 
 ## Why this is simpler
-- the integration work is now broken into small milestones that match the
-  existing data flow
-- future edits can stay inside the current module boundaries instead of
-  growing another systematics wrapper layer
-- the logical flux-family rule now lives in one grep target in `syst/`
-  instead of being split between docs and branch-name assumptions
-- the paired GENIE knob lane now reuses the existing source-shift /
-  covariance-first pattern instead of adding a second fit-specific mechanism
-- fit and export consumers no longer need to guess whether the knob lane should
-  be treated like multisim weights or like detector envelopes
+- stacked SBNFit export now has one explicit repository-owned contract instead
+  of ad hoc post-processing outside the tree
+- the exporter reuses persisted detector labels, knob labels, and retained
+  universes directly instead of inventing another intermediate format
+- rejecting undefined cross-process family correlations is simpler than
+  exporting numerically convenient but semantically guessed matrices
 
 ## Verification
 - configure/build commands:
+-  `cmake -S . -B .build/stacked-export -DCMAKE_BUILD_TYPE=Release`
 - target-only commands:
+-  `cmake --build build --target mk_sbnfit_cov --parallel`
 - shell checks:
--  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md`
--  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/UniverseFill.cc syst/README`
--  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/Support.cc syst/bits/Detail.hh syst/Detector.cc io/DistributionIO.hh io/DistributionIO.cc fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_dist.cc app/mk_xsec_fit.cc app/mk_sbnfit_cov.cc plot/macro/cache_systematics.C syst/README syst/VISION.md fit/README COMMANDS USAGE INSTALL tools/systematics-reweight-smoke.sh`
--  `bash -n tools/systematics-reweight-smoke.sh`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc COMMANDS USAGE INSTALL`
 - smoke checks:
 - results:
-  - tracked-file `git diff --check` passed
-  - the plan update passed `git diff --check`
-  - the branch-aware flux-family milestone passed `git diff --check`
-  - the full tracked-file patch passed `git diff --check`
-  - `bash -n tools/systematics-reweight-smoke.sh` passed
-  - `cmake --build build --target Syst Fit mk_dist mk_fit mk_sbnfit_cov --parallel` failed because the existing `build/` tree points at `/usr/bin/cmake`
-  - fresh configure in `.build/eventweight-integration` failed because `ROOT` is not available and `root-config` is not on `PATH`
-  - runtime smoke remains deferred because no trustworthy configured ROOT build is available
+  - tracked-file `git diff --check` passed for the stacked-export touched files
+  - `cmake --build build --target mk_sbnfit_cov --parallel` did not provide a
+    trustworthy compile check because the existing `build/` tree is stale and
+    returned `make: *** No rule to make target 'mk_sbnfit_cov'.  Stop.`
+  - fresh configure in `.build/stacked-export` reached dependency discovery and
+    then failed because `ROOT` is not available and `root-config` is not on
+    `PATH` in this environment
 
 ## Reduction ledger
 - files deleted: 0
 - wrappers removed:
-  - the need to decide the EventWeight integration sequence ad hoc during code
-    edits
-  - the hardcoded assumption that the flux family can only come from
-    `weightsPPFX`
-  - the need to collapse paired GENIE knobs into generic envelopes before
-    cache, fit, or export
+  - the need to hand-assemble stacked SBNFit covariance files outside the repo
 - shell branches removed: 0
 - docs/build artifacts removed: 0
 - approximate LOC delta:
-  - one focused exec-plan addendum
-  - one small branch-resolution cleanup in `syst/`
-  - one additive source-shift lane through cache, fit, export, and smoke
+  - one app-edge stacked export mode
+  - one focused docs pass for the explicit manifest contract
 
 ## Decisions
 - make covariance the canonical imported semantic from `hive`
@@ -88,9 +67,6 @@
   knob lane, not as extra GENIE multisim universes
 
 ## Remaining hotspots
-- if you want a true stacked multi-process SBNFit export, the next step needs
-  an explicit contract for cross-process family correlations rather than
-  guessing them from per-process caches
 - trustworthy compile/runtime verification still requires a working local ROOT
   build tree
 
