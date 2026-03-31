@@ -12,7 +12,7 @@ The main surfaces are:
 
   EventListIO      --reads--> event displays and row-wise plots
   DistributionIO   --reads--> cached histogram payloads and final-region plots
-  Plotter          --renders-> stacked and unstacked channel views
+  Plotter          --renders-> stacked and unstacked event-category views
   EfficiencyPlot   --renders-> denominator / numerator + efficiency overlays
 
 Public surface
@@ -41,10 +41,15 @@ StackedHist.hh
   uncertainty band.
 
 UnstackedHist.hh
-  Concrete overlay-style renderer for channel-separated views.
+  Concrete overlay-style renderer for event-category-separated views.
+
+PlotEventCategories.hh
+  Central mapping from persisted event-category codes to names, labels, and
+  colours.
 
 PlotChannels.hh
-  Central mapping from analysis-channel codes to names, labels, and colours.
+  Compatibility include that aliases the older `Channels` name to the
+  canonical `EventCategories` surface.
 
 PlottingHelper.hh
   Small helper functions used by the renderers to build entries, combine
@@ -64,7 +69,7 @@ Treat those as row-wise compatibility paths rather than the long-term final
 plotting default.
 
 The stack / unstack path assumes the usual EventListIO-derived columns such as
-__analysis_channel__ and __w__.
+__event_category__ and __w__.
 
 Boundary notes
 --------------

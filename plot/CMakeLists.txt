@@ -12,6 +12,7 @@ set(AMARANTIN_PLOT_PUBLIC_HEADERS
   EfficiencyPlot.hh
   EventDisplay.hh
   EventListPlotting.hh
+  PlotEventCategories.hh
   PlotChannels.hh
   PlotDescriptors.hh
   Plotter.hh

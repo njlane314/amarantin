@@ -23,7 +23,7 @@ More concretely:
   SampleDef        --stamps--> workflow-facing metadata onto DatasetIO::Sample
   snapshot         --exports-> selected EventListIO content to flat ROOT trees
   cuts             --defines-> named selection expressions used by build-time code
-  channels         --classifies-> analysis-channel integers for selected events
+  event_category   --classifies-> selected-event category integers for selected events
 
 Public surface
 --------------
@@ -37,6 +37,10 @@ SampleDef.hh
   Defines ana::SampleDef plus read_sample_defs(...) and
   apply_sample_defs(...), used by mk_dataset to stamp workflow metadata.
 
+SignalDefinition.hh
+  Defines the canonical hardcoded Lambda signal definition used during
+  event-list construction and persisted in EventListIO metadata.
+
 Snapshot.hh
   Defines snapshot::Spec plus snapshot::sample(...) and
   snapshot::merged(...), used for exporting selected columns to simpler ROOT
@@ -48,9 +52,9 @@ Cuts.hh
   Named preset selections and expression builders used during event-list
   construction.
 
-Channels.hh
-  Analysis-channel classification helpers used by downstream plotting and
-  categorisation code.
+EventCategory.hh
+  Selected-event category helpers used after the signal predicate has already
+  been resolved.
 
 Boundary notes
 --------------

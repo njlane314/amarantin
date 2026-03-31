@@ -2,6 +2,261 @@
 
 ## Current milestone
 - status: done
+- subsystem: `syst/` HIVE-informed covariance-first planning
+- design rule from `DESIGN.md`: keep module boundaries sharp and prefer plain
+  data plus explicit workflow/data-flow contracts over framework-heavy
+  orchestration
+
+## What changed
+- added `syst/VISION.md` as a local target-state document for importing the
+  good parts of `hive` systematics handling
+- wrote down the intended covariance-first contract for:
+  - detector systematics
+  - reweight-family systematics
+  - statistical covariance
+  - rebinning and collapse
+- recorded the main review equations and open convention questions
+- reset the active exec-plan tracking toward a staged systematics-import path
+- linked `syst/README` to the new local vision document
+
+## Why this is simpler
+- the next implementation pass now has one explicit target math contract
+- the repo can import `hive`'s useful covariance ideas without importing its
+  XML and shell machinery
+- detector envelopes and total envelopes are now documented as derived views,
+  which sharpens the boundary between plotting convenience and canonical
+  systematics state
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- shell checks:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/README syst/VISION.md`
+- smoke checks:
+- results:
+  - planning/doc pass only
+  - build and smoke verification remain blocked in this environment because
+    `root-config` is not on `PATH`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta: small additive doc pass centered on one new
+  `syst/VISION.md`
+
+## Decisions
+- make covariance the canonical imported semantic from `hive`
+- keep absolute covariance as the preferred canonical math object pending
+  review
+- keep detector and total envelopes as derived summaries only
+- keep `hive` XML/env/shell orchestration out of scope
+
+## Remaining hotspots
+- confirm universe covariance normalization convention
+- confirm detector-source independence / pairing rules
+- decide whether `DistributionIO` should persist absolute covariance only or
+  both absolute and fractional forms
+- teach `fit/` to consume covariance-first payloads in a later milestone
+
+## Current milestone
+- status: done
+- subsystem: `EventListIO` branch naming + row-wise category API
+- design rule from `DESIGN.md`: keep persistence contracts explicit in `io/`
+  and keep downstream EventListIO-first consumers aligned with that surface
+
+## What changed
+- renamed the canonical persisted EventList truth-category branches to:
+  - `__event_category__`
+  - `__passes_signal_definition__`
+- moved the canonical branch-name ownership onto `EventListIO`
+- taught `EventListIO` to expose old and new selected-tree names
+  interchangeably through aliases
+- renamed the row-wise plot mapper to `PlotEventCategories.hh` /
+  `EventCategories`
+- renamed plot descriptor option fields from generic `channel` wording to
+  `event_category`
+- kept `PlotChannels.hh` as a compatibility include alias for older code
+
+## Why this is simpler
+- the file format should say `event category` if that is what the code means
+- a persisted signal flag should say that it passes the signal definition,
+  rather than using a generic `is_signal` name
+- EventListIO-first downstream code should not have to guess whether a
+  `channel` name means fit channel, event category, or something else
+- old/new EventList files can be handled at one persistence boundary instead
+  of pushing compatibility branches into every downstream consumer
+
+## Verification
+- configure/build commands:
+- target-only commands:
+-  `cmake --build build --target IO --parallel`
+-  `cmake --build build --target Ana --parallel`
+-  `cmake --build build --target Plot --parallel`
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/EventListBuild.cc io/EventListIO.hh io/EventListIO.cc io/bits/DERIVED plot/CMakeLists.txt plot/PlotChannels.hh plot/PlotDescriptors.hh plot/PlotEventCategories.hh plot/README plot/StackedHist.cc plot/StackedHist.hh plot/UnstackedHist.cc plot/UnstackedHist.hh`
+-  `git diff --no-index --check -- /dev/null plot/PlotEventCategories.hh`
+- smoke checks:
+-  `build/bin/mk_eventlist --help`
+- results:
+-  tracked-file `git diff --check` passed for the touched files
+-  `plot/PlotEventCategories.hh` produced no whitespace diagnostics under
+   `git diff --no-index --check`
+-  `cmake --build build --target IO --parallel`,
+   `cmake --build build --target Ana --parallel`, and
+   `cmake --build build --target Plot --parallel` remain blocked because the
+   existing `build/` tree points at `/usr/bin/cmake`
+-  `build/bin/mk_eventlist --help` was not attempted because a trustworthy
+   current build is not available in this environment
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - local EventList branch-name literals in `ana/EventListBuild.cc`
+  - generic plot-side `channel` wording for the row-wise EventList category
+    surface
+- shell branches removed: 0
+- docs/build artifacts removed:
+  - stale EventList schema wording in `io/bits/DERIVED`
+  - stale row-wise plot README wording that still described generic channels
+- approximate LOC delta: moderate schema/consumer rename with one compatibility
+  header and EventListIO aliases instead of broader downstream fallback logic
+
+## Decisions
+- use `__event_category__` and `__passes_signal_definition__` as the new
+  canonical EventList branch names
+- keep fit-side `fit::Channel` out of scope
+- keep old and new selected-tree column names interoperable at the EventListIO
+  boundary
+- keep `PlotChannels.hh` as a compatibility include while making
+  `PlotEventCategories.hh` canonical
+
+## Remaining hotspots
+- build verification still requires either a repaired configured build tree or
+  a local ROOT environment
+
+## Current milestone
+- status: done
+- subsystem: `ana/` signal and event-label naming
+- design rule from `DESIGN.md`: keep names direct and explicit so readers do
+  not have to guess which kind of “channel” or “signal” a symbol refers to
+
+## What changed
+- renamed the hardcoded signal-definition surface to `SignalDefinition`
+- renamed the event-level selected-event label surface from `Channels` to
+  `EventCategory`
+- renamed the installed `ana/` headers and their call sites accordingly:
+  - `SignalDefinition.hh`
+  - `SignalDefinition.cc`
+  - `EventCategory.hh`
+- kept fit-side `fit::Channel` unchanged
+
+## Why this is simpler
+- `SignalDefinition` reads as a real definition rather than a shorthand alias
+- `EventCategory` is more explicit than `Channels` in a codebase that also has
+  fit-side channels and other downstream categorisations
+
+## Verification
+- configure/build commands:
+  - `cmake -S . -B .build/eventcategory-check -DCMAKE_BUILD_TYPE=Release`
+- target-only commands:
+  - `cmake --build build --target Ana --parallel`
+- shell checks:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/CMakeLists.txt ana/README ana/EventCategory.hh ana/EventListBuild.hh ana/EventListBuild.cc io/EventListIO.hh io/EventListIO.cc`
+  - `git diff --no-index --check -- /dev/null ana/EventCategory.hh`
+  - `git diff --no-index --check -- /dev/null ana/SignalDefinition.hh`
+  - `git diff --no-index --check -- /dev/null ana/SignalDefinition.cc`
+- smoke checks:
+- results:
+  - tracked-file `git diff --check` passed
+  - the three `git diff --no-index --check` runs produced no whitespace diagnostics for the new files
+  - the existing `build/` tree is stale and still points at `/usr/bin/cmake`
+  - fresh configure in `.build/eventcategory-check` is blocked by missing ROOT / `root-config`
+
+## Reduction ledger
+- files deleted:
+  - installed header `ana/Channels.hh` replaced by `ana/EventCategory.hh`
+- wrappers removed:
+  - the generic `channels` naming at the `ana/` event-label surface
+- shell branches removed: 0
+- docs/build artifacts removed:
+  - stale `ana/README` references to `SignalDef.hh` and `Channels.hh`
+- approximate LOC delta: small public-surface naming pass; behavior unchanged
+
+## Decisions
+- keep `fit::Channel` unchanged
+- rename only the `ana/` event-label surface in this pass
+
+## Remaining hotspots
+- fresh build verification still requires a ROOT environment
+
+## Current milestone
+- status: done
+- subsystem: `ana/` canonical signal definition
+- design rule from `DESIGN.md`: add abstractions only when they delete
+  complexity; keep workflows in `app/`, and keep analysis-side truth logic in
+  `ana/`
+
+## What changed
+- added `ana/SignalDef.hh` and `ana/SignalDef.cc` as the one owner of the
+  hardcoded Lambda signal definition
+- moved the event-level truth predicate and metadata summary string out of
+  `ana/Channels.hh` / `ana/EventListBuild.cc` and into `SignalDef`
+- removed `BuildConfig.signal_definition` so `mk_eventlist` no longer carries
+  a configurable-looking signal-definition seam it does not actually expose
+- trimmed `ana/Channels.hh` back to channel classification only
+- updated `ana/CMakeLists.txt` and `ana/README` to install and describe the
+  new `SignalDef` surface
+- kept the current signal behavior, including the truth-vertex-aware checks
+  and the persisted `signal_definition` metadata string
+
+## Why this is simpler
+- there should be one grep target for the Lambda signal definition
+- `mk_eventlist` should use the canonical hardcoded predicate directly instead
+  of carrying config it never truly exposes
+- `Channels.hh` should not own both channel bookkeeping and the full signal
+  predicate
+
+## Verification
+- configure/build commands:
+  - `cmake -S . -B .build/signaldef-check -DCMAKE_BUILD_TYPE=Release`
+- target-only commands:
+  - `cmake --build build --target Ana --parallel`
+  - `cmake --build build --target mk_eventlist --parallel`
+- shell checks:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/CMakeLists.txt ana/README ana/SignalDef.hh ana/SignalDef.cc ana/Channels.hh ana/EventListBuild.hh ana/EventListBuild.cc io/EventListIO.hh io/EventListIO.cc`
+  - `git diff --no-index --check -- /dev/null ana/SignalDef.hh`
+  - `git diff --no-index --check -- /dev/null ana/SignalDef.cc`
+- smoke checks:
+- results:
+  - tracked-file `git diff --check` passed
+  - the two `git diff --no-index --check` runs produced no whitespace diagnostics for the new files
+  - the existing `build/` tree is stale and still points at `/usr/bin/cmake`
+  - fresh configure in `.build/signaldef-check` is blocked by missing ROOT / `root-config`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - `BuildConfig.signal_definition`
+  - signal-definition ownership from `ana/Channels.hh`
+- shell branches removed: 0
+- docs/build artifacts removed: stale `ana/README` wording about where the
+  signal predicate lives
+- approximate LOC delta: about +490 / -180 including the new signal-definition
+  files and tracking updates
+
+## Decisions
+- create a dedicated `SignalDef` class instead of leaving the signal predicate
+  embedded in `Channels.hh`
+- keep the signal definition hardcoded rather than exposing new CLI/runtime
+  knobs
+
+## Remaining hotspots
+- fresh build verification still requires a ROOT environment
+
+## Current milestone
+- status: done
 - subsystem: `io/` cached-payload naming + sample-build seam
 - design rule from `DESIGN.md`: keep `io/` persistence-only and push workflow
   orchestration back out into `app/`

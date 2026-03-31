@@ -49,7 +49,7 @@ namespace plot_utils
         std::string plot_name_;
         std::string output_directory_;
         std::unique_ptr<THStack> stack_;
-        std::vector<std::unique_ptr<TH1D>> mc_ch_hists_;
+        std::vector<std::unique_ptr<TH1D>> mc_event_category_hists_;
         std::unique_ptr<TH1D> mc_total_;
         std::unique_ptr<TH1D> data_hist_;
         std::unique_ptr<TH1D> mc_unc_hist_;
@@ -57,8 +57,8 @@ namespace plot_utils
         std::unique_ptr<TH1D> ratio_hist_;
         std::unique_ptr<TH1D> ratio_band_;
         std::unique_ptr<TLegend> legend_;
-        std::vector<int> chan_order_;
-        std::vector<double> chan_event_yields_;
+        std::vector<int> event_category_order_;
+        std::vector<double> event_category_yields_;
         bool density_mode_ = false;
     };
 }

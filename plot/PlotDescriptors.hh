@@ -67,15 +67,15 @@ namespace plot_utils
         std::string x_title;
         std::string y_title;
 
-        std::vector<int> signal_channels;
+        std::vector<int> signal_event_categories;
         std::shared_ptr<TMatrixDSym> total_cov;
         std::vector<double> syst_bin;
         std::vector<CutSpec> cuts;
 
-        std::string channel_column = "__analysis_channel__";
-        std::vector<int> unstack_channel_keys;
-        std::map<int, std::string> unstack_channel_labels;
-        std::map<int, int> unstack_channel_colours;
+        std::string event_category_column = EventListIO::event_category_branch_name();
+        std::vector<int> unstack_event_category_keys;
+        std::map<int, std::string> unstack_event_category_labels;
+        std::map<int, int> unstack_event_category_colours;
     };
 
     struct TH1DModel

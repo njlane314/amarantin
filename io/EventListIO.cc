@@ -13,6 +13,9 @@
 
 namespace
 {
+    constexpr const char *kLegacyEventCategoryBranch = "__analysis_channel__";
+    constexpr const char *kLegacyPassesSignalDefinitionBranch = "__is_signal__";
+
     std::string nominal_or_key(const std::string &key, const DatasetIO::Sample &sample)
     {
         return sample.nominal.empty() ? key : sample.nominal;
@@ -110,6 +113,36 @@ namespace
         return utils::must_subdir(samples, sample_key, create, "samples");
     }
 
+    void set_selected_tree_alias(TTree *tree, const char *alias_name, const char *target_name)
+    {
+        if (!tree || !alias_name || !target_name)
+            return;
+        if (tree->GetBranch(alias_name) || tree->GetAlias(alias_name))
+            return;
+        if (!tree->GetBranch(target_name))
+            return;
+        tree->SetAlias(alias_name, target_name);
+    }
+
+    void apply_selected_tree_aliases(TTree *tree)
+    {
+        if (!tree)
+            return;
+
+        set_selected_tree_alias(tree,
+                                EventListIO::event_category_branch_name(),
+                                kLegacyEventCategoryBranch);
+        set_selected_tree_alias(tree,
+                                kLegacyEventCategoryBranch,
+                                EventListIO::event_category_branch_name());
+        set_selected_tree_alias(tree,
+                                EventListIO::passes_signal_definition_branch_name(),
+                                kLegacyPassesSignalDefinitionBranch);
+        set_selected_tree_alias(tree,
+                                kLegacyPassesSignalDefinitionBranch,
+                                EventListIO::passes_signal_definition_branch_name());
+    }
+
 }
 
 EventListIO::EventListIO(const std::string &path, Mode mode)
@@ -158,6 +191,7 @@ EventListIO::Metadata EventListIO::metadata() const
     metadata.subrun_tree_name = utils::read_named(meta_dir, "subrun_tree_name");
     metadata.selection_name = utils::read_named(meta_dir, "selection_name");
     metadata.selection_expr = utils::read_named(meta_dir, "selection_expr");
+    metadata.signal_definition = utils::read_named_or(meta_dir, "signal_definition");
     metadata.slice_required_count = utils::read_param<int>(meta_dir, "slice_required_count");
     metadata.slice_min_topology_score = utils::read_param<double>(meta_dir, "slice_min_topology_score");
     metadata.numi_run_boundary = utils::read_param<int>(meta_dir, "numi_run_boundary");
@@ -177,6 +211,7 @@ void EventListIO::write_metadata(const Metadata &metadata)
     utils::write_named(meta_dir, "subrun_tree_name", metadata.subrun_tree_name);
     utils::write_named(meta_dir, "selection_name", metadata.selection_name);
     utils::write_named(meta_dir, "selection_expr", metadata.selection_expr);
+    utils::write_named(meta_dir, "signal_definition", metadata.signal_definition);
     utils::write_param<int>(meta_dir, "slice_required_count", metadata.slice_required_count);
     utils::write_param<double>(meta_dir, "slice_min_topology_score", metadata.slice_min_topology_score);
     utils::write_param<int>(meta_dir, "numi_run_boundary", metadata.numi_run_boundary);
@@ -211,6 +246,7 @@ void EventListIO::write_sample(const std::string &sample_key,
     events_dir->cd();
     selected_tree->SetName("selected");
     selected_tree->SetTitle("Selected event list");
+    apply_selected_tree_aliases(selected_tree);
     selected_tree->Write("selected", TObject::kOverwrite);
 
     subruns_dir->cd();
@@ -298,6 +334,7 @@ TTree *EventListIO::selected_tree(const std::string &sample_key) const
     TTree *tree = dynamic_cast<TTree *>(events_dir->Get("selected"));
     if (!tree)
         throw std::runtime_error("EventListIO: missing selected tree for sample: " + sample_key);
+    apply_selected_tree_aliases(tree);
     return tree;
 }
 

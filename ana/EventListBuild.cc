@@ -1,7 +1,8 @@
 #include "EventListBuild.hh"
 
 #include "Cuts.hh"
-#include "Channels.hh"
+#include "EventCategory.hh"
+#include "SignalDefinition.hh"
 
 #include <cmath>
 #include <limits>
@@ -19,12 +20,6 @@
 
 namespace
 {
-    constexpr const char *kEventWeightNormalisationBranch = "__w_norm__";
-    constexpr const char *kEventWeightCentralValueBranch = "__w_cv__";
-    constexpr const char *kEventWeightBranch = "__w__";
-    constexpr const char *kEventWeightSquaredBranch = "__w2__";
-    constexpr const char *kAnalysisChannelBranch = "__analysis_channel__";
-    constexpr const char *kSignalBranch = "__is_signal__";
     using RunSubrunKey = std::pair<int, int>;
 
     cuts::Config cuts_config_for(const ana::BuildConfig &config)
@@ -314,7 +309,28 @@ namespace
         return false;
     }
 
-    channels::LambdaTruthCandidate legacy_lambda_candidate(
+    ana::SignalDefinition::TruthInput make_truth_input(bool is_nu_mu_cc,
+                                                       int ccnc,
+                                                       bool truth_in_fiducial,
+                                                       float truth_vtx_x,
+                                                       float truth_vtx_y,
+                                                       float truth_vtx_z,
+                                                       float mu_p,
+                                                       float contained_fraction)
+    {
+        ana::SignalDefinition::TruthInput truth;
+        truth.is_nu_mu_cc = is_nu_mu_cc;
+        truth.ccnc = ccnc;
+        truth.truth_in_fiducial = truth_in_fiducial;
+        truth.truth_vtx_x = truth_vtx_x;
+        truth.truth_vtx_y = truth_vtx_y;
+        truth.truth_vtx_z = truth_vtx_z;
+        truth.mu_p = mu_p;
+        truth.contained_fraction = contained_fraction;
+        return truth;
+    }
+
+    ana::SignalDefinition::LambdaTruthCandidate legacy_lambda_candidate(
         const std::vector<int> *g4_lambda_pdg,
         const std::vector<float> *g4_lambda_p_mag,
         const std::vector<float> *g4_lambda_p_p,
@@ -324,7 +340,7 @@ namespace
         const std::vector<float> *g4_lambda_endy,
         const std::vector<float> *g4_lambda_endz)
     {
-        channels::LambdaTruthCandidate cand;
+        ana::SignalDefinition::LambdaTruthCandidate cand;
         cand.valid = g4_lambda_pdg && !g4_lambda_pdg->empty();
         cand.has_ppi_decay = cand.valid;
         cand.lambda_pdg = first_or_default(g4_lambda_pdg, 0);
@@ -338,13 +354,9 @@ namespace
         return cand;
     }
 
-    channels::LambdaTruthCandidate first_passing_lambda_candidate(
-        bool is_nu_mu_cc,
-        int ccnc,
-        bool truth_in_fiducial,
-        float mu_p,
-        float contained_fraction,
-        const channels::SignalDefinition &signal_definition,
+    ana::SignalDefinition::LambdaTruthCandidate first_passing_lambda_candidate(
+        const ana::SignalDefinition &signal_definition,
+        const ana::SignalDefinition::TruthInput &truth,
         const std::vector<int> *g4_all_lambda_pdg,
         const std::vector<int> *g4_all_lambda_has_ppi_decay,
         const std::vector<int> *g4_all_lambda_has_sigma0_ancestor,
@@ -362,13 +374,13 @@ namespace
         const std::vector<float> *g4_all_lambda_pi_endy,
         const std::vector<float> *g4_all_lambda_pi_endz)
     {
-        channels::LambdaTruthCandidate best;
+        ana::SignalDefinition::LambdaTruthCandidate best;
         if (!g4_all_lambda_pdg)
             return best;
 
         for (std::size_t i = 0; i < g4_all_lambda_pdg->size(); ++i)
         {
-            channels::LambdaTruthCandidate cand;
+            ana::SignalDefinition::LambdaTruthCandidate cand;
             cand.valid = true;
             cand.lambda_pdg = at_or_default(g4_all_lambda_pdg, i, 0);
             cand.has_ppi_decay = at_or_default(g4_all_lambda_has_ppi_decay, i, 0) != 0;
@@ -401,10 +413,7 @@ namespace
             cand.pion_end_z = at_or_default(g4_all_lambda_pi_endz, i,
                                             std::numeric_limits<float>::quiet_NaN());
 
-            if (channels::passes_signal_definition(is_nu_mu_cc, ccnc,
-                                                   truth_in_fiducial, mu_p,
-                                                   contained_fraction, cand,
-                                                   signal_definition))
+            if (signal_definition.passes(truth, cand))
             {
                 return cand;
             }
@@ -418,7 +427,7 @@ namespace
                                               const std::string &event_tree_name,
                                               const std::string &selection_expr,
                                               const cuts::Config &cuts_config,
-                                              const channels::SignalDefinition &signal_definition)
+                                              const ana::SignalDefinition &signal_definition)
     {
         TChain chain(event_tree_name.c_str());
         for (const auto &path : sample.root_files)
@@ -490,6 +499,9 @@ namespace
         int int_ccnc = -1;
         bool is_nu_mu_cc = false;
         bool truth_in_fiducial = false;
+        float truth_vtx_x = std::numeric_limits<float>::quiet_NaN();
+        float truth_vtx_y = std::numeric_limits<float>::quiet_NaN();
+        float truth_vtx_z = std::numeric_limits<float>::quiet_NaN();
         float mu_p = std::numeric_limits<float>::quiet_NaN();
         float contained_fraction = std::numeric_limits<float>::quiet_NaN();
 
@@ -530,6 +542,9 @@ namespace
         const bool has_int_ccnc = chain.GetBranch("int_ccnc") != nullptr;
         const bool has_is_nu_mu_cc = chain.GetBranch("is_nu_mu_cc") != nullptr;
         const bool has_truth_in_fiducial = chain.GetBranch("nu_vtx_in_fv") != nullptr;
+        const bool has_truth_vtx_x = chain.GetBranch("nu_vtx_x") != nullptr;
+        const bool has_truth_vtx_y = chain.GetBranch("nu_vtx_y") != nullptr;
+        const bool has_truth_vtx_z = chain.GetBranch("nu_vtx_z") != nullptr;
         const bool has_mu_p = chain.GetBranch("mu_p") != nullptr;
         const bool has_contained_fraction = chain.GetBranch("contained_fraction") != nullptr;
         const bool has_prim_pdg = chain.GetBranch("prim_pdg") != nullptr;
@@ -594,6 +609,12 @@ namespace
             chain.SetBranchAddress("is_nu_mu_cc", &is_nu_mu_cc);
         if (has_truth_in_fiducial)
             chain.SetBranchAddress("nu_vtx_in_fv", &truth_in_fiducial);
+        if (has_truth_vtx_x)
+            chain.SetBranchAddress("nu_vtx_x", &truth_vtx_x);
+        if (has_truth_vtx_y)
+            chain.SetBranchAddress("nu_vtx_y", &truth_vtx_y);
+        if (has_truth_vtx_z)
+            chain.SetBranchAddress("nu_vtx_z", &truth_vtx_z);
         if (has_mu_p)
             chain.SetBranchAddress("mu_p", &mu_p);
         if (has_contained_fraction)
@@ -660,24 +681,26 @@ namespace
         bool pass_slice = false;
         bool pass_fiducial = false;
         bool pass_muon = false;
-        int analysis_channel = channels::to_int(channels::Channel::kUnknown);
-        bool is_signal = false;
-        selected->Branch(kEventWeightNormalisationBranch,
+        int event_category_code = event_category::to_int(event_category::EventCategory::kUnknown);
+        bool passes_signal_definition = false;
+        selected->Branch(EventListIO::event_weight_normalisation_branch_name(),
                          &event_weight_normalisation,
-                         (std::string(kEventWeightNormalisationBranch) + "/D").c_str());
-        selected->Branch(kEventWeightCentralValueBranch,
+                         (std::string(EventListIO::event_weight_normalisation_branch_name()) + "/D").c_str());
+        selected->Branch(EventListIO::event_weight_central_value_branch_name(),
                          &event_weight_central_value,
-                         (std::string(kEventWeightCentralValueBranch) + "/D").c_str());
-        selected->Branch(kEventWeightBranch, &event_weight, (std::string(kEventWeightBranch) + "/D").c_str());
-        selected->Branch(kEventWeightSquaredBranch,
+                         (std::string(EventListIO::event_weight_central_value_branch_name()) + "/D").c_str());
+        selected->Branch(EventListIO::event_weight_branch_name(),
+                         &event_weight,
+                         (std::string(EventListIO::event_weight_branch_name()) + "/D").c_str());
+        selected->Branch(EventListIO::event_weight_squared_branch_name(),
                          &event_weight_squared,
-                         (std::string(kEventWeightSquaredBranch) + "/D").c_str());
-        selected->Branch(kAnalysisChannelBranch,
-                         &analysis_channel,
-                         (std::string(kAnalysisChannelBranch) + "/I").c_str());
-        selected->Branch(kSignalBranch,
-                         &is_signal,
-                         (std::string(kSignalBranch) + "/O").c_str());
+                         (std::string(EventListIO::event_weight_squared_branch_name()) + "/D").c_str());
+        selected->Branch(EventListIO::event_category_branch_name(),
+                         &event_category_code,
+                         (std::string(EventListIO::event_category_branch_name()) + "/I").c_str());
+        selected->Branch(EventListIO::passes_signal_definition_branch_name(),
+                         &passes_signal_definition,
+                         (std::string(EventListIO::passes_signal_definition_branch_name()) + "/O").c_str());
         selected->Branch(cuts::trigger_branch(), &pass_trigger,
                          (std::string(cuts::trigger_branch()) + "/O").c_str());
         selected->Branch(cuts::slice_branch(), &pass_slice,
@@ -719,15 +742,20 @@ namespace
                 const int n_gamma = count_abs_pdg(prim_pdg, 22);
                 const int n_k0 = count_k0(prim_pdg);
                 const int n_sigma0 = count_abs_pdg(prim_pdg, 3212);
-                const channels::LambdaTruthCandidate lambda_candidate =
+                const ana::SignalDefinition::TruthInput truth =
+                    make_truth_input(is_nu_mu_cc,
+                                     int_ccnc,
+                                     truth_in_fiducial,
+                                     truth_vtx_x,
+                                     truth_vtx_y,
+                                     truth_vtx_z,
+                                     mu_p,
+                                     contained_fraction);
+                const ana::SignalDefinition::LambdaTruthCandidate lambda_candidate =
                     has_g4_all_lambda_pdg
                         ? first_passing_lambda_candidate(
-                              is_nu_mu_cc,
-                              int_ccnc,
-                              truth_in_fiducial,
-                              mu_p,
-                              contained_fraction,
                               signal_definition,
+                              truth,
                               g4_all_lambda_pdg,
                               g4_all_lambda_has_ppi_decay,
                               g4_all_lambda_has_sigma0_ancestor,
@@ -758,41 +786,35 @@ namespace
 
                 if (is_data_origin(sample))
                 {
-                    analysis_channel = channels::to_int(channels::Channel::kDataInclusive);
-                    is_signal = false;
+                    event_category_code = event_category::to_int(event_category::EventCategory::kDataInclusive);
+                    passes_signal_definition = false;
                 }
                 else if (is_external_origin(sample))
                 {
-                    analysis_channel = channels::to_int(channels::Channel::kExternal);
-                    is_signal = false;
+                    event_category_code = event_category::to_int(event_category::EventCategory::kExternal);
+                    passes_signal_definition = false;
                 }
                 else if (is_mc_origin(sample))
                 {
-                    is_signal = channels::is_signal(is_nu_mu_cc,
-                                                    int_ccnc,
-                                                    truth_in_fiducial,
-                                                    mu_p,
-                                                    contained_fraction,
-                                                    lambda_candidate,
-                                                    signal_definition);
-                    analysis_channel = channels::to_int(
-                        channels::classify(truth_in_fiducial,
-                                           nu_pdg,
-                                           int_ccnc,
-                                           n_protons,
-                                           n_pi_minus,
-                                           n_pi_plus,
-                                           n_pi0,
-                                           n_gamma,
-                                           n_k0,
-                                           n_sigma0,
-                                           has_sigma0_lambda_ancestor,
-                                           is_signal));
+                    passes_signal_definition = signal_definition.passes(truth, lambda_candidate);
+                    event_category_code = event_category::to_int(
+                        event_category::classify(truth_in_fiducial,
+                                                 nu_pdg,
+                                                 int_ccnc,
+                                                 n_protons,
+                                                 n_pi_minus,
+                                                 n_pi_plus,
+                                                 n_pi0,
+                                                 n_gamma,
+                                                 n_k0,
+                                                 n_sigma0,
+                                                 has_sigma0_lambda_ancestor,
+                                                 passes_signal_definition));
                 }
                 else
                 {
-                    analysis_channel = channels::to_int(channels::Channel::kUnknown);
-                    is_signal = false;
+                    event_category_code = event_category::to_int(event_category::EventCategory::kUnknown);
+                    passes_signal_definition = false;
                 }
 
                 event_weight_normalisation = resolved_normalisation(sample_key,
@@ -852,6 +874,7 @@ namespace ana
             throw std::runtime_error("ana::build_event_list: selection_expr must not be empty");
 
         const cuts::Config cuts_config = cuts_config_for(config);
+        const SignalDefinition &signal_definition = SignalDefinition::canonical();
 
         EventListIO::Metadata metadata;
         metadata.dataset_path = dataset.path();
@@ -860,6 +883,7 @@ namespace ana
         metadata.subrun_tree_name = config.subrun_tree_name;
         metadata.selection_name = config.selection_name;
         metadata.selection_expr = config.selection_expr;
+        metadata.signal_definition = signal_definition.describe();
         metadata.slice_required_count = cuts_config.slice_required_count;
         metadata.slice_min_topology_score = cuts_config.slice_min_topology_score;
         metadata.numi_run_boundary = cuts_config.numi_run_boundary;
@@ -890,13 +914,13 @@ namespace ana
                                                             cuts_config);
             }
 
-                std::unique_ptr<TTree> selected =
-                    copy_selected_tree(key,
-                                       sample,
-                                       config.event_tree_name,
-                                       effective_selection_expr,
-                                       cuts_config,
-                                       config.signal_definition);
+            std::unique_ptr<TTree> selected =
+                copy_selected_tree(key,
+                                   sample,
+                                   config.event_tree_name,
+                                   effective_selection_expr,
+                                   cuts_config,
+                                   signal_definition);
             std::unique_ptr<TTree> subruns =
                 copy_subrun_tree(sample, config.subrun_tree_name);
 

@@ -1,5 +1,6 @@
 set(AMARANTIN_ANA_SOURCES
   EventListBuild.cc
+  SignalDefinition.cc
   Snapshot.cc
   SampleDef.cc
   Cuts.cc
@@ -7,6 +8,8 @@ set(AMARANTIN_ANA_SOURCES
 
 set(AMARANTIN_ANA_PUBLIC_HEADERS
   EventListBuild.hh
+  EventCategory.hh
+  SignalDefinition.hh
   SampleDef.hh
   Snapshot.hh
 )

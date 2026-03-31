@@ -5,7 +5,6 @@
 
 #include "DatasetIO.hh"
 #include "EventListIO.hh"
-#include "Channels.hh"
 
 namespace ana
 {
@@ -18,7 +17,6 @@ namespace ana
         int slice_required_count = 1;
         double slice_min_topology_score = 0.06;
         int numi_run_boundary = 16880;
-        channels::SignalDefinition signal_definition;
     };
 
     void build_event_list(const DatasetIO &dataset,

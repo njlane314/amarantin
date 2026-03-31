@@ -49,9 +49,9 @@ namespace plot_utils
         std::string plot_name_;
         std::string output_directory_;
         std::unique_ptr<THStack> overlay_;
-        std::vector<std::unique_ptr<TH1D>> mc_ch_hists_;
-        std::vector<int> chan_order_;
-        std::vector<double> chan_event_yields_;
+        std::vector<std::unique_ptr<TH1D>> mc_event_category_hists_;
+        std::vector<int> event_category_order_;
+        std::vector<double> event_category_yields_;
         std::unique_ptr<TH1D> mc_total_;
         std::unique_ptr<TH1D> mc_unc_band_;
         std::unique_ptr<TH1D> data_hist_;

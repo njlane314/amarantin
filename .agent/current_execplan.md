@@ -1,5 +1,512 @@
 # ExecPlan
 
+## ExecPlan Addendum: HIVE-Informed Systematics Import
+
+### 1. Objective
+Define a reviewed covariance-first end state for `syst/` so the next
+implementation pass can import the good parts of `hive` systematics handling
+without importing its XML/shell framework.
+
+The intended simplification is conceptual, not cosmetic:
+
+- make covariance the canonical systematics object
+- treat detector and reweighting sources with one explicit math contract
+- keep envelopes as derived summaries rather than the primary persisted result
+
+### 2. Constraints
+- Preserve current external CLI shapes during the planning/document pass.
+- Keep `io/` persistence-only.
+- Keep workflow orchestration in `app/`, not `syst/`.
+- Do not import `hive` XML templates, env-var discovery, or `system()`-based
+  orchestration.
+- Prefer additive cache-schema evolution over broad rename churn.
+- Leave unrelated dirty-worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep module boundaries sharp
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+This pass should produce a clearer math contract and migration path, not a new
+framework.
+
+### 4. System map
+- planning / vision:
+  - `syst/VISION.md`
+  - `syst/README`
+- current systematics implementation:
+  - `syst/Systematics.hh`
+  - `syst/Systematics.cc`
+  - `syst/Detector.cc`
+  - `syst/UniverseFill.cc`
+  - `syst/UniverseSummary.cc`
+  - `syst/Support.cc`
+  - `syst/bits/Detail.hh`
+- persistence / downstream consumers:
+  - `io/DistributionIO.hh`
+  - `io/DistributionIO.cc`
+  - `fit/SignalStrengthFit.hh`
+  - `fit/SignalStrengthFit.cc`
+  - `app/mk_dist.cc`
+  - `app/mk_xsec_fit.cc`
+- comparison reference:
+  - `/Users/user/programs/hive/hive/src/bdt_covar.cxx`
+  - `/Users/user/programs/hive/hive/src/bdt_datamc.cxx`
+  - `/Users/user/programs/hive/hive/src/load_mva_param.cxx`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- move `amarantin` toward a covariance-first `syst/` contract so `fit/` no
+  longer depends on envelope-only fallbacks
+- keep detector-systematic semantics in `syst/` and cache persistence in `io/`
+
+#### wrapper collapse
+- avoid adding a `hive`-style orchestration layer around the math import
+- prefer one explicit data-model extension over new adapter classes
+
+#### doc / build cleanup
+- write the equations, open review points, and staged migration path once in
+  `syst/VISION.md` instead of rediscovering them during code edits
+
+### 6. Milestones
+
+#### Milestone A: Write the covariance-first vision and review equations
+- status: done
+- hypothesis: one agreed local design doc reduces oscillation and prevents
+  importing `hive` mechanics when only its covariance semantics are needed
+- files / symbols touched:
+  - `syst/VISION.md`
+  - `syst/README`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/README syst/VISION.md`
+- acceptance criteria:
+  - `syst/` has a local vision doc
+  - the doc spells out the target covariance equations and review questions
+  - the migration path is staged without committing to `hive` orchestration
+
+#### Milestone B: Extend the cache schema toward covariance-first detector payloads
+- status: pending
+- hypothesis: detector source shifts plus covariance are a better canonical
+  cache surface than detector envelope alone
+- files / symbols touched:
+  - `io/DistributionIO.hh`
+  - `io/DistributionIO.cc`
+  - `syst/Systematics.hh`
+  - `syst/Systematics.cc`
+  - `syst/Detector.cc`
+  - `syst/bits/Detail.hh`
+- expected behavior risk: moderate
+- verification commands:
+  - focused CMake builds if ROOT is available
+  - detector/reweight smoke checks if ROOT is available
+- acceptance criteria:
+  - detector covariance survives cache write/read
+  - detector envelope becomes a derived view, not the only detector payload
+
+#### Milestone C: Teach fit-side assembly to consume covariance-first payloads
+- status: pending
+- hypothesis: a fit path built from covariance-derived modes or source shifts
+  is simpler and more faithful than sigma/envelope fallbacks
+- files / symbols touched:
+  - `fit/SignalStrengthFit.hh`
+  - `fit/SignalStrengthFit.cc`
+  - `app/mk_xsec_fit.cc`
+- expected behavior risk: moderate
+- verification commands:
+  - focused CMake builds if ROOT is available
+  - fit-side smoke checks once covariance payloads exist
+- acceptance criteria:
+  - fit semantics no longer depend primarily on envelope survival
+
+### 7. Public-surface check
+- compatibility impact:
+  - this planning pass is docs-only
+  - later cache-schema work will require an explicit `DistributionIO` version
+    bump and migration note
+- migration note or explicit non-goal:
+  - non-goal: import `hive` XML templates or large CLI mode switchboards
+  - non-goal: move persistence ownership out of `io/`
+- reviewer sign-off: user requested a HIVE-informed `syst/` plan/vision before
+  implementation
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- targets or dependencies removed: 0
+- approximate LOC delta: docs-only planning pass; small additive change
+
+### 9. Decision log
+- import `hive`'s covariance semantics, not its orchestration machinery
+- make covariance the canonical systematics contract
+- keep envelopes as derived display summaries
+- keep the full-vector collapse idea explicit for later fit work
+
+### 10. Stop conditions
+- stop after the vision, equations, and staged plan are written and reviewed
+- implementation should start only after the open math conventions are agreed
+
+## ExecPlan Addendum: EventList Branch And Category Format Pass
+
+### 1. Objective
+Rename the persisted EventList truth-category branches and the downstream
+EventListIO-first category API so the on-disk/output names match the new
+analysis terminology:
+
+- `__analysis_channel__` -> `__event_category__`
+- `__is_signal__` -> `__passes_signal_definition__`
+- plot-side category helpers stop using generic `channel` naming for the
+  EventList category surface
+
+### 2. Constraints
+- Preserve the current event-level physics logic.
+- Keep `io/` owning the persistence contract.
+- Prefer EventListIO-surface compatibility over ad hoc downstream fallback.
+- Leave unrelated dirty-worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- `io/` owns persistence only
+- keep module boundaries sharp
+- prefer clear data flow and code that is cheap to change
+
+### 4. System map
+- EventList persistence and branch naming:
+  - `io/EventListIO.hh`
+  - `io/EventListIO.cc`
+  - `io/bits/DERIVED`
+  - `ana/EventListBuild.cc`
+- row-wise downstream consumers:
+  - `plot/PlotDescriptors.hh`
+  - `plot/PlotChannels.hh`
+  - `plot/StackedHist.cc`
+  - `plot/UnstackedHist.cc`
+  - `plot/README`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- verification:
+  - `git diff --check -- ...`
+  - focused builds if ROOT is available
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- move the canonical EventList branch names onto the `EventListIO` persistence
+  surface instead of keeping them as local literals in `ana`
+- make the downstream plot API say `event_category` instead of overloading
+  `channel`
+
+#### stale scaffolding
+- keep old and new branch names interoperable through EventListIO tree aliases
+  rather than forcing downstream call sites to special-case both layouts
+
+### 6. Milestones
+
+#### Milestone A: Rename EventList branches and aliases
+- status: done
+- hypothesis: one canonical persistence owner plus read/write aliases is
+  simpler than leaving the old misleading names in the file format
+- files / symbols touched:
+  - `io/EventListIO.hh`
+  - `io/EventListIO.cc`
+  - `ana/EventListBuild.cc`
+  - `io/bits/DERIVED`
+- expected behavior risk: moderate
+- verification commands:
+  - `git diff --check -- ...`
+  - focused builds if the environment allows
+- acceptance criteria:
+  - new EventList files write the renamed branch names
+  - EventListIO-selected trees expose aliases so downstream EventListIO-based
+    code can use both old and new names during the transition
+- verification results:
+  - `ana/EventListBuild.cc` now writes `__event_category__` and
+    `__passes_signal_definition__` via `EventListIO` branch-name helpers
+  - `io/EventListIO.cc` now applies selected-tree aliases in both directions
+    so old and new files are both queryable through the EventListIO surface
+
+#### Milestone B: Rename plot-side category API
+- status: done
+- hypothesis: downstream row-wise plotting becomes easier to read when its
+  option names and code maps say `event_category`
+- files / symbols touched:
+  - `plot/PlotDescriptors.hh`
+  - `plot/PlotChannels.hh`
+  - `plot/StackedHist.cc`
+  - `plot/UnstackedHist.cc`
+  - `plot/CMakeLists.txt`
+  - `plot/README`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- ...`
+  - focused builds if the environment allows
+- acceptance criteria:
+  - plot-side EventList category helpers no longer use generic `channel`
+    naming for that surface
+- verification results:
+  - `plot/PlotDescriptors.hh` now uses `event_category` option names and
+    defaults to `EventListIO::event_category_branch_name()`
+  - `plot/PlotEventCategories.hh` is the canonical mapper and
+    `plot/PlotChannels.hh` remains as a compatibility include alias
+  - `plot/StackedHist.cc` and `plot/UnstackedHist.cc` now use
+    `EventCategories` and `event_category` terminology throughout the
+    row-wise EventList path
+
+### 7. Public-surface check
+- compatibility impact:
+  - EventList output branch names change on new files
+  - EventListIO-based readers keep transitional compatibility through aliases
+  - `plot/PlotEventCategories.hh` is the new canonical header and
+    `plot/PlotChannels.hh` is preserved as a compatibility include
+- migration note or explicit non-goal:
+  - non-goal: rename fit-side `fit::Channel`
+  - non-goal: change category codes or the signal predicate logic
+- reviewer sign-off: user explicitly requested the deeper branch/file-format pass
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - local branch-name literals in `ana/EventListBuild.cc`
+  - generic plot-side `channel` wording for the EventList category surface
+- shell branches removed: 0
+- stale docs removed:
+  - old EventList branch-name documentation in `io/bits/DERIVED`
+  - old plot README wording that still described the row-wise surface as
+    generic channels
+- targets or dependencies removed: 0
+- approximate LOC delta: moderate rename/schema pass with compatibility aliases
+  instead of downstream special cases
+
+### 9. Decision log
+- use `__event_category__` as the canonical persisted category branch name
+- use `__passes_signal_definition__` as the canonical persisted signal-flag
+  branch name
+- keep transition compatibility at the EventListIO surface via aliases
+
+### 10. Stop conditions
+- stop when the persisted/output names and the EventListIO-first downstream
+  terminology are aligned and verified as far as the environment allows
+
+## ExecPlan Addendum: SignalDefinition And EventCategory Naming
+
+### 1. Objective
+Rename the new analysis-side signal and event-label surfaces so their names
+say exactly what they are:
+
+- `SignalDef` / `SignalDefinition` surface -> `SignalDefinition`
+- `Channels` surface -> `EventCategory`
+
+### 2. Constraints
+- Preserve current `mk_eventlist` behavior.
+- Keep the hardcoded signal definition in `ana/`.
+- Leave unrelated dirty-worktree changes untouched.
+- Keep fit-side `fit::Channel` naming out of scope.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep names direct
+- prefer clear data flow and code that is cheap to change
+
+### 4. System map
+- `ana/SignalDefinition.hh`
+- `ana/SignalDefinition.cc`
+- `ana/EventCategory.hh`
+- `ana/EventListBuild.hh`
+- `ana/EventListBuild.cc`
+- `ana/CMakeLists.txt`
+- `ana/README`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- make the hardcoded signal owner read as a definition, not a shortened alias
+- make the event-label surface read as one event category, not generic
+  “channels”
+
+### 6. Milestones
+
+#### Milestone A: Rename surfaces
+- status: done
+- hypothesis: explicit nouns reduce ambiguity with collider-fit channels and
+  fit-side categorisation
+- files / symbols touched:
+  - `ana/SignalDefinition.hh`
+  - `ana/SignalDefinition.cc`
+  - `ana/EventCategory.hh`
+  - `ana/EventListBuild.hh`
+  - `ana/EventListBuild.cc`
+  - `ana/CMakeLists.txt`
+  - `ana/README`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- ...`
+  - focused CMake builds if the environment allows
+- acceptance criteria:
+  - `ana/` exposes `SignalDefinition` and `EventCategory` by name
+  - fit-side `fit::Channel` remains unchanged
+- verification results:
+  - tracked touched files passed `git diff --check`
+  - new files `ana/EventCategory.hh`, `ana/SignalDefinition.hh`, and `ana/SignalDefinition.cc` produced no whitespace diagnostics under `git diff --no-index --check`
+  - `cmake --build build --target Ana --parallel` is still blocked because the existing `build/` tree points at `/usr/bin/cmake`
+  - a fresh configure in `.build/eventcategory-check` is blocked by missing ROOT / `root-config`
+
+### 7. Public-surface check
+- compatibility impact: installed header names in `ana/` change again in this
+  pass
+- migration note or explicit non-goal:
+  - non-goal: rename `fit::Channel`
+  - non-goal: change event-level physics logic
+- reviewer sign-off: requested directly by the user
+
+### 8. Reduction ledger
+- files deleted:
+  - installed header `ana/Channels.hh` replaced by `ana/EventCategory.hh`
+- wrappers removed:
+  - the generic `channels` naming at the `ana/` event-label surface
+- shell branches removed: 0
+- stale docs removed:
+  - `ana/README` wording that still referred to `SignalDef.hh` and `Channels.hh`
+- targets or dependencies removed: 0
+- approximate LOC delta: mostly naming churn around the public `ana/` surface; behavior unchanged
+
+### 9. Decision log
+- reserve `Channel` for fit-side concepts
+- use `EventCategory` for the event-level selected-event label
+- use `SignalDefinition` for the hardcoded truth-level signal predicate
+
+### 10. Stop conditions
+- stop when the rename is complete and the touched files are verified as far
+  as the environment allows
+
+## ExecPlan Addendum: Canonical SignalDef Surface
+
+### 1. Objective
+Replace the current pseudo-configurable signal-definition plumbing with one
+canonical hardcoded `SignalDef` type that is easier to grep and keeps the
+event-level Lambda signal predicate in one place.
+
+### 2. Constraints
+- Preserve current `mk_eventlist` CLI behavior.
+- Keep `io/` persistence-only.
+- Leave unrelated dirty-worktree changes untouched.
+- Keep the current event-level signal behavior unchanged while folding in the
+  already-present truth-vertex and metadata edits.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- prefer plain data and namespace functions
+- keep workflows in `app/`
+- add abstractions only when they delete complexity
+
+The goal here is to remove fake configurability, not add a new framework.
+
+### 4. System map
+- signal-definition and event-list build path:
+  - `ana/Channels.hh`
+  - `ana/EventListBuild.hh`
+  - `ana/EventListBuild.cc`
+  - `app/mk_eventlist.cc`
+  - `io/EventListIO.hh`
+  - `io/EventListIO.cc`
+- new canonical signal-definition owner:
+  - `ana/SignalDef.hh`
+  - `ana/SignalDef.cc`
+  - `ana/CMakeLists.txt`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- verification:
+  - `git diff --check -- ...`
+  - `cmake --build build --target Ana --parallel`
+  - `cmake --build build --target mk_eventlist --parallel`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- move the event-level Lambda signal predicate out of `Channels.hh` into a
+  dedicated `ana::SignalDef` owner
+- let `Channels.hh` own channel classification only
+
+#### wrapper collapse
+- drop `BuildConfig.signal_definition` so the hardcoded predicate stops
+  pretending to be runtime configuration
+
+#### stale scaffolding
+- keep EventList metadata summary generation with the canonical definition
+  instead of hand-building it at the call site
+
+### 6. Milestones
+
+#### Milestone A: Introduce canonical SignalDef
+- status: done
+- hypothesis: one named class with one hardcoded definition is smaller and
+  clearer than a configurable-looking struct threaded through build config
+- files / symbols touched:
+  - `ana/SignalDef.hh`
+  - `ana/SignalDef.cc`
+  - `ana/Channels.hh`
+  - `ana/EventListBuild.hh`
+  - `ana/EventListBuild.cc`
+  - `ana/CMakeLists.txt`
+  - `app/mk_eventlist.cc`
+  - `io/EventListIO.hh`
+  - `io/EventListIO.cc`
+- expected behavior risk: low to moderate
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/CMakeLists.txt ana/SignalDef.hh ana/SignalDef.cc ana/Channels.hh ana/EventListBuild.hh ana/EventListBuild.cc app/mk_eventlist.cc io/EventListIO.hh io/EventListIO.cc`
+  - `cmake --build build --target Ana --parallel`
+  - `cmake --build build --target mk_eventlist --parallel`
+- acceptance criteria:
+  - one canonical `SignalDef` owns the event-level Lambda signal predicate
+  - `EventListBuild` uses that canonical definition directly
+  - current `mk_eventlist` CLI behavior is unchanged
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/CMakeLists.txt ana/README ana/SignalDef.hh ana/SignalDef.cc ana/Channels.hh ana/EventListBuild.hh ana/EventListBuild.cc io/EventListIO.hh io/EventListIO.cc` passed on tracked touched files
+  - `git diff --no-index --check -- /dev/null ana/SignalDef.hh` and `git diff --no-index --check -- /dev/null ana/SignalDef.cc` produced no whitespace diagnostics for the new files
+  - `cmake --build build --target Ana --parallel` and `cmake --build build --target mk_eventlist --parallel` are blocked because the existing `build/` tree still references `/usr/bin/cmake`
+  - fresh configure at `.build/signaldef-check` is blocked by missing ROOT / `root-config`
+
+### 7. Public-surface check
+- compatibility impact: additive new `ana/SignalDef.hh`; `ana::BuildConfig`
+  stops advertising signal-definition customization that the CLI never
+  exposed
+- migration note or explicit non-goal:
+  - non-goal: expose new signal-definition runtime options
+  - non-goal: change the physics cuts in this pass
+- reviewer sign-off: user explicitly requested a dedicated `SignalDef` class
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - `BuildConfig.signal_definition`
+  - the signal-predicate ownership from `ana/Channels.hh`
+- shell branches removed: 0
+- stale docs removed: 0
+- targets or dependencies removed: 0
+- approximate LOC delta: about +490 / -180 including the new signal-definition files and tracking updates
+
+### 9. Decision log
+- keep one canonical hardcoded signal definition in `ana/`
+- preserve the in-flight truth-vertex-aware logic instead of reverting it
+
+### 10. Stop conditions
+- stop when the signal predicate has one owner, the fake config seam is gone,
+  and focused verification has run
+- stop before widening into broader event-channel redesign
+
 ## ExecPlan Addendum: Spectrum And SampleIO Seam Trim
 
 ### 1. Objective

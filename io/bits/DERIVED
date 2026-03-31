@@ -66,6 +66,7 @@ Top-level metadata written in meta/:
   subrun_tree_name
   selection_name
   selection_expr
+  signal_definition
   slice_required_count
   slice_min_topology_score
   numi_run_boundary
@@ -206,24 +207,33 @@ Current preset resolution rules:
   muon
     prefers __pass_muon__, then sel_muon, then selection_pass > 0
 
-Framework-owned truth-category columns
+Framework-owned event-category columns
 --------------------------------------
 
 For MC-like, external, and data samples, EventListIO also writes:
 
-  __analysis_channel__             int
-  __is_signal__                    bool
+  __event_category__               int
+  __passes_signal_definition__     bool
 
 Meaning:
 
-  __analysis_channel__
-    Canonical framework-owned channel code derived from sample origin and
+  __event_category__
+    Canonical framework-owned event-category code derived from sample origin and
     copied truth/event content.
 
-  __is_signal__
-    Lambda-channel signal flag derived from the copied event content.
+  __passes_signal_definition__
+    Canonical framework-owned signal-definition flag derived from the copied
+    event content.
 
-Current channel codes:
+Legacy compatibility:
+
+  EventListIO sets selected-tree aliases so old and new files can be queried
+  with either naming pair:
+
+    __analysis_channel__           alias for __event_category__
+    __is_signal__                  alias for __passes_signal_definition__
+
+Current event-category codes:
 
   0   unknown
   1   external
@@ -280,12 +290,12 @@ Legacy fallback inputs when `g4_all_lambda_*` are absent:
 For data and external samples:
 
   data
-    __analysis_channel__ = 99
-    __is_signal__ = false
+    __event_category__ = 99
+    __passes_signal_definition__ = false
 
   external
-    __analysis_channel__ = 1
-    __is_signal__ = false
+    __event_category__ = 1
+    __passes_signal_definition__ = false
 
 Orthogonal sample filtering
 ---------------------------
@@ -447,8 +457,8 @@ columns to treat as stable are:
   __pass_slice__
   __pass_fiducial__
   __pass_muon__
-  __analysis_channel__
-  __is_signal__
+  __event_category__
+  __passes_signal_definition__
 
 For training snapshots, it is reasonable to export both upstream physics
 branches and selected framework-owned helper columns, especially:

@@ -14,6 +14,13 @@ class EventListIO
 public:
     enum class Mode { kRead, kWrite, kUpdate };
 
+    static constexpr const char *event_weight_normalisation_branch_name() { return "__w_norm__"; }
+    static constexpr const char *event_weight_central_value_branch_name() { return "__w_cv__"; }
+    static constexpr const char *event_weight_branch_name() { return "__w__"; }
+    static constexpr const char *event_weight_squared_branch_name() { return "__w2__"; }
+    static constexpr const char *event_category_branch_name() { return "__event_category__"; }
+    static constexpr const char *passes_signal_definition_branch_name() { return "__passes_signal_definition__"; }
+
     struct Metadata
     {
         std::string dataset_path;
@@ -22,6 +29,7 @@ public:
         std::string subrun_tree_name;
         std::string selection_name;
         std::string selection_expr;
+        std::string signal_definition;
         int slice_required_count = 1;
         double slice_min_topology_score = 0.06;
         int numi_run_boundary = 16880;

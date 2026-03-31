@@ -15,7 +15,7 @@
 #include "TPad.h"
 #include "THStack.h"
 
-#include "PlotChannels.hh"
+#include "PlotEventCategories.hh"
 #include "Plotter.hh"
 #include "PlottingHelper.hh"
 #include "bits/DataMcHistogramUtils.hh"
@@ -139,9 +139,9 @@ namespace plot_utils
     void UnstackedHist::build_histograms()
     {
         overlay_ = std::make_unique<THStack>((plot_name_ + "_overlay").c_str(), spec_.axis_title().c_str());
-        mc_ch_hists_.clear();
-        chan_order_.clear();
-        chan_event_yields_.clear();
+        mc_event_category_hists_.clear();
+        event_category_order_.clear();
+        event_category_yields_.clear();
         mc_total_.reset();
         mc_unc_band_.reset();
         data_hist_.reset();
@@ -151,10 +151,10 @@ namespace plot_utils
         legend_.reset();
         density_mode_ = false;
 
-        const std::vector<int> channels =
-            opt_.unstack_channel_keys.empty() ? Channels::mc_keys() : opt_.unstack_channel_keys;
+        const std::vector<int> event_categories =
+            opt_.unstack_event_category_keys.empty() ? EventCategories::mc_keys() : opt_.unstack_event_category_keys;
 
-        std::map<int, std::unique_ptr<TH1D>> sum_by_channel;
+        std::map<int, std::unique_ptr<TH1D>> sum_by_event_category;
         for (const Entry *entry : mc_)
         {
             if (!entry)
@@ -163,21 +163,21 @@ namespace plot_utils
             if (!tree)
                 continue;
 
-            for (int ch : channels)
+            for (int event_category : event_categories)
             {
                 const std::string hist_name =
-                    plot_name_ + "_mc_" + std::to_string(ch) + "_" + TH1DModel::sanitise(entry->sample_key);
+                    plot_name_ + "_mc_" + std::to_string(event_category) + "_" + TH1DModel::sanitise(entry->sample_key);
                 auto part = book_histogram(spec_, hist_name);
                 fill_histogram(tree,
                                *part,
                                spec_,
-                               combine_selection({spec_.selection, equality_selection(opt_.channel_column, ch)}),
+                               combine_selection({spec_.selection, equality_selection(opt_.event_category_column, event_category)}),
                                true);
 
-                auto &sum = sum_by_channel[ch];
+                auto &sum = sum_by_event_category[event_category];
                 if (!sum)
                 {
-                    sum.reset(static_cast<TH1D *>(part->Clone((plot_name_ + "_sum_" + std::to_string(ch)).c_str())));
+                    sum.reset(static_cast<TH1D *>(part->Clone((plot_name_ + "_sum_" + std::to_string(event_category)).c_str())));
                     sum->SetDirectory(nullptr);
                 }
                 else
@@ -188,7 +188,7 @@ namespace plot_utils
         }
 
         std::vector<std::pair<int, double>> yields;
-        for (auto &kv : sum_by_channel)
+        for (auto &kv : sum_by_event_category)
         {
             if (kv.second)
                 yields.emplace_back(kv.first, kv.second->Integral());
@@ -202,13 +202,13 @@ namespace plot_utils
         for (std::size_t i = 0; i < yields.size(); ++i)
         {
             const int ch = yields[i].first;
-            auto it = sum_by_channel.find(ch);
-            if (it == sum_by_channel.end() || !it->second)
+            auto it = sum_by_event_category.find(ch);
+            if (it == sum_by_event_category.end() || !it->second)
                 continue;
 
-            int colour = Channels::colour(ch);
-            auto colour_it = opt_.unstack_channel_colours.find(ch);
-            if (colour_it != opt_.unstack_channel_colours.end())
+            int colour = EventCategories::colour(ch);
+            auto colour_it = opt_.unstack_event_category_colours.find(ch);
+            if (colour_it != opt_.unstack_event_category_colours.end())
                 colour = colour_it->second;
 
             it->second->SetFillStyle(0);
@@ -217,12 +217,12 @@ namespace plot_utils
             it->second->SetLineStyle(line_style_for_index(i));
 
             overlay_->Add(it->second.get(), "HIST");
-            mc_ch_hists_.push_back(std::move(it->second));
-            chan_order_.push_back(ch);
-            chan_event_yields_.push_back(yields[i].second);
+            mc_event_category_hists_.push_back(std::move(it->second));
+            event_category_order_.push_back(ch);
+            event_category_yields_.push_back(yields[i].second);
         }
 
-        for (const auto &hist : mc_ch_hists_)
+        for (const auto &hist : mc_event_category_hists_)
         {
             if (!hist)
                 continue;
@@ -268,15 +268,15 @@ namespace plot_utils
             data_hist_->SetFillStyle(0);
         }
 
-        if (opt_.overlay_signal && !opt_.signal_channels.empty() && mc_total_ && !mc_ch_hists_.empty())
+        if (opt_.overlay_signal && !opt_.signal_event_categories.empty() && mc_total_ && !mc_event_category_hists_.empty())
         {
-            auto sig = std::unique_ptr<TH1D>(static_cast<TH1D *>(mc_ch_hists_.front()->Clone((plot_name_ + "_sig").c_str())));
+            auto sig = std::unique_ptr<TH1D>(static_cast<TH1D *>(mc_event_category_hists_.front()->Clone((plot_name_ + "_sig").c_str())));
             sig->Reset();
-            for (std::size_t i = 0; i < mc_ch_hists_.size(); ++i)
+            for (std::size_t i = 0; i < mc_event_category_hists_.size(); ++i)
             {
-                const int ch = chan_order_.at(i);
-                if (std::find(opt_.signal_channels.begin(), opt_.signal_channels.end(), ch) != opt_.signal_channels.end())
-                    sig->Add(mc_ch_hists_[i].get());
+                const int ch = event_category_order_.at(i);
+                if (std::find(opt_.signal_event_categories.begin(), opt_.signal_event_categories.end(), ch) != opt_.signal_event_categories.end())
+                    sig->Add(mc_event_category_hists_[i].get());
             }
 
             const double signal_events = bits::integral_in_visible_range(*sig, spec_.xmin, spec_.xmax);
@@ -300,7 +300,7 @@ namespace plot_utils
                     hist->Scale(1.0, "width");
             };
 
-            for (auto &hist : mc_ch_hists_)
+            for (auto &hist : mc_event_category_hists_)
                 scale_width(hist);
             scale_width(mc_total_);
             scale_width(data_hist_);
@@ -324,7 +324,7 @@ namespace plot_utils
         }
 
         max_y = 0.0;
-        for (const auto &hist : mc_ch_hists_)
+        for (const auto &hist : mc_event_category_hists_)
         {
             if (hist)
                 max_y = std::max(max_y, bits::maximum_in_visible_range(*hist, spec_.xmin, spec_.xmax, false));
@@ -382,7 +382,7 @@ namespace plot_utils
             mc_unc_band_->Draw("E2 SAME");
         }
 
-        for (auto &hist : mc_ch_hists_)
+        for (auto &hist : mc_event_category_hists_)
         {
             if (hist)
                 hist->Draw("HIST SAME");
@@ -460,7 +460,7 @@ namespace plot_utils
         legend_->SetFillStyle(0);
         legend_->SetTextFont(42);
         if (opt_.legend_on_top)
-            legend_->SetNColumns(mc_ch_hists_.size() > 4 ? 3 : 2);
+            legend_->SetNColumns(mc_event_category_hists_.size() > 4 ? 3 : 2);
 
         if (has_data())
             legend_->AddEntry(data_hist_.get(), "Data", "lep");
@@ -471,16 +471,16 @@ namespace plot_utils
         if (sig_hist_)
             legend_->AddEntry(sig_hist_.get(), "Signal overlay", "l");
 
-        for (std::size_t i = 0; i < mc_ch_hists_.size(); ++i)
+        for (std::size_t i = 0; i < mc_event_category_hists_.size(); ++i)
         {
-            const int ch = chan_order_.at(i);
-            std::string label = Channels::label(ch);
-            auto label_it = opt_.unstack_channel_labels.find(ch);
-            if (label_it != opt_.unstack_channel_labels.end())
+            const int ch = event_category_order_.at(i);
+            std::string label = EventCategories::label(ch);
+            auto label_it = opt_.unstack_event_category_labels.find(ch);
+            if (label_it != opt_.unstack_event_category_labels.end())
                 label = label_it->second;
-            if (opt_.annotate_numbers && i < chan_event_yields_.size())
-                label += " : " + Plotter::fmt_commas(chan_event_yields_[i], 2);
-            legend_->AddEntry(mc_ch_hists_[i].get(), label.c_str(), "l");
+            if (opt_.annotate_numbers && i < event_category_yields_.size())
+                label += " : " + Plotter::fmt_commas(event_category_yields_[i], 2);
+            legend_->AddEntry(mc_event_category_hists_[i].get(), label.c_str(), "l");
         }
 
         legend_->Draw();
