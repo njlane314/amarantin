@@ -2011,3 +2011,61 @@
 - if you want true generalisation rather than better ownership, the next step
   is a `BuildConfig`-level sample-filter policy surface instead of another
   hardcoded analysis helper
+
+---
+
+## Current milestone
+- status: done
+- subsystem: fit CLI public-surface rename
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep the surface
+  small and cheap to change, and avoid unnecessary churn beyond the real user
+  interface
+
+## What changed
+- renamed the app target and installed executable from `mk_xsec_fit` to
+  `mk_fit`
+- updated fit CLI help, success messages, and error-prefix handling so the
+  user-facing program name is consistently `mk_fit`
+- updated the current workflow docs and architecture notes to teach `mk_fit`
+  as the canonical downstream fit executable
+- kept `app/mk_xsec_fit.cc` in place so this pass stayed on the executable
+  surface instead of widening into source-file rename churn
+
+## Why this is simpler
+- `mk_fit` is shorter, easier to type, and easier to teach in examples
+- the rename stayed local to the real public surface: build target, binary
+  name, CLI text, and current docs
+- leaving the source file path alone kept the change small while still making
+  the user-facing interface consistent
+
+## Verification
+- local checks:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/CMakeLists.txt app/mk_xsec_fit.cc COMMANDS USAGE INSTALL fit/README VISION.md INVARIANTS.md docs/repo-internals.puml`
+- Docker checks:
+  - `docker build -t amarantin-dev .`
+  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/mk-fit-rename-docker -DCMAKE_BUILD_TYPE=Release && cmake --build .build/mk-fit-rename-docker --target mk_fit --parallel && (.build/mk-fit-rename-docker/bin/mk_fit --help || true) > /tmp/mk_fit.help 2>&1 && ! grep -q -- "mk_xsec_fit" /tmp/mk_fit.help && grep -q -- "usage: mk_fit" /tmp/mk_fit.help'`
+- results:
+  - tracked-file `git diff --check` passed
+  - fresh Docker configure/build passed
+  - the Docker smoke confirmed `usage: mk_fit` and no remaining
+    `mk_xsec_fit` string in the help output
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed:
+  - current workflow references to `mk_xsec_fit`
+- approximate LOC delta:
+  - small build-surface and doc-surface rename
+  - no source-file move in this pass
+
+## Decisions
+- rename the executable target now, but keep `app/mk_xsec_fit.cc` as the
+  implementation file to avoid unnecessary rename churn
+- treat `docs/minimality-log.md` historical `mk_xsec_fit` references as
+  historical record rather than rewrite old milestones
+
+## Remaining hotspots
+- if you later want the source tree to match the new executable name exactly,
+  the follow-up is a pure file-rename pass for `app/mk_xsec_fit.cc`

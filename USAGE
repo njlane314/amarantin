@@ -149,26 +149,26 @@ run/subrun normalization table using the event-tree `run` and `subRun`
 branches, resolves `__w_cv__` from the central-value physics weights, and
 persists `__w__ = __w_norm__ * __w_cv__` plus `__w2__`.
 
-Basic mk_xsec_fit usage
------------------------
+Basic mk_fit usage
+------------------
 
 General form:
 
-    build/bin/mk_xsec_fit [--signal-process <name>] [--output <path>] [--mu-start <value>] [--mu-lower <value>] [--mu-upper <value>] [--selection <expr>] [--data-bins <csv>] [--signal-cache <key>] [--background-cache <key>] [--allow-zero-data] input.dists.root signal-sample-key background-sample-key channel-key
+    build/bin/mk_fit [--signal-process <name>] [--output <path>] [--mu-start <value>] [--mu-lower <value>] [--mu-upper <value>] [--selection <expr>] [--data-bins <csv>] [--signal-cache <key>] [--background-cache <key>] [--allow-zero-data] input.dists.root signal-sample-key background-sample-key channel-key
 
 or:
 
-    build/bin/mk_xsec_fit [fit flags] [--selection <expr>] [--data-bins <csv>] [--manifest <fit.manifest>] [--allow-zero-data] input.dists.root channel-key
+    build/bin/mk_fit [fit flags] [--selection <expr>] [--data-bins <csv>] [--manifest <fit.manifest>] [--allow-zero-data] input.dists.root channel-key
 
 Example:
 
-    build/bin/mk_xsec_fit \
+    build/bin/mk_fit \
       --manifest muon_region.fit.manifest \
       --output build/fits/muon_region.fit.txt \
       build/dists/run1-numi-fhc.root \
       muon_region
 
-The mk_xsec_fit program reads cached `DistributionIO` entries directly, builds
+The mk_fit program reads cached `DistributionIO` entries directly, builds
 one in-memory fit channel, profiles the signal-strength parameter `mu`, and
 prints or writes a plain-text report.
 If every observed bin is zero, the CLI now requires `--allow-zero-data` so an
@@ -406,7 +406,7 @@ Running a native xsec fit by hand
 Once a cached DistributionIO file already exists, run the native fit
 directly:
 
-    build/bin/mk_xsec_fit \
+    build/bin/mk_fit \
       --manifest muon_region.fit.manifest \
       --output build/fits/muon_region.fit.txt \
       build/dists/run1-numi-fhc.root \
@@ -430,7 +430,7 @@ Reading one manifest row from left to right:
   * process name inside the fit channel
   * process kind: signal, background, or data
   * cached sample key inside DistributionIO
-  * optional explicit cache key; if omitted, mk_xsec_fit uses the first cache
+  * optional explicit cache key; if omitted, mk_fit uses the first cache
 
 Rows with kind `data` are not added as fit processes; they are summed into the
 observed channel bins automatically and recorded as observed-data provenance.
@@ -640,7 +640,7 @@ Typical fit workflow
 
 After a DistributionIO cache already exists, fit it directly:
 
-    build/bin/mk_xsec_fit \
+    build/bin/mk_fit \
       --manifest muon_region.fit.manifest \
       --output build/fits/muon_region.fit.txt \
       build/dists/run1-numi-fhc.root \
@@ -755,7 +755,7 @@ Then build and run:
       beam-s0 \
       topological_score \
       50 0 1
-    build/bin/mk_xsec_fit \
+    build/bin/mk_fit \
       --manifest muon_region.fit.manifest \
       --output build/fits/muon_region.fit.txt \
       build/dists/run1-numi-fhc.root \

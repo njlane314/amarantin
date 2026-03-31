@@ -4,7 +4,7 @@ amarantin
 Native fit library
 ------------------
 The preferred persisted downstream analysis surface is `DistributionIO`.
-`mk_xsec_fit` now reads cached `DistributionIO` entries directly and assembles
+`mk_fit` now reads cached `DistributionIO` entries directly and assembles
 one in-memory `fit::Channel` for the fit. No persistent channel bundle is
 required by the native workflow.
 
@@ -21,7 +21,7 @@ The small public surface is:
 
 Typical workflow:
 
-  build/bin/mk_xsec_fit \
+  build/bin/mk_fit \
     --manifest numu_signal_region.fit.manifest \
     --output build/fits/numu_signal_region.fit.txt \
     build/dists/final.dists.root \
@@ -35,8 +35,9 @@ Rows with kind `data` fill the observed bins automatically. Without manifest
 data rows, pass `--data-bins` or use `--allow-zero-data` when an empty
 observation is intentional.
 
-For programmatic use, `app/mk_xsec_fit.cc` is the reference path for turning
-cached `DistributionIO::Spectrum` payloads into one `fit::Channel`.
+For programmatic use, `app/mk_xsec_fit.cc` remains the reference path behind
+the `mk_fit` CLI for turning cached `DistributionIO::Spectrum` payloads into
+one `fit::Channel`.
 
 The default problem builder now shares family nuisances across processes,
 prefers explicit detector source shifts from cached `DistributionIO` entries,

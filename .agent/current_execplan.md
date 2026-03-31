@@ -2890,7 +2890,7 @@ This pass is a surface simplification, not a behavior change.
 ### 6. Milestones
 
 #### Milestone A: Rename the fit CLI surface to `mk_fit`
-- status: in_progress
+- status: done
 - hypothesis: a shorter executable name is easier to type and teach, and the
   change stays small if it is limited to the target name plus current docs
 - files / symbols touched:
@@ -2913,6 +2913,13 @@ This pass is a surface simplification, not a behavior change.
   - the CMake app target is `mk_fit`
   - CLI help and status/error messages say `mk_fit`
   - current docs teach `mk_fit` as the canonical fit executable
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/CMakeLists.txt app/mk_xsec_fit.cc COMMANDS USAGE INSTALL fit/README VISION.md INVARIANTS.md docs/repo-internals.puml` passed
+  - Docker verification passed in a fresh Linux build tree:
+    - `docker build -t amarantin-dev .`
+    - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/mk-fit-rename-docker -DCMAKE_BUILD_TYPE=Release && cmake --build .build/mk-fit-rename-docker --target mk_fit --parallel && (.build/mk-fit-rename-docker/bin/mk_fit --help || true) > /tmp/mk_fit.help 2>&1 && ! grep -q -- "mk_xsec_fit" /tmp/mk_fit.help && grep -q -- "usage: mk_fit" /tmp/mk_fit.help'`
+    - built target summary included:
+      - `Built target mk_fit`
 
 ### 7. Public-surface check
 - compatibility impact:
@@ -2929,10 +2936,11 @@ This pass is a surface simplification, not a behavior change.
 - wrappers removed: 0
 - shell branches removed: 0
 - stale docs removed:
-  - pending: current workflow docs still naming `mk_xsec_fit`
+  - current workflow docs still naming `mk_xsec_fit`
 - targets or dependencies removed:
-  - pending: `mk_xsec_fit` target name
-- approximate LOC delta: expected small doc/build-surface rename
+  - `mk_xsec_fit` target name
+- approximate LOC delta: small doc/build-surface rename with no source-file
+  move
 
 ### 9. Decision log
 - rename the executable target and user-facing strings without renaming the

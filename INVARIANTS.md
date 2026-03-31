@@ -39,7 +39,8 @@ non-negotiable.
 - Installed public headers remain under
   `${CMAKE_INSTALL_INCLUDEDIR}/amarantin`.
 - Existing documented executables remain available by default:
-  `mk_sample`, `mk_dataset`, `mk_eventlist`, `mk_channel`, `mk_xsec_fit`.
+  `mk_sample`, `mk_dataset`, `mk_eventlist`, `mk_dist`, `mk_fit`,
+  `mk_sbnfit_cov`.
 - CLI evolution is additive-first. Add the new path before removing or
   repurposing documented old flags, positional forms, or workflows.
 - External behavior is preserved by default. Any approved break needs an

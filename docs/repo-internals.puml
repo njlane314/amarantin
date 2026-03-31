@@ -125,7 +125,7 @@ package "Persistent surfaces" {
 package "Read side" <<art>> {
   component "row-wise reads\nsnapshot::*\ndraw_event_display(...)\nevaluate(... direct)" as ROW_READ <<tools>>
   component "cached reads\nmake_histogram(...)\nevaluate(... cached)" as BIN_READ <<tools>>
-  component "mk_xsec_fit\nuses fit::profile_signal_strength(...)" as FIT <<art>>
+  component "mk_fit\nuses fit::profile_signal_strength(...)" as FIT <<art>>
   artifact "fit report\nplain-text summary" as REPORT <<data>>
 
   ROW_READ -[hidden]down-> BIN_READ

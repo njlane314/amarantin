@@ -626,7 +626,7 @@ By default, the repository should preserve a small stable external surface:
 
 - installed libraries: `IO`, `Ana`, `Syst`, `Plot`, `Fit`
 - command-line tools: `mk_sample`, `mk_dataset`, `mk_eventlist`,
-  `mk_dist`, `mk_xsec_fit`
+  `mk_dist`, `mk_fit`
 - plain-text workflow inputs where possible
 - installed public headers that map cleanly onto the real module boundaries
 
