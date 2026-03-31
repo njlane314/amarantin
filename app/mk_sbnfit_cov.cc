@@ -959,8 +959,7 @@ namespace
         return component;
     }
 
-    void write_single_nominal_histogram(TFile &output,
-                                        const DistributionIO::Spectrum &spectrum,
+    void write_single_nominal_histogram(const DistributionIO::Spectrum &spectrum,
                                         const CliOptions &options)
     {
         const int nbins = spectrum.spec.nbins;
@@ -975,8 +974,7 @@ namespace
         nominal_hist.Write(options.nominal_name.c_str());
     }
 
-    void write_stacked_nominal_histogram(TFile &output,
-                                         const std::vector<LoadedEntry> &entries,
+    void write_stacked_nominal_histogram(const std::vector<LoadedEntry> &entries,
                                          const CliOptions &options)
     {
         const int total_nbins = stacked_nbins(entries);
@@ -997,8 +995,7 @@ namespace
         nominal_hist.Write(options.nominal_name.c_str());
     }
 
-    void write_stack_manifest(TFile &output,
-                              const std::vector<LoadedEntry> &entries)
+    void write_stack_manifest(const std::vector<LoadedEntry> &entries)
     {
         std::string label;
         std::string sample_key;
@@ -1032,8 +1029,7 @@ namespace
         tree.Write("stack_manifest");
     }
 
-    void write_component_outputs(TFile &output,
-                                 const CliOptions &options,
+    void write_component_outputs(const CliOptions &options,
                                  const std::vector<double> &nominal,
                                  const std::vector<MatrixComponent> &components,
                                  std::vector<std::string> &included_components,
@@ -1100,8 +1096,8 @@ int main(int argc, char **argv)
         if (options.stacked_mode())
         {
             nominal = stacked_nominal(entries);
-            write_stacked_nominal_histogram(output, entries, options);
-            write_stack_manifest(output, entries);
+            write_stacked_nominal_histogram(entries, options);
+            write_stack_manifest(entries);
 
             components.push_back(stacked_shift_component(entries,
                                                          ShiftLaneKind::kDetector,
@@ -1123,7 +1119,7 @@ int main(int argc, char **argv)
                 throw std::runtime_error("mk_sbnfit_cov: nominal payload size does not match cached nbins");
 
             nominal = spectrum.nominal;
-            write_single_nominal_histogram(output, spectrum, options);
+            write_single_nominal_histogram(spectrum, options);
 
             components.push_back(component_from_detector(spectrum));
             components.push_back(component_from_genie_knobs(spectrum));
@@ -1134,8 +1130,7 @@ int main(int argc, char **argv)
 
         std::vector<std::string> included_components;
         std::vector<std::string> approximate_components;
-        write_component_outputs(output,
-                                options,
+        write_component_outputs(options,
                                 nominal,
                                 components,
                                 included_components,
