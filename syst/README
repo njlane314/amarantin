@@ -13,9 +13,9 @@ does not render plots. Its job is:
 
   selected rows
       ->
-  nominal histogram + systematic variations
+  nominal histogram + detector / universe variations
       ->
-  per-bin summaries
+  covariance-first family summaries
       ->
   optional DistributionIO cache
 
@@ -64,6 +64,109 @@ This is the important conceptual split:
 - GENIE / flux / reinteraction systematics are alternate weights on the
   nominal selected sample
 
+Math sketch
+-----------
+The internal math is easiest to read as one nominal yield plus two kinds of
+systematic shift objects:
+
+  selected rows
+      |
+      v
+  nominal yield y
+      |
+      +--> detector source shifts s^(d)
+      |         |
+      |         v
+      |     V^det = sum_d s^(d) (s^(d))^T
+      |
+      +--> universe-family shifts Delta^(u)
+                |
+                v
+            V^F = (1/N) sum_u Delta^(u) (Delta^(u))^T
+      |
+      v
+  sigma_i = sqrt(max(V_ii, 0))
+      |
+      v
+  derived envelopes and total band
+
+The canonical persisted object for reweight families is the absolute covariance
+matrix `V`, not the derived `sigma` band.
+
+### Nominal yield
+
+For one histogram bin `i`, the nominal yield is:
+
+  y_i = sum_e w_e * 1[e -> bin i]
+
+where `w_e` is the persisted central event weight `__w__`.
+
+### Detector-source covariance
+
+For detector source `d`, syst/ builds one source-local central-value histogram
+and one varied histogram on the same requested observable and binning:
+
+  s_i^(d) = y_i^(var,d) - y_i^(cv,d)
+
+The detector covariance is then the sum of outer products:
+
+  V^det_ij = sum_d s_i^(d) * s_j^(d)
+
+The returned detector band is derived from the diagonal only:
+
+  sigma_i^det = sqrt(max(V^det_ii, 0))
+  y_i^det,down = max(0, y_i - sigma_i^det)
+  y_i^det,up   = y_i + sigma_i^det
+
+### Reweight-family covariance
+
+For universe `u` in one family `F`, the rebinned universe prediction is:
+
+  y_i^(u) = sum_e w_e * alpha_(e,u) * 1[e -> bin i]
+
+where `alpha_(e,u)` is the decoded universe weight on event `e`.
+
+The universe shift relative to the nominal prediction is:
+
+  Delta_i^(u) = y_i^(u) - y_i
+
+and the family covariance uses the internal `1/N` normalization:
+
+  V^F_ij = (1/N) * sum_u Delta_i^(u) * Delta_j^(u)
+
+The derived per-bin family sigma is:
+
+  sigma_i^F = sqrt(max(V^F_ii, 0))
+
+If eigenmode compression is enabled, it is derived from the covariance
+eigendecomposition:
+
+  V^F = U Lambda U^T
+  mode_k = sqrt(lambda_k) * u_k
+
+### Exact rebinning
+
+If a cached covariance is rebinned later, the exact transform is:
+
+  V' = R * V * R^T
+
+where `R` is the linear rebin matrix from the cached fine binning to the
+requested target binning.
+
+### Total band
+
+The current merged `total_down` / `total_up` summary is a binwise quadrature
+band, not a separately persisted total covariance matrix:
+
+  (sigma_i^tot)^2 =
+      (sigma_i^det)^2 +
+      (sigma_i^genie)^2 +
+      (sigma_i^flux)^2 +
+      (sigma_i^reint)^2
+
+  y_i^tot,down = max(0, y_i - sigma_i^tot)
+  y_i^tot,up   = y_i + sigma_i^tot
+
 Systematic lanes
 ----------------
 The library currently handles those two kinds of systematic inputs.
@@ -78,9 +181,13 @@ The usual shape is:
       +
   detector-variation sample keys
       ->
-  one nominal histogram + many detector variation histograms
+  one nominal histogram + one CV/varied pair per named detector source
       ->
-  per-bin detector envelope
+  detector source shifts
+      ->
+  detector covariance
+      ->
+  derived detector envelope
 
 The detector variation keys can be supplied explicitly through
 `SystematicsOptions::detector_sample_keys` or inferred from
@@ -89,9 +196,16 @@ The detector variation keys can be supplied explicitly through
 For detector systematics, syst/:
 
 - fills one histogram for the nominal sample
-- fills one histogram for each detector variation sample
-- stores the detector templates in the cache when building a persistent entry
-- reduces those templates to a simple per-bin envelope:
+- resolves one source-local detector CV sample and one varied sample for each
+  named detector source when that metadata is available
+- forms one detector shift vector per source:
+  - `s^(d) = y^(var,d) - y^(cv,d)`
+- sums those source outer products into detector covariance:
+  - `V^det = sum_d s^(d) (s^(d))^T`
+- stores detector source labels, matched sample keys, shift vectors, detector
+  covariance, and detector templates in the cache when building a persistent
+  entry
+- derives the detector envelope from the detector covariance diagonal:
   - `detector.down`
   - `detector.up`
 
@@ -118,6 +232,10 @@ For each enabled family, syst/:
   - optional eigenmode compression
   - a derived envelope built from `nominal +/- sigma`
 
+The important detail is that `sigma`, compressed modes, and envelopes are all
+derived from the family covariance. The covariance is the family truth that
+survives cache write/read and exact later rebinning.
+
 So detector systematics come from separate event-list samples, while the
 reweightable families come from alternate weights on the nominal sample.
 
@@ -141,12 +259,16 @@ This nominal histogram is the reference for all later comparisons.
 If detector systematics are enabled:
 
 - collect the detector variation sample keys
-- open each detector variation tree from `EventListIO`
-- fill the same histogram for each detector variation sample
-- compare those histograms to the nominal histogram bin-by-bin
+- resolve named detector sources against their source-local CV samples
+- fill the same histogram for each detector CV and varied sample
+- build one source shift vector:
+  - `s^(d) = y^(var,d) - y^(cv,d)`
+- sum those shifts into detector covariance:
+  - `V^det = sum_d s^(d) (s^(d))^T`
 - build:
-  - detector templates for persistent cache storage
-  - detector envelope `down` / `up` for the returned result
+  - detector templates for persistent cache storage and fallback compatibility
+  - detector covariance for canonical cache storage
+  - detector envelope `down` / `up` as a diagonal-derived summary
 
 This lane answers:
 
@@ -160,7 +282,10 @@ If `genie`, `flux`, or `reint` are enabled:
 - stay on the nominal tree
 - read the corresponding multi-universe weight branch
 - refill the same binned observable once per universe
-- convert the universe set into a covariance-first family summary
+- form one universe shift vector per universe:
+  - `Delta^(u) = y^(u) - y`
+- convert the universe set into a covariance-first family summary:
+  - `V^F = (1/N) sum_u Delta^(u) (Delta^(u))^T`
 - derive:
   - per-bin `sigma`
   - optional eigenmode compression
@@ -178,8 +303,9 @@ After the detector lane and reweighting lane are built, syst/ combines them into
 
 The current combination is bin-by-bin:
 
-- take the detector shift from the detector envelope, if present
-- take the per-bin `sigma` from each enabled universe family
+- take `sigma^det` from the detector covariance diagonal, via the derived
+  detector envelope, if present
+- take the per-bin `sigma` from each enabled universe family covariance
 - add those contributions in quadrature
 - apply the final downward or upward shift to the nominal bin
 
@@ -218,7 +344,11 @@ The cached `DistributionIO::Spectrum` holds:
 
 - nominal bins
 - `sumw2`
-- detector sample keys
+- detector source labels
+- detector source-local CV sample keys
+- detector variation sample keys
+- detector shift vectors
+- detector covariance
 - detector templates and detector envelope
 - family `sigma`
 - family covariance
@@ -240,8 +370,13 @@ reusing stale entries.
 
 Rebinning note
 --------------
-Exact later rebinning of a universe family requires at least one of these
-stored summaries:
+Exact later rebinning of a covariance-carrying family or detector payload uses
+the linear transform:
+
+  V' = R * V * R^T
+
+Exact later rebinning of a universe family therefore requires at least one of
+these stored summaries:
 
 - covariance
 - eigenmodes
