@@ -59,7 +59,7 @@ namespace syst::detail
                 if (it != detector_cv_by_role.end() && it->second != key)
                 {
                     throw std::runtime_error(
-                        "SystematicsEngine: multiple detector CV samples found for nominal " +
+                        "syst: multiple detector CV samples found for nominal " +
                         seed_nominal + " role " + sample.role);
                 }
                 detector_cv_by_role[sample.role] = key;
@@ -84,7 +84,7 @@ namespace syst::detail
             if (candidate_nominal != seed_nominal)
             {
                 throw std::runtime_error(
-                    "SystematicsEngine: detector sample " + key +
+                    "syst: detector sample " + key +
                     " does not match nominal " + seed_nominal);
             }
 
@@ -102,7 +102,7 @@ namespace syst::detail
             if (!seen_source_labels.insert(source_label).second)
             {
                 throw std::runtime_error(
-                    "SystematicsEngine: duplicate detector source label " + source_label +
+                    "syst: duplicate detector source label " + source_label +
                     " for nominal " + seed_nominal);
             }
 
@@ -121,7 +121,7 @@ namespace syst::detail
         if (entry.detector_templates.size() !=
             static_cast<std::size_t>(entry.detector_template_count * entry.spec.nbins))
         {
-            throw std::runtime_error("SystematicsEngine: detector template payload is truncated");
+            throw std::runtime_error("syst: detector template payload is truncated");
         }
 
         out.assign(static_cast<std::size_t>(entry.detector_template_count),
@@ -170,7 +170,7 @@ namespace syst::detail
         if (source_shift_vectors.size() !=
             static_cast<std::size_t>(source_count * source_nbins))
         {
-            throw std::runtime_error("SystematicsEngine: shift payload is truncated");
+            throw std::runtime_error("syst: shift payload is truncated");
         }
 
         const MatrixRowMajor rebin = build_rebin_matrix(source_nbins,
@@ -198,7 +198,7 @@ namespace syst::detail
         if (source_covariance.size() !=
             static_cast<std::size_t>(source_nbins * source_nbins))
         {
-            throw std::runtime_error("SystematicsEngine: detector covariance payload is truncated");
+            throw std::runtime_error("syst: detector covariance payload is truncated");
         }
 
         const MatrixRowMajor rebin = build_rebin_matrix(source_nbins,
@@ -223,7 +223,7 @@ namespace syst::detail
             return {};
         if (shift_vectors.size() != static_cast<std::size_t>(source_count * nbins))
         {
-            throw std::runtime_error("SystematicsEngine: detector shift payload is truncated");
+            throw std::runtime_error("syst: detector shift payload is truncated");
         }
 
         const Eigen::Map<const MatrixRowMajor> shifts(shift_vectors.data(),
@@ -265,7 +265,7 @@ namespace syst::detail
 
         const std::size_t nbins = nominal.size();
         if (covariance.size() != nbins * nbins)
-            throw std::runtime_error("SystematicsEngine: detector covariance size does not match nominal bins");
+            throw std::runtime_error("syst: detector covariance size does not match nominal bins");
 
         out.down = nominal;
         out.up = nominal;

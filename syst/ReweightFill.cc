@@ -189,7 +189,7 @@ namespace syst::detail
         if (raw_up->size() != source_labels.size() || raw_down->size() != source_labels.size())
         {
             throw std::runtime_error(
-                "SystematicsEngine: GENIE knob-pair payload size does not match the reviewed local knob contract");
+                "syst: GENIE knob-pair payload size does not match the reviewed local knob contract");
         }
 
         for (std::size_t source = 0; source < source_labels.size(); ++source)
@@ -201,20 +201,20 @@ namespace syst::detail
         }
     }
 
-    SampleComputation compute_sample(TTree *tree,
-                                     const HistogramSpec &spec,
-                                     const SystematicsOptions &options)
+    ComputedSample compute_sample(TTree *tree,
+                                  const HistogramSpec &spec,
+                                  const SystematicsOptions &options)
     {
         if (!tree)
-            throw std::runtime_error("SystematicsEngine: missing selected tree");
+            throw std::runtime_error("syst: missing selected tree");
         if (spec.branch_expr.empty())
-            throw std::runtime_error("SystematicsEngine: branch_expr is required");
+            throw std::runtime_error("syst: branch_expr is required");
         if (spec.nbins <= 0)
-            throw std::runtime_error("SystematicsEngine: nbins must be positive");
+            throw std::runtime_error("syst: nbins must be positive");
         if (!(spec.xmax > spec.xmin))
-            throw std::runtime_error("SystematicsEngine: invalid histogram range");
+            throw std::runtime_error("syst: invalid histogram range");
 
-        SampleComputation out;
+        ComputedSample out;
         out.nominal.assign(static_cast<std::size_t>(spec.nbins), 0.0);
         out.sumw2.assign(static_cast<std::size_t>(spec.nbins), 0.0);
 

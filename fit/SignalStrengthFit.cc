@@ -45,8 +45,8 @@ namespace
         return std::max(lower, std::min(value, upper));
     }
 
-    const DistributionIO::Family &family_for(const fit::Process &process,
-                                             fit::SourceKind source)
+    const DistributionIO::UniverseFamily &family_for(const fit::Process &process,
+                                                     fit::SourceKind source)
     {
         switch (source)
         {
@@ -62,7 +62,7 @@ namespace
         throw std::runtime_error("fit::family_for: source is not a family mode");
     }
 
-    int family_mode_count(const DistributionIO::Family &family)
+    int family_mode_count(const DistributionIO::UniverseFamily &family)
     {
         if (family.eigen_rank > 0 && !family.eigenmodes.empty())
             return family.eigen_rank;
@@ -71,7 +71,7 @@ namespace
         return 0;
     }
 
-    double family_mode_value(const DistributionIO::Family &family,
+    double family_mode_value(const DistributionIO::UniverseFamily &family,
                              int mode_index,
                              int bin)
     {
@@ -214,7 +214,7 @@ namespace
     }
 
     std::string mode_name(const char *label,
-                          const DistributionIO::Family &family,
+                          const DistributionIO::UniverseFamily &family,
                           int mode_index)
     {
         std::string name(label);
@@ -410,7 +410,7 @@ namespace
                     case fit::SourceKind::kFluxMode:
                     case fit::SourceKind::kReintMode:
                     {
-                        const DistributionIO::Family &family = family_for(*process, term.source);
+                        const DistributionIO::UniverseFamily &family = family_for(*process, term.source);
                         const int mode_count = family_mode_count(family);
                         if (term.index < 0 || term.index >= mode_count)
                             throw std::runtime_error("fit::validate_problem: family nuisance term mode_index out of range");
@@ -463,7 +463,7 @@ namespace
             case fit::SourceKind::kFluxMode:
             case fit::SourceKind::kReintMode:
             {
-                const DistributionIO::Family &family = family_for(process, term.source);
+                const DistributionIO::UniverseFamily &family = family_for(process, term.source);
                 return term.coefficient *
                        family_mode_value(family, term.index, bin) *
                        theta;
@@ -963,7 +963,7 @@ namespace fit
             if (process.kind == ProcessKind::kData)
                 continue;
 
-            const std::pair<SourceKind, const DistributionIO::Family *> families[] = {
+            const std::pair<SourceKind, const DistributionIO::UniverseFamily *> families[] = {
                 {SourceKind::kGenieMode, &process.genie},
                 {SourceKind::kFluxMode, &process.flux},
                 {SourceKind::kReintMode, &process.reint},

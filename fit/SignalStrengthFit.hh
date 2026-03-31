@@ -16,7 +16,7 @@ namespace fit
         kBackground
     };
 
-    using Family = DistributionIO::Family;
+    using Family = DistributionIO::UniverseFamily;
 
     struct Spec
     {

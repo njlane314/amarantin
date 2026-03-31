@@ -17,7 +17,7 @@ namespace syst::detail
     constexpr int kSystematicsCacheVersion = 5;
 
     using CacheEntry = DistributionIO::Spectrum;
-    using FamilyCache = DistributionIO::Family;
+    using FamilyCache = DistributionIO::UniverseFamily;
     using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
     struct DetectorSourceMatch
@@ -51,7 +51,7 @@ namespace syst::detail
         void accumulate(int bin, int nbins, double base_weight);
     };
 
-    struct SampleComputation
+    struct ComputedSample
     {
         std::vector<double> nominal;
         std::vector<double> sumw2;
@@ -75,9 +75,9 @@ namespace syst::detail
                                      const HistogramSpec &spec,
                                      const SystematicsOptions &options);
 
-    SampleComputation compute_sample(TTree *tree,
-                                     const HistogramSpec &spec,
-                                     const SystematicsOptions &options);
+    ComputedSample compute_sample(TTree *tree,
+                                  const HistogramSpec &spec,
+                                  const SystematicsOptions &options);
 
     MatrixRowMajor build_rebin_matrix(int source_nbins,
                                       double source_xmin,

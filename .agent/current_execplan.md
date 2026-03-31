@@ -1,5 +1,211 @@
 # ExecPlan
 
+## ExecPlan Addendum: Systematics File Layout Cleanup
+
+### 1. Objective
+Rename the remaining misleading `syst/` implementation filenames and split the
+old `Support.cc` junk drawer into two responsibility-named translation units.
+
+### 2. Constraints
+- Preserve systematics behavior and cache formats.
+- Keep the installed public header surface unchanged in this pass.
+- Keep the split local to `syst/`; do not push helper logic into `io/` or
+  `app/`.
+- Limit churn to the user-approved file-level rename and split set.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep module boundaries sharp
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+This pass removes one generic implementation bucket and makes the remaining
+translation-unit names describe their real responsibilities.
+
+### 4. System map
+- `syst/CMakeLists.txt`
+- `syst/Systematics.cc`
+- `syst/DetectorSystematics.cc`
+- `syst/CacheKey.cc`
+- `syst/Rebin.cc`
+- `syst/ReweightFill.cc`
+- `syst/ReweightCovariance.cc`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### file naming
+- rename `Detector.cc` to `DetectorSystematics.cc`
+- rename `UniverseFill.cc` to `ReweightFill.cc`
+- rename `UniverseSummary.cc` to `ReweightCovariance.cc`
+
+#### junk-drawer split
+- split `Support.cc` into `CacheKey.cc` and `Rebin.cc`
+
+### 6. Milestones
+
+#### Milestone A: Apply the file-layout cleanup
+- status: done
+- hypothesis: responsibility-named translation units make `syst/` easier to
+  scan and grep without changing runtime behavior
+- files / symbols touched:
+  - `syst/CMakeLists.txt`
+  - `syst/DetectorSystematics.cc`
+  - `syst/CacheKey.cc`
+  - `syst/Rebin.cc`
+  - `syst/ReweightFill.cc`
+  - `syst/ReweightCovariance.cc`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/CMakeLists.txt syst/DetectorSystematics.cc syst/CacheKey.cc syst/Rebin.cc syst/ReweightFill.cc syst/ReweightCovariance.cc`
+  - `ls syst`
+- acceptance criteria:
+  - the build lists only the new implementation filenames
+  - `Support.cc` is gone and its responsibilities are split into named files
+  - the detector and reweight translation units have domain-specific names
+- verification results:
+  - focused `git diff --check` passed for the file-layout cleanup files
+  - `ls syst` shows the renamed and split translation units in place
+  - compile verification remains limited by the broken local `build/` tree
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed public headers changed in this pass
+- reviewer sign-off:
+  - explicit user approval received in-thread for the file rename/split pass
+
+### 8. Reduction ledger
+- files deleted: 1
+  - `syst/Support.cc`
+- wrappers removed: 0
+- shell branches removed: 0
+- stale file names removed from the active `syst/` build surface:
+  - `Detector.cc`
+  - `UniverseFill.cc`
+  - `UniverseSummary.cc`
+- approximate LOC delta: near-neutral; one source file split into two smaller
+  units
+
+### 9. Decision log
+- keep the split minimal: cache-key helpers in `CacheKey.cc`, rebin math in
+  `Rebin.cc`
+- keep the translation-unit renames local; no namespace or type rename churn
+  beyond the earlier approved naming pass
+
+### 10. Stop conditions
+- stop after the file names and `Support.cc` split match the reviewed rename
+  set
+- do not expand the pass into broader detector/reweight refactors
+
+## ExecPlan Addendum: Systematics Naming Cleanup
+
+### 1. Objective
+Make the `syst/` surface smaller and easier to grep by deleting the stale
+`SystematicsEngine` wrapper, renaming the adjacent cached-family nouns to be
+more explicit, and tightening one internal data-struct name.
+
+### 2. Constraints
+- Preserve CLI behavior.
+- Keep `io/` persistence-only and `app/` workflow-only.
+- Keep `DistributionIO::Spectrum` unchanged in this pass.
+- Limit public-surface churn to the user-approved naming changes:
+  - remove `SystematicsEngine`
+  - rename `DistributionIO::Spec` to `DistributionIO::HistogramSpec`
+  - rename `DistributionIO::Family` to `DistributionIO::UniverseFamily`
+- Leave unrelated files and historical log content untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- prefer plain data and namespace functions
+- keep module boundaries sharp
+- add abstractions only when they delete complexity
+
+This pass removes a wrapper instead of adding one and makes the nouns on the
+systematics/cache boundary more explicit.
+
+### 4. System map
+- `syst/Systematics.hh`
+- `syst/Systematics.cc`
+- `syst/UniverseFill.cc`
+- `syst/UniverseSummary.cc`
+- `syst/Support.cc`
+- `syst/Detector.cc`
+- `syst/bits/Detail.hh`
+- `io/DistributionIO.hh`
+- `fit/SignalStrengthFit.hh`
+- `fit/SignalStrengthFit.cc`
+- `app/mk_sbnfit_cov.cc`
+- `docs/adaptive-binning-plan.md`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- delete `SystematicsEngine` and rely on the existing `syst::` namespace API
+
+#### boundary sharpening
+- rename `DistributionIO::Spec` to `DistributionIO::HistogramSpec`
+- rename `DistributionIO::Family` to `DistributionIO::UniverseFamily`
+
+#### stale scaffolding
+- rename `SampleComputation` to `ComputedSample`
+- stop exposing `SystematicsEngine` in diagnostics
+
+### 6. Milestones
+
+#### Milestone A: Apply the naming pass end to end
+- status: done
+- hypothesis: deleting the stale wrapper and using more explicit cache nouns
+  reduces conceptual duplication without changing workflow behavior
+- files / symbols touched:
+  - `syst::SystematicsEngine`
+  - `DistributionIO::HistogramSpec`
+  - `DistributionIO::UniverseFamily`
+  - `syst::detail::ComputedSample`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_sbnfit_cov.cc syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/UniverseSummary.cc syst/Support.cc syst/Detector.cc syst/bits/Detail.hh docs/adaptive-binning-plan.md`
+  - `rg -n "SampleComputation|DistributionIO::Family|DistributionIO::Spec|class SystematicsEngine|SystematicsEngine:" -S io syst app fit`
+- acceptance criteria:
+  - the wrapper class is gone
+  - the renamed types are updated through downstream code
+  - no stale code references remain to the removed names
+- verification results:
+  - the focused `git diff --check` passed for the naming-pass files
+  - the focused `rg` sweep returned no remaining code references to `SampleComputation`, `DistributionIO::Family`, `DistributionIO::Spec`, or `SystematicsEngine`
+  - `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel` did not provide a trustworthy compile check here because the current `build/` tree still points at `/usr/bin/cmake`, which is absent in this environment
+
+### 7. Public-surface check
+- compatibility impact:
+  - installed public headers changed by user request
+- migration note:
+  - replace `DistributionIO::Spec` with `DistributionIO::HistogramSpec`
+  - replace `DistributionIO::Family` with `DistributionIO::UniverseFamily`
+  - replace `SystematicsEngine::*` calls with `syst::*`
+- reviewer sign-off:
+  - explicit user approval received in-thread for the naming pass
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - `SystematicsEngine`
+- shell branches removed: 0
+- stale docs removed:
+  - one active reference to `DistributionIO::Spec`
+- targets or dependencies removed: 0
+- approximate LOC delta: small negative; one public wrapper deleted
+
+### 9. Decision log
+- keep `DistributionIO::Spectrum` unchanged in this pass
+- rename only the adjacent family/spec nouns plus one internal helper struct
+- use `syst:` as the diagnostic prefix instead of the removed class name
+
+### 10. Stop conditions
+- stop after the agreed rename set is complete
+- do not expand the pass into broader cache-surface churn around `Spectrum`
+
 ## ExecPlan Addendum: HIVE-Informed Systematics Import
 
 ### 1. Objective

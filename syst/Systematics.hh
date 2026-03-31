@@ -156,30 +156,6 @@ namespace syst
                                  DistributionIO &distfile,
                                  const CacheBuildOptions &options);
 
-    class SystematicsEngine
-    {
-    public:
-        static SystematicsResult evaluate(EventListIO &eventlist,
-                                          const std::string &sample_key,
-                                          const HistogramSpec &spec,
-                                          const SystematicsOptions &options = SystematicsOptions{});
-
-        static SystematicsResult evaluate(EventListIO &eventlist,
-                                          DistributionIO &distfile,
-                                          const std::string &sample_key,
-                                          const HistogramSpec &spec,
-                                          const SystematicsOptions &options = SystematicsOptions{});
-
-        static std::string cache_key(const HistogramSpec &spec,
-                                     const SystematicsOptions &options);
-
-        static void clear_cache();
-
-        static std::unique_ptr<TH1D> make_histogram(const HistogramSpec &spec,
-                                                    const std::vector<double> &bins,
-                                                    const char *hist_name = "h_systematics",
-                                                    const char *title = "");
-    };
 }
 
 #endif // SYSTEMATICS_HH

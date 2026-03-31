@@ -34,7 +34,7 @@ That implies:
 
 Current fine-cache layout notes:
 
-- [`DistributionIO::Spec`](../io/DistributionIO.hh)
+- [`DistributionIO::HistogramSpec`](../io/DistributionIO.hh)
 - [`io/bits/DERIVED`](../io/bits/DERIVED)
 
 The first implementation should stay small:
@@ -49,7 +49,7 @@ The first implementation should stay small:
 ## Persistence
 
 If persisted adaptive-binning provenance is needed, prefer a small additive
-extension on `DistributionIO::Spec`, for example optional `bin_edges`, while
+extension on `DistributionIO::HistogramSpec`, for example optional `bin_edges`, while
 keeping `nbins/xmin/xmax` for compatibility and easy grepability.
 
 Do not add a new channel-bundle persistence format just to hold rebinned views.
@@ -101,7 +101,7 @@ Useful follow-on helpers:
 
 ## Open Questions
 
-1. Should optional `bin_edges` be persisted on `DistributionIO::Spec` in the
+1. Should optional `bin_edges` be persisted on `DistributionIO::HistogramSpec` in the
    first pass, or kept as downstream-only configuration until there is a
    concrete reproducibility need?
 2. Should the first delivery live as library code only, or also get a thin CLI

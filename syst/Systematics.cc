@@ -83,7 +83,7 @@ namespace
                                                           const PersistentCacheInspection &inspection)
     {
         std::ostringstream os;
-        os << "SystematicsEngine: persistent cache file " << distfile.path()
+        os << "syst: persistent cache file " << distfile.path()
            << " does not match event list " << eventlist.path();
         if (inspection.metadata_present)
         {
@@ -173,9 +173,9 @@ namespace
     {
         TTree *nominal_tree = eventlist.selected_tree(sample_key);
         if (!nominal_tree)
-            throw std::runtime_error("SystematicsEngine: missing selected tree for sample " + sample_key);
+            throw std::runtime_error("syst: missing selected tree for sample " + sample_key);
 
-        const syst::detail::SampleComputation nominal_sample =
+        const syst::detail::ComputedSample nominal_sample =
             syst::detail::compute_sample(nominal_tree, fine_spec, options);
 
         syst::detail::CacheEntry entry;
@@ -210,19 +210,19 @@ namespace
                 TTree *cv_tree = eventlist.selected_tree(source.cv_sample_key);
                 if (!cv_tree)
                 {
-                    throw std::runtime_error("SystematicsEngine: missing detector CV tree for sample " +
+                    throw std::runtime_error("syst: missing detector CV tree for sample " +
                                              source.cv_sample_key);
                 }
                 TTree *varied_tree = eventlist.selected_tree(source.varied_sample_key);
                 if (!varied_tree)
                 {
-                    throw std::runtime_error("SystematicsEngine: missing detector variation tree for sample " +
+                    throw std::runtime_error("syst: missing detector variation tree for sample " +
                                              source.varied_sample_key);
                 }
 
-                const syst::detail::SampleComputation cv_sample =
+                const syst::detail::ComputedSample cv_sample =
                     syst::detail::compute_sample(cv_tree, fine_spec, syst::SystematicsOptions{});
-                const syst::detail::SampleComputation variation_sample =
+                const syst::detail::ComputedSample variation_sample =
                     syst::detail::compute_sample(varied_tree, fine_spec, syst::SystematicsOptions{});
 
                 entry.detector_source_labels.push_back(source.source_label);
@@ -462,10 +462,10 @@ namespace syst
         if (options.persistent_cache != CachePolicy::kMemoryOnly)
         {
             throw std::runtime_error(
-                "SystematicsEngine: DistributionIO is required for persistent cache policies");
+                "syst: DistributionIO is required for persistent cache policies");
         }
         if (sample_key.empty())
-            throw std::runtime_error("SystematicsEngine: sample_key is required");
+            throw std::runtime_error("syst: sample_key is required");
 
         const std::string eval_key = detail::evaluation_cache_key(eventlist, nullptr, sample_key, spec, options);
         if (options.enable_memory_cache)
@@ -503,7 +503,7 @@ namespace syst
                                const SystematicsOptions &options)
     {
         if (sample_key.empty())
-            throw std::runtime_error("SystematicsEngine: sample_key is required");
+            throw std::runtime_error("syst: sample_key is required");
 
         const std::string eval_key = detail::evaluation_cache_key(eventlist, &distfile, sample_key, spec, options);
         if (options.enable_memory_cache)
@@ -543,7 +543,7 @@ namespace syst
         {
             if (use_persistent_cache && options.persistent_cache == CachePolicy::kLoadOnly)
             {
-                throw std::runtime_error("SystematicsEngine: persistent cache miss for sample " +
+                throw std::runtime_error("syst: persistent cache miss for sample " +
                                          sample_key + " key " + persistent_key);
             }
 
@@ -587,7 +587,7 @@ namespace syst
                                          const char *title)
     {
         if (spec.nbins <= 0)
-            throw std::runtime_error("SystematicsEngine: nbins must be positive");
+            throw std::runtime_error("syst: nbins must be positive");
 
         std::unique_ptr<TH1D> hist(new TH1D(hist_name,
                                             (title && *title) ? title : spec.branch_expr.c_str(),
@@ -669,39 +669,4 @@ namespace syst
         distfile.flush();
     }
 
-    SystematicsResult SystematicsEngine::evaluate(EventListIO &eventlist,
-                                                  const std::string &sample_key,
-                                                  const HistogramSpec &spec,
-                                                  const SystematicsOptions &options)
-    {
-        return syst::evaluate(eventlist, sample_key, spec, options);
-    }
-
-    SystematicsResult SystematicsEngine::evaluate(EventListIO &eventlist,
-                                                  DistributionIO &distfile,
-                                                  const std::string &sample_key,
-                                                  const HistogramSpec &spec,
-                                                  const SystematicsOptions &options)
-    {
-        return syst::evaluate(eventlist, distfile, sample_key, spec, options);
-    }
-
-    std::string SystematicsEngine::cache_key(const HistogramSpec &spec,
-                                             const SystematicsOptions &options)
-    {
-        return syst::cache_key(spec, options);
-    }
-
-    void SystematicsEngine::clear_cache()
-    {
-        syst::clear_cache();
-    }
-
-    std::unique_ptr<TH1D> SystematicsEngine::make_histogram(const HistogramSpec &spec,
-                                                            const std::vector<double> &bins,
-                                                            const char *hist_name,
-                                                            const char *title)
-    {
-        return syst::make_histogram(spec, bins, hist_name, title);
-    }
 }

@@ -1,9 +1,10 @@
 set(AMARANTIN_SYST_SOURCES
   Systematics.cc
-  Detector.cc
-  Support.cc
-  UniverseFill.cc
-  UniverseSummary.cc
+  DetectorSystematics.cc
+  CacheKey.cc
+  Rebin.cc
+  ReweightFill.cc
+  ReweightCovariance.cc
 )
 
 set(AMARANTIN_SYST_PUBLIC_HEADERS

@@ -17,7 +17,7 @@ public:
         int build_version = 1;
     };
 
-    struct Spec
+    struct HistogramSpec
     {
         std::string sample_key;
         std::string branch_expr;
@@ -28,7 +28,7 @@ public:
         std::string cache_key;
     };
 
-    struct Family
+    struct UniverseFamily
     {
         std::string branch_name;
         long long n_variations = 0;
@@ -52,7 +52,7 @@ public:
 
     struct Spectrum
     {
-        Spec spec;
+        HistogramSpec spec;
         std::vector<double> nominal;
         std::vector<double> sumw2;
         std::vector<std::string> detector_source_labels;
@@ -69,9 +69,9 @@ public:
         std::vector<double> detector_up;
         std::vector<double> detector_templates;
         int detector_template_count = 0;
-        Family genie;
-        Family flux;
-        Family reint;
+        UniverseFamily genie;
+        UniverseFamily flux;
+        UniverseFamily reint;
         std::vector<double> total_down;
         std::vector<double> total_up;
     };

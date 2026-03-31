@@ -74,7 +74,7 @@ namespace
                                     const std::vector<double> &delta,
                                     int nbins);
 
-    bool family_has_exact_universes(const DistributionIO::Family &family,
+    bool family_has_exact_universes(const DistributionIO::UniverseFamily &family,
                                     int nbins);
 
     void print_usage(std::ostream &os)
@@ -396,8 +396,8 @@ namespace
                                             spectrum.spec.nbins);
     }
 
-    const DistributionIO::Family &family_for(const DistributionIO::Spectrum &spectrum,
-                                             FamilyKind kind)
+    const DistributionIO::UniverseFamily &family_for(const DistributionIO::Spectrum &spectrum,
+                                                     FamilyKind kind)
     {
         switch (kind)
         {
@@ -427,7 +427,7 @@ namespace
         return "unknown";
     }
 
-    std::vector<double> covariance_from_family_universes(const DistributionIO::Family &family,
+    std::vector<double> covariance_from_family_universes(const DistributionIO::UniverseFamily &family,
                                                          const std::vector<double> &nominal,
                                                          int nbins,
                                                          const std::string &label)
@@ -457,7 +457,7 @@ namespace
         return covariance;
     }
 
-    MatrixComponent component_from_family(const DistributionIO::Family &family,
+    MatrixComponent component_from_family(const DistributionIO::UniverseFamily &family,
                                           const std::vector<double> &nominal,
                                           int nbins,
                                           const std::string &label)
@@ -674,14 +674,14 @@ namespace
         }
     }
 
-    bool family_has_payload(const DistributionIO::Family &family)
+    bool family_has_payload(const DistributionIO::UniverseFamily &family)
     {
         return !family.covariance.empty() ||
                !family.sigma.empty() ||
                !family.universe_histograms.empty();
     }
 
-    bool family_has_exact_universes(const DistributionIO::Family &family,
+    bool family_has_exact_universes(const DistributionIO::UniverseFamily &family,
                                     int nbins)
     {
         return family.n_variations > 0 &&
@@ -695,7 +695,7 @@ namespace
                                               int universe_index,
                                               int total_nbins)
     {
-        const DistributionIO::Family &family = family_for(entry.spectrum, kind);
+        const DistributionIO::UniverseFamily &family = family_for(entry.spectrum, kind);
         const int nbins = entry.spectrum.spec.nbins;
         if (!family_has_exact_universes(family, nbins))
         {
@@ -902,7 +902,7 @@ namespace
             return component;
         }
 
-        const DistributionIO::Family &reference = family_for(contributors.front()->spectrum, kind);
+        const DistributionIO::UniverseFamily &reference = family_for(contributors.front()->spectrum, kind);
         if (reference.branch_name.empty())
         {
             throw std::runtime_error(
@@ -918,7 +918,7 @@ namespace
 
         for (const auto *entry : contributors)
         {
-            const DistributionIO::Family &family = family_for(entry->spectrum, kind);
+            const DistributionIO::UniverseFamily &family = family_for(entry->spectrum, kind);
             if (family.branch_name != reference.branch_name)
             {
                 throw std::runtime_error(

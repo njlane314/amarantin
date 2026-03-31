@@ -2,6 +2,125 @@
 
 ## Current milestone
 - status: done
+- subsystem: `syst/` file layout naming cleanup
+- design rule from `DESIGN.md`: keep module boundaries sharp, delete generic
+  helper buckets, and prefer names that match actual responsibilities
+
+## What changed
+- renamed the remaining misleading `syst/` implementation files:
+  - `Detector.cc` -> `DetectorSystematics.cc`
+  - `UniverseFill.cc` -> `ReweightFill.cc`
+  - `UniverseSummary.cc` -> `ReweightCovariance.cc`
+- split `Support.cc` into:
+  - `CacheKey.cc`
+  - `Rebin.cc`
+- updated `syst/CMakeLists.txt` so the build surface matches the renamed and
+  split translation units
+
+## Why this is simpler
+- `syst/` now reads like responsibilities instead of implementation phases
+- the old `Support.cc` bucket no longer hides unrelated cache-key and rebinning
+  logic behind one generic filename
+- the build surface is easier to scan because detector, reweight filling,
+  reweight covariance, cache keys, and rebinning are all named directly
+
+## Verification
+- configure/build commands:
+- target-only commands:
+-  `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel`
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/CMakeLists.txt syst/DetectorSystematics.cc syst/CacheKey.cc syst/Rebin.cc syst/ReweightFill.cc syst/ReweightCovariance.cc`
+-  `ls syst`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed for the file-layout cleanup files
+  - `ls syst` shows the renamed and split translation units in place
+  - `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel` still
+    does not provide a trustworthy compile check here because the current
+    `build/` tree points at `/usr/bin/cmake`, which is absent in this
+    environment
+
+## Reduction ledger
+- files deleted: 1
+  - `syst/Support.cc`
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - near-neutral; one generic source file split into two smaller named files
+
+## Decisions
+- keep the split minimal and responsibility-based:
+  - `CacheKey.cc` owns cache-key assembly helpers
+  - `Rebin.cc` owns rebin-matrix and vector-rebin helpers
+- keep the rename local to `syst/` implementation files; public API names stay
+  unchanged in this pass
+
+## Remaining hotspots
+- trustworthy compile verification still requires a working ROOT-enabled build
+  tree
+- historical log entries below still mention older filenames where they record
+  past milestones
+
+## Current milestone
+- status: done
+- subsystem: `syst/` naming cleanup
+- design rule from `DESIGN.md`: prefer plain data and namespace functions, and
+  delete abstractions that do not buy clarity
+
+## What changed
+- removed the stale public `SystematicsEngine` wrapper from `syst/`
+- renamed adjacent cache nouns:
+  - `DistributionIO::Spec` -> `DistributionIO::HistogramSpec`
+  - `DistributionIO::Family` -> `DistributionIO::UniverseFamily`
+- renamed the internal data result:
+  - `SampleComputation` -> `ComputedSample`
+- changed systematics diagnostics from `SystematicsEngine:` to `syst:`
+- updated downstream `fit/`, export CLI, and one active docs reference to the
+  new names
+
+## Why this is simpler
+- the `syst::` namespace was already the real public API; the wrapper class was
+  pure duplication
+- `HistogramSpec` and `UniverseFamily` are easier to grep and understand than
+  `Spec` and `Family`
+- `ComputedSample` reads like data returned from `compute_sample(...)`, not a
+  process object
+
+## Verification
+- configure/build commands:
+- target-only commands:
+-  `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel`
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_sbnfit_cov.cc syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/UniverseSummary.cc syst/Support.cc syst/Detector.cc syst/bits/Detail.hh docs/adaptive-binning-plan.md`
+-  `rg -n "\\bSampleComputation\\b|\\bDistributionIO::Family\\b|\\bDistributionIO::Spec\\b|\\bclass SystematicsEngine\\b|\\bSystematicsEngine:" -S io syst app fit`
+- smoke checks:
+- results:
+  - the focused `git diff --check` passed for the naming-pass files
+  - the focused `rg` sweep returned no remaining code references to the removed names
+  - `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel` did not provide a trustworthy compile check here because the current `build/` tree still points at `/usr/bin/cmake`, which is absent in this environment
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - `SystematicsEngine`
+- shell branches removed: 0
+- docs/build artifacts removed:
+  - one active stale reference to `DistributionIO::Spec`
+- approximate LOC delta:
+  - small negative; wrapper deleted and downstream uses updated
+
+## Decisions
+- keep `DistributionIO::Spectrum` unchanged in this pass
+- allow this small public-surface rename because the user requested it
+
+## Remaining hotspots
+- trustworthy compile verification still requires a working ROOT-enabled build
+- historical log entries still mention older names where they describe past
+  milestones
+
+## Current milestone
+- status: done
 - subsystem: stacked `mk_sbnfit_cov` smoke coverage
 - design rule from `DESIGN.md`: keep verification focused at the workflow edge,
   reuse persisted data surfaces directly, and avoid building a heavier harness

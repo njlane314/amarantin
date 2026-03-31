@@ -150,7 +150,7 @@ namespace
     {
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(covariance);
         if (solver.info() != Eigen::Success)
-            throw std::runtime_error("SystematicsEngine: eigenmode compression failed");
+            throw std::runtime_error("syst: eigenmode compression failed");
 
         const Eigen::VectorXd eigenvalues = solver.eigenvalues();
         const Eigen::MatrixXd eigenvectors = solver.eigenvectors();
@@ -181,7 +181,7 @@ namespace
 
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(covariance);
         if (solver.info() != Eigen::Success)
-            throw std::runtime_error("SystematicsEngine: eigenmode compression failed");
+            throw std::runtime_error("syst: eigenmode compression failed");
 
         const Eigen::VectorXd eigenvalues = solver.eigenvalues();
         const Eigen::MatrixXd eigenvectors = solver.eigenvectors();
@@ -207,7 +207,7 @@ namespace
         for (const auto &universe_histogram : universes)
         {
             if (static_cast<int>(universe_histogram.size()) != nbins)
-                throw std::runtime_error("SystematicsEngine: retained universe histogram size does not match nominal bins");
+                throw std::runtime_error("syst: retained universe histogram size does not match nominal bins");
             const Eigen::Map<const Eigen::VectorXd> universe_vec(universe_histogram.data(), nbins);
             const Eigen::VectorXd delta = universe_vec - nominal_vec;
             covariance += delta * delta.transpose();
@@ -379,7 +379,7 @@ namespace syst::detail
             else
             {
                 throw std::runtime_error(
-                    "SystematicsEngine: cached sigma-only family " + family.branch_name +
+                    "syst: cached sigma-only family " + family.branch_name +
                     " cannot be rebinned; rebuild the cache with covariance, eigenmodes, or retained universe histograms");
             }
         }
