@@ -1,5 +1,98 @@
 # ExecPlan
 
+## ExecPlan Addendum: mk_cov Executable Rename
+
+### 1. Objective
+Rename the covariance export executable and its repo references from the old
+long-form CLI name to `mk_cov`.
+
+### 2. Constraints
+- Preserve the existing covariance export behavior and file format.
+- Keep the source file `app/mk_cov.cc` in place.
+- Update active docs, scripts, build targets, and tracking files so the new
+  executable name is used consistently.
+- Leave `.git/` history and reflogs untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- prefer fewer concepts per workflow
+- keep workflows easy to grep
+- add abstractions only when they delete complexity
+
+This pass deletes a leftover compatibility name instead of adding another one.
+
+### 4. System map
+- `app/CMakeLists.txt`
+- `app/mk_cov.cc`
+- `COMMANDS`
+- `INSTALL`
+- `USAGE`
+- `INVARIANTS.md`
+- `tools/systematics-sbnfit-export-smoke.sh`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### cli naming
+- rename the app target and installed executable to `mk_cov`
+- update all repo references to the new CLI name
+
+### 6. Milestones
+
+#### Milestone A: Apply the executable rename
+- status: done
+- hypothesis: one short covariance-export CLI name is easier to teach, grep,
+  and keep in sync with the existing `app/mk_cov.cc` source path
+- files / symbols touched:
+  - `mk_cov`
+  - `app/CMakeLists.txt`
+  - `app/mk_cov.cc`
+  - workflow docs and smoke script references
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/CMakeLists.txt app/mk_cov.cc COMMANDS INSTALL USAGE INVARIANTS.md tools/systematics-sbnfit-export-smoke.sh`
+  - `rg --hidden --glob '!.git' -n "retired covariance export CLI name" -S .`
+  - `cmake --build build --target mk_cov --parallel`
+- acceptance criteria:
+  - the executable target is named `mk_cov`
+  - no repo references remain to the retired CLI name outside `.git/`
+  - the smoke script and install docs call `mk_cov`
+- verification results:
+  - focused `git diff --check` passed for the rename-pass files
+  - the hidden-file `rg` sweep returned no remaining references to the retired
+    covariance export CLI name outside `.git/`
+  - `cmake --build build --target mk_cov --parallel` did not provide a
+    trustworthy compile check here because the local `build/` tree is stale
+    and reconfigure remains blocked by missing SQLite3 headers and
+    `nlohmann/json.hpp`
+
+### 7. Public-surface check
+- compatibility impact:
+  - the installed executable and build target are now `mk_cov`
+- reviewer sign-off:
+  - explicit user approval received in-thread for replacing every repo
+    reference to the old CLI name
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale CLI names removed from the active tree:
+  - the old covariance export executable name
+- approximate LOC delta: near-neutral; mostly string and target-name updates
+
+### 9. Decision log
+- keep the smoke script filename unchanged in this pass; only the invoked
+  binary name changed
+- update historical tracking files too so the repo contains no remaining live
+  references to the retired CLI name
+
+### 10. Stop conditions
+- stop after the executable target, docs, scripts, and tracking files all use
+  `mk_cov`
+- do not expand the pass into unrelated SBNFit export refactors
+
 ## ExecPlan Addendum: Cards Directory Rename
 
 ### 1. Objective
@@ -133,7 +226,7 @@ source filenames from the active tree.
 
 #### file naming
 - rename `app/mk_xsec_fit.cc` to `app/mk_fit.cc`
-- rename `app/mk_sbnfit_cov.cc` to `app/mk_cov.cc`
+- rename the covariance export entrypoint source to `app/mk_cov.cc`
 
 ### 6. Milestones
 
@@ -149,7 +242,7 @@ source filenames from the active tree.
 - expected behavior risk: low
 - verification commands:
   - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/CMakeLists.txt app/mk_fit.cc app/mk_cov.cc fit/README`
-  - `rg -n "app/mk_xsec_fit\\.cc|app/mk_sbnfit_cov\\.cc" -S app fit/README`
+  - `rg -n "app/mk_xsec_fit\\.cc" -S app fit/README`
 - acceptance criteria:
   - the app build references only `mk_fit.cc` and `mk_cov.cc`
   - active docs no longer point at the old source filenames
@@ -160,7 +253,7 @@ source filenames from the active tree.
 
 ### 7. Public-surface check
 - compatibility impact:
-  - none; installed executable names stay `mk_fit` and `mk_sbnfit_cov`
+  - none; installed executable names stay `mk_fit` and `mk_cov`
 - reviewer sign-off:
   - explicit user approval received in-thread for the source-file rename
 
@@ -170,20 +263,19 @@ source filenames from the active tree.
 - shell branches removed: 0
 - stale source filenames removed from the active tree:
   - `app/mk_xsec_fit.cc`
-  - `app/mk_sbnfit_cov.cc`
 - approximate LOC delta: near-neutral; pure file rename plus small reference
   updates
 
 ### 9. Decision log
-- keep the executable target name `mk_sbnfit_cov` unchanged in this pass even
-  though the source file becomes `mk_cov.cc`
+- keep this pass scoped to source-file naming; executable naming is handled
+  separately
 - update only active references to the source paths; historical log entries may
   continue to mention the old filenames
 
 ### 10. Stop conditions
 - stop after the source filenames, build file, and active path references are
   aligned
-- do not expand the pass into a CLI rename for `mk_sbnfit_cov`
+- do not expand the pass beyond the source-file cleanup set
 
 ## ExecPlan Addendum: Systematics File Layout Cleanup
 
@@ -320,7 +412,7 @@ systematics/cache boundary more explicit.
 - `io/DistributionIO.hh`
 - `fit/SignalStrengthFit.hh`
 - `fit/SignalStrengthFit.cc`
-- `app/mk_sbnfit_cov.cc`
+- `app/mk_cov.cc`
 - `docs/adaptive-binning-plan.md`
 - `.agent/current_execplan.md`
 - `docs/minimality-log.md`
@@ -351,7 +443,7 @@ systematics/cache boundary more explicit.
   - `syst::detail::ComputedSample`
 - expected behavior risk: low
 - verification commands:
-  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_sbnfit_cov.cc syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/UniverseSummary.cc syst/Support.cc syst/Detector.cc syst/bits/Detail.hh docs/adaptive-binning-plan.md`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_cov.cc syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/UniverseSummary.cc syst/Support.cc syst/Detector.cc syst/bits/Detail.hh docs/adaptive-binning-plan.md`
   - `rg -n "SampleComputation|DistributionIO::Family|DistributionIO::Spec|class SystematicsEngine|SystematicsEngine:" -S io syst app fit`
 - acceptance criteria:
   - the wrapper class is gone
@@ -360,7 +452,7 @@ systematics/cache boundary more explicit.
 - verification results:
   - the focused `git diff --check` passed for the naming-pass files
   - the focused `rg` sweep returned no remaining code references to `SampleComputation`, `DistributionIO::Family`, `DistributionIO::Spec`, or `SystematicsEngine`
-  - `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel` did not provide a trustworthy compile check here because the current `build/` tree still points at `/usr/bin/cmake`, which is absent in this environment
+  - `cmake --build build --target Syst mk_fit mk_cov --parallel` did not provide a trustworthy compile check here because the current `build/` tree still points at `/usr/bin/cmake`, which is absent in this environment
 
 ### 7. Public-surface check
 - compatibility impact:
@@ -537,22 +629,22 @@ framework.
   persisted covariance-first cache is simpler than pushing SBNFit-format
   concerns back into `syst/` or `io/`
 - files / symbols touched:
-  - `app/mk_sbnfit_cov.cc`
+  - `app/mk_cov.cc`
   - `app/CMakeLists.txt`
   - `COMMANDS`
   - `INSTALL`
   - `USAGE`
 - expected behavior risk: low
 - verification commands:
-  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc app/CMakeLists.txt COMMANDS INSTALL USAGE`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_cov.cc app/CMakeLists.txt COMMANDS INSTALL USAGE`
   - focused CMake builds if ROOT is available
 - acceptance criteria:
   - one CLI can export a cached spectrum as SBNFit-style fractional covariance
   - the export is derived from the persisted covariance-first payloads
   - SBNFit-format details stay in `app/`, not in core `syst/` math
 - verification results:
-  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc app/CMakeLists.txt COMMANDS INSTALL USAGE` passed
-  - `cmake --build build --target mk_sbnfit_cov --parallel` did not provide a trustworthy compile check here; the current `build/` tree is inconsistent and returned `make: *** No rule to make target 'mk_sbnfit_cov'.  Stop.`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_cov.cc app/CMakeLists.txt COMMANDS INSTALL USAGE` passed
+  - `cmake --build build --target mk_cov --parallel` did not provide a trustworthy compile check here; the current `build/` tree is inconsistent and returned `make: *** No rule to make target 'mk_cov'.  Stop.`
   - a fresh configure remains blocked in this environment by missing local dependencies (`/usr/include/sqlite3.h` and `nlohmann/json.hpp`)
 
 #### Milestone E: Make reweight families covariance-canonical
@@ -3411,7 +3503,7 @@ systematics framework.
   - `fit/SignalStrengthFit.hh`
   - `fit/SignalStrengthFit.cc`
   - `app/mk_dist.cc`
-  - `app/mk_sbnfit_cov.cc`
+  - `app/mk_cov.cc`
 - verification:
   - `tools/systematics-reweight-smoke.sh`
 - tracking:
@@ -3507,7 +3599,7 @@ systematics framework.
   - `fit/SignalStrengthFit.hh`
   - `fit/SignalStrengthFit.cc`
   - `app/mk_xsec_fit.cc`
-  - `app/mk_sbnfit_cov.cc`
+  - `app/mk_cov.cc`
   - `fit/README`
   - `COMMANDS`
   - `USAGE`
@@ -3515,14 +3607,14 @@ systematics framework.
   - `docs/minimality-log.md`
 - expected behavior risk: moderate
 - verification commands:
-  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_xsec_fit.cc app/mk_sbnfit_cov.cc fit/README COMMANDS USAGE INSTALL`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_xsec_fit.cc app/mk_cov.cc fit/README COMMANDS USAGE INSTALL`
 - acceptance criteria:
   - fit-side default nuisance assembly includes the knob-pair lane when present
   - SBNFit export includes the knob-pair covariance component when present
   - docs mention the new branch-aware flux and optional knob-pair behavior
 - verification results:
-  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_xsec_fit.cc app/mk_sbnfit_cov.cc fit/README COMMANDS USAGE INSTALL` passed
-  - `cmake --build build --target Syst Fit mk_dist mk_fit mk_sbnfit_cov --parallel` failed because the existing `build/` tree still points at `/usr/bin/cmake`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_xsec_fit.cc app/mk_cov.cc fit/README COMMANDS USAGE INSTALL` passed
+  - `cmake --build build --target Syst Fit mk_dist mk_fit mk_cov --parallel` failed because the existing `build/` tree still points at `/usr/bin/cmake`
   - fresh configure in `.build/eventweight-integration` failed in this environment because `ROOT` is not available and `root-config` is not on `PATH`
 
 #### Milestone E: Add focused smoke coverage
@@ -3579,7 +3671,7 @@ systematics framework.
 ## ExecPlan Addendum: Explicit Stacked SBNFit Export
 
 ### 1. Objective
-Extend `mk_sbnfit_cov` so it can export a stacked multi-process covariance
+Extend `mk_cov` so it can export a stacked multi-process covariance
 matrix from multiple cached `DistributionIO::Spectrum` entries without guessing
 cross-process correlations.
 
@@ -3601,7 +3693,7 @@ This pass should add one explicit export contract, not a new framework.
 
 ### 4. System map
 - stacked export implementation:
-  - `app/mk_sbnfit_cov.cc`
+  - `app/mk_cov.cc`
 - current workflow/docs:
   - `COMMANDS`
   - `USAGE`
@@ -3613,7 +3705,7 @@ This pass should add one explicit export contract, not a new framework.
 ### 5. Candidate simplifications
 
 #### boundary sharpening
-- keep stacked covariance assembly in `mk_sbnfit_cov` rather than pushing
+- keep stacked covariance assembly in `mk_cov` rather than pushing
   SBNFit-specific stacking rules back into `syst/`
 
 #### wrapper collapse
@@ -3645,16 +3737,16 @@ This pass should add one explicit export contract, not a new framework.
 
 #### Milestone B: Implement manifest-driven stacked export
 - status: done
-- hypothesis: `mk_sbnfit_cov` can stack spectra safely if it treats detector
+- hypothesis: `mk_cov` can stack spectra safely if it treats detector
   and knob lanes as shared labeled source shifts, and multisim families as
   shared universes only when retained universes survive
 - files / symbols touched:
-  - `app/mk_sbnfit_cov.cc`
+  - `app/mk_cov.cc`
 - expected behavior risk: moderate
 - verification commands:
-  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_cov.cc`
 - acceptance criteria:
-  - `mk_sbnfit_cov` supports a manifest-driven stacked mode
+  - `mk_cov` supports a manifest-driven stacked mode
   - stacked detector and GENIE knob correlations are built only from explicit
     shared source labels
   - stacked GENIE / flux / reint family correlations are built only from
@@ -3662,8 +3754,8 @@ This pass should add one explicit export contract, not a new framework.
   - the tool rejects stacked exports when a required cross-process family
     contract is not available
 - verification results:
-  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc` passed
-  - `cmake --build build --target mk_sbnfit_cov --parallel` did not provide a trustworthy compile check here; the existing `build/` tree is stale and returned `make: *** No rule to make target 'mk_sbnfit_cov'.  Stop.`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_cov.cc` passed
+  - `cmake --build build --target mk_cov --parallel` did not provide a trustworthy compile check here; the existing `build/` tree is stale and returned `make: *** No rule to make target 'mk_cov'.  Stop.`
   - `cmake -S . -B .build/stacked-export -DCMAKE_BUILD_TYPE=Release` reached dependency discovery but failed in this environment because `ROOT` is not available and `root-config` is not on `PATH`
 
 #### Milestone C: Update docs and lightweight verification
@@ -3688,7 +3780,7 @@ This pass should add one explicit export contract, not a new framework.
 
 ### 7. Public-surface check
 - compatibility impact:
-  - additive `mk_sbnfit_cov --manifest` workflow
+  - additive `mk_cov --manifest` workflow
 - migration note or explicit non-goal:
   - migration note: the single-spectrum export mode remains unchanged
   - non-goal: move stacked export logic into core `syst/`
@@ -3708,14 +3800,14 @@ This pass should add one explicit export contract, not a new framework.
   guessed from per-process covariance blocks
 
 ### 10. Stop conditions
-- stop once `mk_sbnfit_cov` can export one explicit stacked contract and the
+- stop once `mk_cov` can export one explicit stacked contract and the
   docs teach it
 - stop before widening the pass into a broader SBNFit orchestration layer
 
 ## ExecPlan Addendum: Stacked Export Smoke Coverage
 
 ### 1. Objective
-Add one focused smoke script for the new stacked `mk_sbnfit_cov --manifest`
+Add one focused smoke script for the new stacked `mk_cov --manifest`
 contract so runtime verification is ready when a local ROOT build is available.
 
 ### 2. Constraints
@@ -3738,7 +3830,7 @@ framework.
 - smoke tool:
   - `tools/systematics-sbnfit-export-smoke.sh`
 - export implementation under test:
-  - `app/mk_sbnfit_cov.cc`
+  - `app/mk_cov.cc`
 - workflow/docs:
   - `COMMANDS`
   - `INSTALL`

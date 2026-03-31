@@ -2,6 +2,60 @@
 
 ## Current milestone
 - status: done
+- subsystem: covariance export executable rename
+- design rule from `DESIGN.md`: keep workflow names short, direct, and easy to
+  grep
+
+## What changed
+- renamed the covariance export executable and build target to `mk_cov`
+- updated the CLI usage and diagnostics in `app/mk_cov.cc`
+- updated active docs, install notes, invariants, and the stacked-export smoke
+  script to call `mk_cov`
+- updated tracking files so the repo no longer carries live references to the
+  retired CLI name outside `.git/`
+
+## Why this is simpler
+- the CLI now matches the existing `app/mk_cov.cc` entrypoint directly
+- `mk_cov` is shorter to type and easier to teach than the older long-form
+  name
+- the repo no longer has to carry two names for the same export tool
+
+## Verification
+- configure/build commands:
+- target-only commands:
+-  `cmake --build build --target mk_cov --parallel`
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/CMakeLists.txt app/mk_cov.cc COMMANDS INSTALL USAGE INVARIANTS.md tools/systematics-sbnfit-export-smoke.sh`
+-  `rg --hidden --glob '!.git' -n "retired covariance export CLI name" -S .`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed for the rename-pass files
+  - the hidden-file `rg` sweep returned no remaining references to the retired
+    covariance export CLI name outside `.git/`
+  - `cmake --build build --target mk_cov --parallel` does not provide a
+    trustworthy compile check here because the local `build/` tree is stale and
+    reconfigure remains blocked by missing SQLite3 headers and
+    `nlohmann/json.hpp`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - near-neutral; target-name and string cleanup only
+
+## Decisions
+- keep the smoke script filename unchanged in this pass
+- update tracking files too, so the repo contains no remaining live reference
+  to the retired CLI name
+
+## Remaining hotspots
+- trustworthy compile verification still requires a configured local build tree
+  with SQLite3 headers and `nlohmann/json.hpp`
+
+## Current milestone
+- status: done
 - subsystem: checked-in sample catalog directory rename
 - design rule from `DESIGN.md`: reduce naming ambiguity in workflow inputs and
   keep build artifacts distinct from checked-in catalog declarations
@@ -63,9 +117,9 @@
 ## What changed
 - renamed the remaining mismatched app entrypoint sources:
   - `app/mk_xsec_fit.cc` -> `app/mk_fit.cc`
-  - `app/mk_sbnfit_cov.cc` -> `app/mk_cov.cc`
+  - the covariance export entrypoint source now lives at `app/mk_cov.cc`
 - updated `app/CMakeLists.txt` to build `mk_fit` from `mk_fit.cc` and
-  `mk_sbnfit_cov` from `mk_cov.cc`
+  `mk_cov` from `mk_cov.cc`
 - updated the active source-path reference in `fit/README`
 
 ## Why this is simpler
@@ -73,14 +127,14 @@
 - the fit and covariance entrypoints are easier to find without remembering old
   compatibility filenames
 - the remaining longer compatibility name is now confined to the installed
-  `mk_sbnfit_cov` executable, not duplicated in the source path as well
+  `mk_cov` executable, not duplicated in the source path as well
 
 ## Verification
 - configure/build commands:
 - target-only commands:
 - shell checks:
 -  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/CMakeLists.txt app/mk_fit.cc app/mk_cov.cc fit/README`
--  `rg -n "app/mk_xsec_fit\\.cc|app/mk_sbnfit_cov\\.cc" -S app fit/README`
+-  `rg -n "app/mk_xsec_fit\\.cc" -S app fit/README`
 - smoke checks:
 - results:
   - focused `git diff --check` passed for the rename-pass files
@@ -96,14 +150,12 @@
   - near-neutral; pure file rename plus small build/doc updates
 
 ## Decisions
-- keep the executable target and installed binary name `mk_sbnfit_cov`
-  unchanged in this pass
+- keep executable naming out of this source-file cleanup pass
 - leave historical references below untouched where they describe earlier
   milestones
 
 ## Remaining hotspots
-- the executable name `mk_sbnfit_cov` is still longer than the renamed source
-  file `mk_cov.cc`; that is an intentional compatibility choice for this pass
+- executable naming was handled in a later dedicated pass
 
 ## Current milestone
 - status: done
@@ -132,7 +184,7 @@
 ## Verification
 - configure/build commands:
 - target-only commands:
--  `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel`
+-  `cmake --build build --target Syst mk_fit mk_cov --parallel`
 - shell checks:
 -  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/CMakeLists.txt syst/DetectorSystematics.cc syst/CacheKey.cc syst/Rebin.cc syst/ReweightFill.cc syst/ReweightCovariance.cc`
 -  `ls syst`
@@ -140,7 +192,7 @@
 - results:
   - focused `git diff --check` passed for the file-layout cleanup files
   - `ls syst` shows the renamed and split translation units in place
-  - `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel` still
+  - `cmake --build build --target Syst mk_fit mk_cov --parallel` still
     does not provide a trustworthy compile check here because the current
     `build/` tree points at `/usr/bin/cmake`, which is absent in this
     environment
@@ -195,15 +247,15 @@
 ## Verification
 - configure/build commands:
 - target-only commands:
--  `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel`
+-  `cmake --build build --target Syst mk_fit mk_cov --parallel`
 - shell checks:
--  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_sbnfit_cov.cc syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/UniverseSummary.cc syst/Support.cc syst/Detector.cc syst/bits/Detail.hh docs/adaptive-binning-plan.md`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_cov.cc syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/UniverseSummary.cc syst/Support.cc syst/Detector.cc syst/bits/Detail.hh docs/adaptive-binning-plan.md`
 -  `rg -n "\\bSampleComputation\\b|\\bDistributionIO::Family\\b|\\bDistributionIO::Spec\\b|\\bclass SystematicsEngine\\b|\\bSystematicsEngine:" -S io syst app fit`
 - smoke checks:
 - results:
   - the focused `git diff --check` passed for the naming-pass files
   - the focused `rg` sweep returned no remaining code references to the removed names
-  - `cmake --build build --target Syst mk_fit mk_sbnfit_cov --parallel` did not provide a trustworthy compile check here because the current `build/` tree still points at `/usr/bin/cmake`, which is absent in this environment
+  - `cmake --build build --target Syst mk_fit mk_cov --parallel` did not provide a trustworthy compile check here because the current `build/` tree still points at `/usr/bin/cmake`, which is absent in this environment
 
 ## Reduction ledger
 - files deleted: 0
@@ -226,7 +278,7 @@
 
 ## Current milestone
 - status: done
-- subsystem: stacked `mk_sbnfit_cov` smoke coverage
+- subsystem: stacked `mk_cov` smoke coverage
 - design rule from `DESIGN.md`: keep verification focused at the workflow edge,
   reuse persisted data surfaces directly, and avoid building a heavier harness
   than the contract requires
@@ -235,7 +287,7 @@
 - added `tools/systematics-sbnfit-export-smoke.sh`
 - kept the smoke narrow and app-edge:
   - write synthetic cached `DistributionIO::Spectrum` payloads directly
-  - run `mk_sbnfit_cov --manifest` on a good stacked manifest
+  - run `mk_cov --manifest` on a good stacked manifest
   - check exported detector, `genie_knobs`, total, and family covariance
     content from the produced ROOT file
   - check explicit rejection on mismatched multisim family metadata
@@ -291,7 +343,7 @@
   cross-process correlations
 
 ## What changed
-- taught `mk_sbnfit_cov` a manifest-driven stacked export mode at the `app/`
+- taught `mk_cov` a manifest-driven stacked export mode at the `app/`
   edge
 - kept the single-spectrum export path intact while adding:
   - manifest parsing and stacked nominal assembly
@@ -316,15 +368,15 @@
 - configure/build commands:
 -  `cmake -S . -B .build/stacked-export -DCMAKE_BUILD_TYPE=Release`
 - target-only commands:
--  `cmake --build build --target mk_sbnfit_cov --parallel`
+-  `cmake --build build --target mk_cov --parallel`
 - shell checks:
--  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_sbnfit_cov.cc COMMANDS USAGE INSTALL`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md app/mk_cov.cc COMMANDS USAGE INSTALL`
 - smoke checks:
 - results:
   - tracked-file `git diff --check` passed for the stacked-export touched files
-  - `cmake --build build --target mk_sbnfit_cov --parallel` did not provide a
+  - `cmake --build build --target mk_cov --parallel` did not provide a
     trustworthy compile check because the existing `build/` tree is stale and
-    returned `make: *** No rule to make target 'mk_sbnfit_cov'.  Stop.`
+    returned `make: *** No rule to make target 'mk_cov'.  Stop.`
   - fresh configure in `.build/stacked-export` reached dependency discovery and
     then failed because `ROOT` is not available and `root-config` is not on
     `PATH` in this environment

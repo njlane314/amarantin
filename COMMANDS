@@ -29,7 +29,7 @@ Primary executables
   * build/bin/mk_eventlist
   * build/bin/mk_dist
   * build/bin/mk_fit
-  * build/bin/mk_sbnfit_cov
+  * build/bin/mk_cov
 
 Canonical build path
 --------------------
@@ -75,7 +75,7 @@ Build selected targets
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
   cmake --build build --target mk_fit
-  cmake --build build --target mk_sbnfit_cov
+  cmake --build build --target mk_cov
 
 Sample workflow
 ---------------
@@ -202,14 +202,14 @@ Notes:
   rebuilding them.
 
 Export one cached spectrum as an SBNFit-style fractional covariance ROOT file
-  build/bin/mk_sbnfit_cov \
+  build/bin/mk_cov \
     --matrix-name frac_covariance \
     build/dists/run1-numi-fhc.root \
     beam-s0 \
     build/exports/beam-s0.frac_cov.root
 
 Notes:
-  `mk_sbnfit_cov` exports one cached `DistributionIO::Spectrum` at a time.
+  `mk_cov` exports one cached `DistributionIO::Spectrum` at a time.
   It writes a ROOT matrix named `frac_covariance` by default for SBNFit-style
   consumers, plus `abs_covariance`, component covariance matrices when
   available, and a nominal histogram.
@@ -222,7 +222,7 @@ Export one stacked multi-process SBNFit-style covariance from a manifest
   beam_bkg beam-bkg
   dirt dirt
   EOF
-  build/bin/mk_sbnfit_cov \
+  build/bin/mk_cov \
     --manifest stack.export.manifest \
     --matrix-name frac_covariance \
     build/dists/run1-numi-fhc.root \
@@ -237,7 +237,7 @@ Stacked export contract:
   `genie`, `flux`, and `reint` correlate across rows only when retained
   universes survive on every contributing row with matching family branch name
   and universe count.
-  If that exact family contract is unavailable, `mk_sbnfit_cov` rejects the
+  If that exact family contract is unavailable, `mk_cov` rejects the
   stacked export instead of guessing a block-diagonal merge.
 
 Focused smoke for the stacked export contract

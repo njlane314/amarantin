@@ -27,7 +27,7 @@ if ! command -v root-config >/dev/null 2>&1; then
 fi
 
 require_library "IO"
-require_binary "${ROOT_DIR}/build/bin/mk_sbnfit_cov"
+require_binary "${ROOT_DIR}/build/bin/mk_cov"
 
 SOURCE="${TMP_DIR}/sbnfit_export_smoke.cc"
 BINARY="${TMP_DIR}/sbnfit_export_smoke"
@@ -297,12 +297,12 @@ signal signal smoke
 bad bad-genie smoke
 EOF
 
-"${ROOT_DIR}/build/bin/mk_sbnfit_cov" \
+"${ROOT_DIR}/build/bin/mk_cov" \
   --manifest "${GOOD_MANIFEST}" \
   "${DIST_PATH}" \
   "${GOOD_OUTPUT}"
 
-if "${ROOT_DIR}/build/bin/mk_sbnfit_cov" \
+if "${ROOT_DIR}/build/bin/mk_cov" \
   --manifest "${BAD_MANIFEST}" \
   "${DIST_PATH}" \
   "${BAD_OUTPUT}" >"${FAIL_LOG}" 2>&1; then

@@ -3,7 +3,7 @@ add_executable(mk_dataset mk_dataset.cc)
 add_executable(mk_eventlist mk_eventlist.cc)
 add_executable(mk_dist mk_dist.cc)
 add_executable(mk_fit mk_fit.cc)
-add_executable(mk_sbnfit_cov mk_cov.cc)
+add_executable(mk_cov mk_cov.cc)
 
 target_link_libraries(mk_sample
   PRIVATE
@@ -38,13 +38,13 @@ target_link_libraries(mk_fit
     amarantin_build_options
 )
 
-target_link_libraries(mk_sbnfit_cov
+target_link_libraries(mk_cov
   PRIVATE
     IO
     amarantin_build_options
 )
 
-foreach(target_name mk_sample mk_dataset mk_eventlist mk_dist mk_fit mk_sbnfit_cov)
+foreach(target_name mk_sample mk_dataset mk_eventlist mk_dist mk_fit mk_cov)
 
   set_target_properties(${target_name} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
@@ -59,6 +59,6 @@ foreach(target_name mk_sample mk_dataset mk_eventlist mk_dist mk_fit mk_sbnfit_c
   endif()
 endforeach()
 
-install(TARGETS mk_sample mk_dataset mk_eventlist mk_dist mk_fit mk_sbnfit_cov
+install(TARGETS mk_sample mk_dataset mk_eventlist mk_dist mk_fit mk_cov
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 )

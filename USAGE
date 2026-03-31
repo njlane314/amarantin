@@ -190,20 +190,20 @@ The supported kinds are:
 
 The current manifest mode expects unique non-data process names.
 
-Basic mk_sbnfit_cov usage
+Basic mk_cov usage
 -------------------------
 
 General form:
 
-    build/bin/mk_sbnfit_cov [--cache-key <key>] [--matrix-name <name>] [--nominal-name <name>] input.dists.root sample-key output.root
+    build/bin/mk_cov [--cache-key <key>] [--matrix-name <name>] [--nominal-name <name>] input.dists.root sample-key output.root
 
 or:
 
-    build/bin/mk_sbnfit_cov [--manifest <export.manifest>] [--matrix-name <name>] [--nominal-name <name>] input.dists.root output.root
+    build/bin/mk_cov [--manifest <export.manifest>] [--matrix-name <name>] [--nominal-name <name>] input.dists.root output.root
 
 Example:
 
-    build/bin/mk_sbnfit_cov \
+    build/bin/mk_cov \
       --matrix-name frac_covariance \
       build/dists/run1-numi-fhc.root \
       beam-s0 \
@@ -216,13 +216,13 @@ Stacked example:
     beam_bkg beam-bkg
     dirt dirt
     EOF
-    build/bin/mk_sbnfit_cov \
+    build/bin/mk_cov \
       --manifest stack.export.manifest \
       --matrix-name frac_covariance \
       build/dists/run1-numi-fhc.root \
       build/exports/stacked.frac_cov.root
 
-The mk_sbnfit_cov program reads one cached `DistributionIO::Spectrum`,
+The mk_cov program reads one cached `DistributionIO::Spectrum`,
 reconstructs the available systematic absolute covariance components
 (`detector`, optional `genie_knobs`, `genie`, `flux`, `reint`), derives
 fractional covariance from the cached nominal prediction, and writes a ROOT
@@ -251,7 +251,7 @@ The stacked correlation contract is strict:
   * `genie`, `flux`, and `reint` correlate across rows only when retained
     universes survive on every contributing row with matching family branch
     name and universe count
-  * if that exact family contract is unavailable, `mk_sbnfit_cov` rejects the
+  * if that exact family contract is unavailable, `mk_cov` rejects the
     stacked export instead of guessing a block-diagonal merge
 
 Creating a sample list

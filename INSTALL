@@ -36,7 +36,7 @@ Executables
   * mk_eventlist
   * mk_dist
   * mk_fit
-  * mk_sbnfit_cov
+  * mk_cov
 
 Prerequisites
 -------------
@@ -80,7 +80,7 @@ Build only selected targets
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
   cmake --build build --target mk_fit
-  cmake --build build --target mk_sbnfit_cov
+  cmake --build build --target mk_cov
 
 Install
 -------
@@ -150,7 +150,7 @@ present on the selected-event tree. The logical flux family prefers
 
 Runtime note for SBNFit export
 ------------------------------
-`mk_sbnfit_cov` now also supports `--manifest` to export a stacked
+`mk_cov` now also supports `--manifest` to export a stacked
 multi-process covariance matrix. In that mode it correlates detector and
 `genie_knobs` lanes only by shared source labels, and correlates multisim
 families only when retained universes survive with matching family branch name
@@ -165,7 +165,7 @@ Typical installed outputs are:
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_eventlist
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dist
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_fit
-  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_sbnfit_cov
+  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_cov
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libIO.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libAna.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libSyst.<shared-library>
@@ -204,7 +204,7 @@ After a successful build, the build tree should contain:
   build/bin/mk_eventlist
   build/bin/mk_dist
   build/bin/mk_fit
-  build/bin/mk_sbnfit_cov
+  build/bin/mk_cov
   build/lib/
 
 A simple smoke test is:

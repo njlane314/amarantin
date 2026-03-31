@@ -79,9 +79,9 @@ namespace
 
     void print_usage(std::ostream &os)
     {
-        os << "usage: mk_sbnfit_cov [--cache-key <key>] [--matrix-name <name>] "
+        os << "usage: mk_cov [--cache-key <key>] [--matrix-name <name>] "
               "[--nominal-name <name>] <input.dists.root> <sample-key> <output.root>\n"
-              "   or: mk_sbnfit_cov [--manifest <export.manifest>] "
+              "   or: mk_cov [--manifest <export.manifest>] "
               "[--matrix-name <name>] [--nominal-name <name>] "
               "<input.dists.root> <output.root>\n";
     }
@@ -89,7 +89,7 @@ namespace
     [[noreturn]] void print_usage_and_throw()
     {
         print_usage(std::cerr);
-        throw std::runtime_error("mk_sbnfit_cov: invalid arguments");
+        throw std::runtime_error("mk_cov: invalid arguments");
     }
 
     CliOptions parse_args(int argc, char **argv)
@@ -153,9 +153,9 @@ namespace
         }
 
         if (options.matrix_name.empty())
-            throw std::runtime_error("mk_sbnfit_cov: matrix-name must not be empty");
+            throw std::runtime_error("mk_cov: matrix-name must not be empty");
         if (options.nominal_name.empty())
-            throw std::runtime_error("mk_sbnfit_cov: nominal-name must not be empty");
+            throw std::runtime_error("mk_cov: nominal-name must not be empty");
         return options;
     }
 
@@ -166,13 +166,13 @@ namespace
         if (!requested_key.empty())
         {
             if (!dist.has(sample_key, requested_key))
-                throw std::runtime_error("mk_sbnfit_cov: requested cache key is not present for sample");
+                throw std::runtime_error("mk_cov: requested cache key is not present for sample");
             return requested_key;
         }
 
         const std::vector<std::string> keys = dist.dist_keys(sample_key);
         if (keys.empty())
-            throw std::runtime_error("mk_sbnfit_cov: no cached distributions found for sample");
+            throw std::runtime_error("mk_cov: no cached distributions found for sample");
         return keys.front();
     }
 
@@ -213,7 +213,7 @@ namespace
     {
         std::ifstream input(path);
         if (!input)
-            throw std::runtime_error("mk_sbnfit_cov: failed to open manifest: " + path);
+            throw std::runtime_error("mk_cov: failed to open manifest: " + path);
 
         std::vector<ManifestRow> rows;
         std::string line;
@@ -229,7 +229,7 @@ namespace
             if (fields.size() < 2 || fields.size() > 3)
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: expected 2 or 3 fields in manifest at line " +
+                    "mk_cov: expected 2 or 3 fields in manifest at line " +
                     std::to_string(line_number) + " in " + path);
             }
 
@@ -243,13 +243,13 @@ namespace
             if (row.label.empty())
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: empty label in manifest at line " +
+                    "mk_cov: empty label in manifest at line " +
                     std::to_string(line_number));
             }
             if (row.sample_key.empty())
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: empty sample key in manifest at line " +
+                    "mk_cov: empty sample key in manifest at line " +
                     std::to_string(line_number));
             }
 
@@ -257,7 +257,7 @@ namespace
         }
 
         if (rows.empty())
-            throw std::runtime_error("mk_sbnfit_cov: manifest is empty: " + path);
+            throw std::runtime_error("mk_cov: manifest is empty: " + path);
         return rows;
     }
 
@@ -273,9 +273,9 @@ namespace
     {
         const std::size_t expected = static_cast<std::size_t>(nbins * nbins);
         if (target.size() != expected)
-            throw std::runtime_error("mk_sbnfit_cov: target matrix size is invalid for " + context);
+            throw std::runtime_error("mk_cov: target matrix size is invalid for " + context);
         if (source.size() != expected)
-            throw std::runtime_error("mk_sbnfit_cov: source matrix size is invalid for " + context);
+            throw std::runtime_error("mk_cov: source matrix size is invalid for " + context);
 
         for (std::size_t i = 0; i < expected; ++i)
             target[i] += source[i];
@@ -290,11 +290,11 @@ namespace
     {
         const std::size_t expected = static_cast<std::size_t>(block_nbins * block_nbins);
         if (block.size() != expected)
-            throw std::runtime_error("mk_sbnfit_cov: block matrix size is invalid for " + context);
+            throw std::runtime_error("mk_cov: block matrix size is invalid for " + context);
         if (target.size() != static_cast<std::size_t>(total_nbins * total_nbins))
-            throw std::runtime_error("mk_sbnfit_cov: target stacked matrix size is invalid for " + context);
+            throw std::runtime_error("mk_cov: target stacked matrix size is invalid for " + context);
         if (offset < 0 || offset + block_nbins > total_nbins)
-            throw std::runtime_error("mk_sbnfit_cov: block offset is invalid for " + context);
+            throw std::runtime_error("mk_cov: block offset is invalid for " + context);
 
         for (int row = 0; row < block_nbins; ++row)
         {
@@ -327,7 +327,7 @@ namespace
 
         const std::size_t expected = static_cast<std::size_t>(source_count * nbins);
         if (shift_vectors.size() != expected)
-            throw std::runtime_error("mk_sbnfit_cov: shift payload is truncated");
+            throw std::runtime_error("mk_cov: shift payload is truncated");
 
         std::vector<double> out = zero_matrix(nbins);
         for (int source = 0; source < source_count; ++source)
@@ -359,7 +359,7 @@ namespace
         const std::size_t expected = static_cast<std::size_t>(nbins * nbins);
         if (!covariance.empty() && covariance.size() != expected)
         {
-            throw std::runtime_error("mk_sbnfit_cov: " + label + " covariance payload is truncated");
+            throw std::runtime_error("mk_cov: " + label + " covariance payload is truncated");
         }
         if (covariance.size() == expected)
         {
@@ -409,7 +409,7 @@ namespace
                 return spectrum.reint;
         }
 
-        throw std::runtime_error("mk_sbnfit_cov: unknown family kind");
+        throw std::runtime_error("mk_cov: unknown family kind");
     }
 
     const char *family_label(FamilyKind kind)
@@ -435,7 +435,7 @@ namespace
         if (!family_has_exact_universes(family, nbins))
             return {};
         if (nominal.size() != static_cast<std::size_t>(nbins))
-            throw std::runtime_error("mk_sbnfit_cov: nominal payload is incompatible with " + label);
+            throw std::runtime_error("mk_cov: nominal payload is incompatible with " + label);
 
         const int n_variations = static_cast<int>(family.n_variations);
         std::vector<double> covariance = zero_matrix(nbins);
@@ -467,7 +467,7 @@ namespace
 
         const std::size_t expected = static_cast<std::size_t>(nbins * nbins);
         if (!family.covariance.empty() && family.covariance.size() != expected)
-            throw std::runtime_error("mk_sbnfit_cov: " + label + " covariance payload is truncated");
+            throw std::runtime_error("mk_cov: " + label + " covariance payload is truncated");
         if (family.covariance.size() == expected)
         {
             component.absolute = family.covariance;
@@ -483,7 +483,7 @@ namespace
         if (!family.sigma.empty() &&
             family.sigma.size() != static_cast<std::size_t>(nbins))
         {
-            throw std::runtime_error("mk_sbnfit_cov: " + label + " sigma payload is truncated");
+            throw std::runtime_error("mk_cov: " + label + " sigma payload is truncated");
         }
         if (family.sigma.size() == static_cast<std::size_t>(nbins))
         {
@@ -500,7 +500,7 @@ namespace
         const int nbins = static_cast<int>(nominal.size());
         const std::size_t expected = static_cast<std::size_t>(nbins * nbins);
         if (absolute.size() != expected)
-            throw std::runtime_error("mk_sbnfit_cov: absolute covariance size does not match nominal bins");
+            throw std::runtime_error("mk_cov: absolute covariance size does not match nominal bins");
 
         std::vector<float> out(expected, 0.0f);
         for (int row = 0; row < nbins; ++row)
@@ -555,7 +555,7 @@ namespace
                 return spectrum.genie_knob_source_labels;
         }
 
-        throw std::runtime_error("mk_sbnfit_cov: unknown shift lane");
+        throw std::runtime_error("mk_cov: unknown shift lane");
     }
 
     const std::vector<double> &shift_vectors_for(const DistributionIO::Spectrum &spectrum,
@@ -569,7 +569,7 @@ namespace
                 return spectrum.genie_knob_shift_vectors;
         }
 
-        throw std::runtime_error("mk_sbnfit_cov: unknown shift lane");
+        throw std::runtime_error("mk_cov: unknown shift lane");
     }
 
     const std::vector<double> &shift_covariance_for(const DistributionIO::Spectrum &spectrum,
@@ -583,7 +583,7 @@ namespace
                 return spectrum.genie_knob_covariance;
         }
 
-        throw std::runtime_error("mk_sbnfit_cov: unknown shift lane");
+        throw std::runtime_error("mk_cov: unknown shift lane");
     }
 
     int shift_source_count_for(const DistributionIO::Spectrum &spectrum,
@@ -597,7 +597,7 @@ namespace
                 return spectrum.genie_knob_source_count;
         }
 
-        throw std::runtime_error("mk_sbnfit_cov: unknown shift lane");
+        throw std::runtime_error("mk_cov: unknown shift lane");
     }
 
     bool shift_lane_has_component(const DistributionIO::Spectrum &spectrum,
@@ -625,9 +625,9 @@ namespace
         for (const auto &label : labels)
         {
             if (label.empty())
-                throw std::runtime_error("mk_sbnfit_cov: empty source label in " + context);
+                throw std::runtime_error("mk_cov: empty source label in " + context);
             if (!seen.insert(label).second)
-                throw std::runtime_error("mk_sbnfit_cov: duplicate source label " + label + " in " + context);
+                throw std::runtime_error("mk_cov: duplicate source label " + label + " in " + context);
         }
     }
 
@@ -640,9 +640,9 @@ namespace
         const int source_count = shift_source_count_for(entry.spectrum, kind);
         const std::vector<double> &shift_vectors = shift_vectors_for(entry.spectrum, kind);
         if (source_index < 0 || source_index >= source_count)
-            throw std::runtime_error("mk_sbnfit_cov: source index is out of range");
+            throw std::runtime_error("mk_cov: source index is out of range");
         if (shift_vectors.size() != static_cast<std::size_t>(source_count * nbins))
-            throw std::runtime_error("mk_sbnfit_cov: shift payload is truncated");
+            throw std::runtime_error("mk_cov: shift payload is truncated");
 
         std::vector<double> out(static_cast<std::size_t>(total_nbins), 0.0);
         for (int bin = 0; bin < nbins; ++bin)
@@ -660,7 +660,7 @@ namespace
         if (target.size() != static_cast<std::size_t>(nbins * nbins) ||
             delta.size() != static_cast<std::size_t>(nbins))
         {
-            throw std::runtime_error("mk_sbnfit_cov: outer-product inputs are incompatible");
+            throw std::runtime_error("mk_cov: outer-product inputs are incompatible");
         }
 
         for (int row = 0; row < nbins; ++row)
@@ -699,11 +699,11 @@ namespace
         const int nbins = entry.spectrum.spec.nbins;
         if (!family_has_exact_universes(family, nbins))
         {
-            throw std::runtime_error("mk_sbnfit_cov: exact family universes are unavailable for stacked export");
+            throw std::runtime_error("mk_cov: exact family universes are unavailable for stacked export");
         }
         const int n_variations = static_cast<int>(family.n_variations);
         if (universe_index < 0 || universe_index >= n_variations)
-            throw std::runtime_error("mk_sbnfit_cov: family universe index is out of range");
+            throw std::runtime_error("mk_cov: family universe index is out of range");
 
         std::vector<double> out(static_cast<std::size_t>(total_nbins), 0.0);
         for (int bin = 0; bin < nbins; ++bin)
@@ -799,7 +799,7 @@ namespace
             if (local.absolute.empty())
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: contributing " + label +
+                    "mk_cov: contributing " + label +
                     " payload could not be converted into covariance");
             }
             component.absolute = zero_matrix(total_nbins);
@@ -821,13 +821,13 @@ namespace
             if (source_count <= 0 || shifts.empty())
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: stacked " + label +
+                    "mk_cov: stacked " + label +
                     " export requires explicit source shifts for every contributing spectrum");
             }
             if (labels.size() != static_cast<std::size_t>(source_count))
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: stacked " + label +
+                    "mk_cov: stacked " + label +
                     " export requires one source label per contributing shift source");
             }
             validate_unique_labels(labels, label + " component");
@@ -888,7 +888,7 @@ namespace
             if (local.absolute.empty())
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: contributing " + component.label +
+                    "mk_cov: contributing " + component.label +
                     " payload could not be converted into covariance");
             }
             component.absolute = zero_matrix(total_nbins);
@@ -906,13 +906,13 @@ namespace
         if (reference.branch_name.empty())
         {
             throw std::runtime_error(
-                "mk_sbnfit_cov: stacked " + component.label +
+                "mk_cov: stacked " + component.label +
                 " export requires a non-empty family branch name");
         }
         if (!family_has_exact_universes(reference, contributors.front()->spectrum.spec.nbins))
         {
             throw std::runtime_error(
-                "mk_sbnfit_cov: stacked " + component.label +
+                "mk_cov: stacked " + component.label +
                 " export requires retained universes for every contributing spectrum");
         }
 
@@ -922,19 +922,19 @@ namespace
             if (family.branch_name != reference.branch_name)
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: stacked " + component.label +
+                    "mk_cov: stacked " + component.label +
                     " export requires matching family branch names across contributing spectra");
             }
             if (family.n_variations != reference.n_variations)
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: stacked " + component.label +
+                    "mk_cov: stacked " + component.label +
                     " export requires matching universe counts across contributing spectra");
             }
             if (!family_has_exact_universes(family, entry->spectrum.spec.nbins))
             {
                 throw std::runtime_error(
-                    "mk_sbnfit_cov: stacked " + component.label +
+                    "mk_cov: stacked " + component.label +
                     " export requires retained universes for every contributing spectrum");
             }
         }
@@ -1089,7 +1089,7 @@ int main(int argc, char **argv)
 
         TFile output(options.output_path.c_str(), "RECREATE");
         if (output.IsZombie())
-            throw std::runtime_error("mk_sbnfit_cov: failed to open output ROOT file");
+            throw std::runtime_error("mk_cov: failed to open output ROOT file");
 
         std::vector<MatrixComponent> components;
         std::vector<double> nominal;
@@ -1114,9 +1114,9 @@ int main(int argc, char **argv)
             const DistributionIO::Spectrum &spectrum = entries.front().spectrum;
             const int nbins = spectrum.spec.nbins;
             if (nbins <= 0)
-                throw std::runtime_error("mk_sbnfit_cov: cached histogram nbins must be positive");
+                throw std::runtime_error("mk_cov: cached histogram nbins must be positive");
             if (spectrum.nominal.size() != static_cast<std::size_t>(nbins))
-                throw std::runtime_error("mk_sbnfit_cov: nominal payload size does not match cached nbins");
+                throw std::runtime_error("mk_cov: nominal payload size does not match cached nbins");
 
             nominal = spectrum.nominal;
             write_single_nominal_histogram(spectrum, options);
@@ -1141,7 +1141,7 @@ int main(int argc, char **argv)
 
         if (options.stacked_mode())
         {
-            std::cout << "mk_sbnfit_cov: wrote stacked export " << options.output_path
+            std::cout << "mk_cov: wrote stacked export " << options.output_path
                       << " from " << options.input_path
                       << " manifest " << options.manifest_path
                       << " as " << options.matrix_name
@@ -1149,7 +1149,7 @@ int main(int argc, char **argv)
         }
         else
         {
-            std::cout << "mk_sbnfit_cov: wrote " << options.output_path
+            std::cout << "mk_cov: wrote " << options.output_path
                       << " from " << options.input_path
                       << " sample " << options.sample_key
                       << " cache " << entries.front().cache_key
@@ -1158,18 +1158,18 @@ int main(int argc, char **argv)
 
         if (!included_components.empty())
         {
-            std::cout << "mk_sbnfit_cov: included components:";
+            std::cout << "mk_cov: included components:";
             for (const auto &label : included_components)
                 std::cout << " " << label;
             std::cout << "\n";
         }
         else
         {
-            std::cout << "mk_sbnfit_cov: no systematic covariance payloads were present; wrote zero covariance matrices\n";
+            std::cout << "mk_cov: no systematic covariance payloads were present; wrote zero covariance matrices\n";
         }
         if (!approximate_components.empty())
         {
-            std::cout << "mk_sbnfit_cov: diagonal-only fallback used for:";
+            std::cout << "mk_cov: diagonal-only fallback used for:";
             for (const auto &label : approximate_components)
                 std::cout << " " << label;
             std::cout << "\n";
