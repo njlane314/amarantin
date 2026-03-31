@@ -2,76 +2,67 @@
 
 ## Current milestone
 - status: done
-- subsystem: `syst/` reweight-family covariance canonicalization
-- design rule from `DESIGN.md`: keep workflows in `app/`, keep `io/`
-  persistence-only, and make the core data flow easier to follow by treating
-  one persisted covariance matrix as the family truth
+- subsystem: `syst/` EventWeight branch-to-systematics contract
+- design rule from `DESIGN.md`: keep the systematic semantics explicit in
+  `syst/`, keep persistence ownership in `io/`, and prefer one grep-friendly
+  reviewed contract over branch-name folklore
 
 ## What changed
-- made `syst/UniverseSummary.cc` persist family covariance unconditionally as
-  the canonical cache payload for GENIE, flux, and reinteraction families
-- changed rebinned family readback to prefer exact covariance, then retained
-  universes, and only then fall back to old eigenmode-only caches
-- derived sigma and any rebinned compressed modes from the exact rebinned
-  covariance instead of rebuilding the family result primarily from cached
-  compressed modes
-- froze the canonical cache key on `cov=1`, bumped the systematics cache schema
-  version to `4`, and kept the old `persist_covariance` option only as a
-  compatibility surface
-- updated the reweight smoke so it now checks that canonical family covariance
-  is actually written to the cache
+- updated `syst/VISION.md` with the concrete upstream EventWeight surface from
+  `/Users/user/programs/searchingforstrangeness`
+- classified `weightSpline`, `weightTune`, `weightSplineTimesTune`, `ppfx_cv`,
+  and `RootinoFix` as nominal-weight inputs rather than covariance families
+- classified `weightsGenie`, `weightsReint`, `weightsPPFX`, and `weightsFlux`
+  as the canonical multisim family surfaces to consume in `amarantin`
+- classified `weightsGenieUp` / `weightsGenieDn` as an optional separate
+  paired-knob lane rather than extra entries inside the GENIE multisim family
+- recorded the concrete implication that `amarantin`'s logical flux family
+  should prefer `weightsPPFX` and fall back to `weightsFlux`
 
 ## Why this is simpler
-- one family cache payload is now the source of truth instead of an optional
-  covariance branch shadowing sigma and compressed modes
-- exact rebinned covariance no longer depends on whether the cached family also
-  carried compressed eigenmodes
-- older no-covariance caches still have a bounded fallback path, but the new
-  default no longer encourages building fresh sigma-only family caches
+- the vision doc now points at the actual upstream branch names that exist on
+  disk instead of talking only in abstract family terms
+- central-value weights are separated clearly from systematic-variation inputs
+- the future `weightsFlux` / `weightsPPFX` handling and optional GENIE knob
+  lane can be implemented against one reviewed contract
 
 ## Verification
 - configure/build commands:
--  `cmake -S . -B .build/milestone-e -DCMAKE_BUILD_TYPE=Release`
 - target-only commands:
--  `cmake --build build-docker-plot-check --target Syst --parallel`
 - shell checks:
--  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/UniverseSummary.cc syst/Systematics.cc syst/Support.cc syst/bits/Detail.hh syst/README io/bits/DERIVED tools/systematics-reweight-smoke.sh`
--  `bash -n tools/systematics-reweight-smoke.sh`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/VISION.md`
 - smoke checks:
 - results:
   - tracked-file `git diff --check` passed
-  - `bash -n tools/systematics-reweight-smoke.sh` passed
-  - `cmake -S . -B .build/milestone-e -DCMAKE_BUILD_TYPE=Release` failed in
-    this environment because `ROOT` is not available and `root-config` is not
-    on `PATH`
-  - `cmake --build build-docker-plot-check --target Syst --parallel` was not a
-    usable compile check because that auxiliary build tree was configured under
-    `/work/build-docker-plot-check` and now fails the CMake path consistency
-    guard
-  - runtime smoke checks remain deferred because no trustworthy configured ROOT
-    build is available
+  - this was a docs-only pass, so no build or runtime verification was needed
 
 ## Reduction ledger
 - files deleted: 0
 - wrappers removed:
-  - the optional-payload distinction where family covariance could silently be
-    dropped while sigma and compressed modes remained
+  - the need to rediscover upstream EventWeight branch semantics from a
+    separate repository during future `syst/` work
 - shell branches removed: 0
 - docs/build artifacts removed: 0
 - approximate LOC delta:
-  - one focused reweight-family cleanup pass plus doc/test updates
-  - no new framework layer or extra app surface
+  - one focused vision-doc extension
+  - no code-path changes
 
 ## Decisions
 - make covariance the canonical imported semantic from `hive`
 - keep absolute covariance as the canonical persisted form
 - keep detector and total envelopes as derived summaries only
 - keep `amarantin` as the covariance builder
+- treat `weightsPPFX` and `weightsFlux` as one logical flux-family surface with
+  branch-dependent resolution
+- treat `weightsGenieUp` / `weightsGenieDn` as an optional separate paired
+  knob lane, not as extra GENIE multisim universes
 
 ## Remaining hotspots
 - if you want a true stacked multi-process SBNFit export, the next step needs
   an explicit contract for cross-process family correlations rather than
   guessing them from per-process caches
+- the concrete `weightsFlux` fallback and optional GENIE knob-pair propagation
+  still need implementation work in `syst/`
 
 ## Current milestone
 - status: done

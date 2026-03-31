@@ -194,6 +194,27 @@ framework.
   - `cmake -S . -B .build/milestone-e -DCMAKE_BUILD_TYPE=Release` failed in this environment because `ROOT` is not available and `root-config` is not on `PATH`
   - `cmake --build build-docker-plot-check --target Syst --parallel` was not a usable check because that auxiliary build tree was configured under `/work/build-docker-plot-check` and now fails the CMake path consistency guard
 
+#### Milestone F: Record the upstream EventWeight branch contract in the vision doc
+- status: done
+- hypothesis: one explicit mapping from the concrete
+  `searchingforstrangeness` EventWeight branches to `amarantin` systematic
+  semantics will prevent silent branch misuse and reduce future implementation
+  churn
+- files / symbols touched:
+  - `syst/VISION.md`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/VISION.md`
+- acceptance criteria:
+  - the vision doc names the concrete upstream EventWeight branches
+  - each branch set is classified as nominal-weight, canonical multisim, or
+    optional paired-knob surface
+  - the doc states how those branches should be used in `amarantin`
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/VISION.md` passed
+
 ### 7. Public-surface check
 - compatibility impact:
   - `DistributionIO` cache schema version is now `4`

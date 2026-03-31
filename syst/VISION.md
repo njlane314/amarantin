@@ -119,6 +119,125 @@ The following should be derived views, not primary objects:
 Those envelopes are still useful for quick plots and smoke checks, but they
 should no longer be the only information that survives.
 
+SearchingForStrangeness EventWeight Surface
+-------------------------------------------
+
+`/Users/user/programs/searchingforstrangeness` is the concrete upstream branch
+surface this framework should target.
+
+The important boundary fact is:
+
+- in checked-in `searchingforstrangeness` configs there is no dedicated
+  `EventWeights` tree
+- the weight branches live directly on the main `EventSelectionFilter` event
+  tree
+- `amarantin` should therefore consume those persisted branches directly from
+  `EventListIO`, not try to reconstruct art `MCEventWeight` products
+
+The branch-to-systematics contract should be:
+
+| Branch surface | Meaning in `searchingforstrangeness` | Role in `amarantin` |
+| --- | --- | --- |
+| `weightSpline`, `weightTune`, `weightSplineTimesTune` | central-value GENIE spline/tune correction summaries | nominal-weight only; fold into `__w_cv__`, not a systematic family |
+| `ppfx_cv` | central-value NuMI PPFX correction summary | nominal-weight only; fold into `__w_cv__` for NuMI, not a systematic family |
+| `RootinoFix` | one-sided central-value correction from GENIE knob production | nominal-weight only; fold into `__w_cv__`, not a detector or reweight nuisance |
+| `weightsGenie` | compressed GENIE multisim universes | canonical GENIE covariance family |
+| `weightsReint` | compressed Geant4 reinteraction multisim universes | canonical reinteraction covariance family |
+| `weightsPPFX` | compressed NuMI PPFX multisim universes | canonical flux covariance family for NuMI |
+| `weightsFlux` | compressed non-NuMI / legacy beamline flux universes | canonical flux covariance family fallback when `weightsPPFX` is absent |
+| `weightsGenieUp`, `weightsGenieDn` | paired compressed up/down knob weights in a fixed upstream order | optional explicit paired GENIE-knob source lane; keep separate from `weightsGenie` multisim |
+| scalar `knob*up`, `knob*dn` branches | scalar projections of a subset of GENIE knob weights | debug / fallback only; not the canonical systematic surface if paired vectors survive |
+
+The branch encoding already matches `amarantin`'s current universe decode:
+
+- `searchingforstrangeness` compresses multisim and paired up/down vectors as
+  `unsigned short` values scaled by `1000`
+- `amarantin` already decodes multisim vectors with `raw / 1000.0` and
+  sanitises non-finite or non-positive values
+- no additional rescaling convention should be introduced downstream
+
+Upstream branch semantics
+-------------------------
+
+`searchingforstrangeness` currently assembles those branches as follows:
+
+- `weightsGenie`
+  - built by multiplying together the `All_UBGenie` blocks coming from the
+    checked-in eventweight process sequence
+  - default checked-in production surface is `500` universes
+  - this is already the final persisted GENIE multisim family that
+    `amarantin` should consume; `amarantin` should not try to rediscover the
+    upstream art process split
+- `weightsPPFX`
+  - built in NuMI tuple mode from `ppfx_*` multisim blocks
+  - checked-in production surface is `600` universes
+  - this is the preferred flux family whenever it is present
+- `weightsFlux`
+  - built in non-NuMI mode by multiplying the legacy beamline flux multisim
+    groups into one final vector
+  - this is logically the same family role as `weightsPPFX`, but for a
+    different upstream beam configuration
+- `weightsReint`
+  - built by multiplying the available Geant4 hadron reinteraction vectors
+    into one final reinteraction multisim family
+- `weightsGenieUp` / `weightsGenieDn`
+  - built from the separate `eventweightGenieKnobs` surface
+  - the vector entries are ordered by an upstream hardcoded knob list, not by
+    branch name discovery at read time
+  - if `amarantin` imports this lane, it must freeze and review that knob
+    order explicitly rather than infer labels from the ntuple
+
+Framework mapping
+-----------------
+
+The intended `amarantin` usage should be:
+
+- nominal weight path:
+  - keep the current `ana::build_event_list(...)` contract
+  - compute `__w_cv__` from:
+    - `weightSplineTimesTune` when available, otherwise
+      `weightSpline * weightTune`
+    - times `ppfx_cv` for NuMI samples when present
+    - times `RootinoFix` when present
+  - do not re-interpret those central-value factors as separate covariance
+    families
+- canonical covariance families in `syst/`:
+  - GENIE family: `weightsGenie`
+  - reinteraction family: `weightsReint`
+  - logical flux family:
+    - prefer `weightsPPFX`
+    - otherwise use `weightsFlux`
+- optional explicit knob-pair lane:
+  - treat `weightsGenieUp` / `weightsGenieDn` as a separate paired-source
+    family, not as extra entries inside `weightsGenie`
+  - for knob source `k`, the intended shift vector is:
+
+```text
+s^k_{p,b} = 0.5 * (n^{up,k}_{p,b} - n^{down,k}_{p,b})
+V^{knob}_{(p,b),(q,c)} = sum_k s^k_{p,b} * s^k_{q,c}
+```
+
+  - this paired lane should remain optional until the upstream knob ordering is
+    copied into a reviewed local contract
+- scalar `knob*up/dn` branches:
+  - do not use them as the primary source when `weightsGenieUp/Dn` exist
+  - they are acceptable only as a narrow fallback or validation surface for a
+    subset of knobs
+
+Immediate implications for `amarantin`
+--------------------------------------
+
+This upstream branch surface sharpens three concrete follow-up items:
+
+- flux-family resolution in `syst/` should become branch-set aware:
+  - prefer `weightsPPFX`
+  - otherwise fall back to `weightsFlux`
+- the current hardcoded flux mapping to `weightsPPFX` alone is too narrow for
+  the full `searchingforstrangeness` ntuple surface
+- if knob-pair propagation is added later, `syst/` should import the
+  `weightsGenieUp/Dn` vector lane with explicit source labels, not scrape the
+  scalar `knob*` branches one by one
+
 Design Anchors
 --------------
 
