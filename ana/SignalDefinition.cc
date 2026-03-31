@@ -28,6 +28,17 @@ namespace ana
         return signal_definition;
     }
 
+    SampleSelectionRule sample_selection_rule(const DatasetIO::Sample &sample)
+    {
+        using Origin = DatasetIO::Sample::Origin;
+
+        if (sample.origin == Origin::kOverlay)
+            return {"count_strange == 0", "count_strange"};
+        if (sample.origin == Origin::kSignal)
+            return {"count_strange > 0", "count_strange"};
+        return {};
+    }
+
     bool SignalDefinition::in_fiducial(float x,
                                        float y,
                                        float z,

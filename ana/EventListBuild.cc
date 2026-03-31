@@ -31,35 +31,27 @@ namespace
         return cuts_config;
     }
 
-    const char *orthogonal_selection_for_sample(const DatasetIO::Sample &sample)
-    {
-        using Origin = DatasetIO::Sample::Origin;
-
-        if (sample.origin == Origin::kOverlay)
-            return "count_strange == 0";
-        if (sample.origin == Origin::kSignal)
-            return "count_strange > 0";
-        return nullptr;
-    }
-
     std::string build_selection_expression(const DatasetIO::Sample &sample,
                                            TChain &chain,
                                            const std::string &selection_expr)
     {
-        const char *orthogonal_expr = orthogonal_selection_for_sample(sample);
-        if (!orthogonal_expr)
+        const ana::SampleSelectionRule rule = ana::sample_selection_rule(sample);
+        if (!rule.expression)
             return selection_expr;
 
-        if (!chain.GetBranch("count_strange"))
+        if (rule.required_branch && !chain.GetBranch(rule.required_branch))
         {
             throw std::runtime_error(
-                "ana::build_event_list: sample origin requires count_strange for orthogonal filtering");
+                "ana::build_event_list: sample origin " +
+                std::string(DatasetIO::Sample::origin_name(sample.origin)) +
+                " requires branch " + rule.required_branch +
+                " for analysis-specific EventList filtering");
         }
 
         if (selection_expr.empty())
-            return orthogonal_expr;
+            return rule.expression;
 
-        return "(" + selection_expr + ") && (" + orthogonal_expr + ")";
+        return "(" + selection_expr + ") && (" + rule.expression + ")";
     }
 
     std::vector<std::string> branch_names(TTree *tree)

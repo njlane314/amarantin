@@ -1,11 +1,19 @@
 #ifndef SIGNAL_DEFINITION_HH
 #define SIGNAL_DEFINITION_HH
 
+#include "DatasetIO.hh"
+
 #include <limits>
 #include <string>
 
 namespace ana
 {
+    struct SampleSelectionRule
+    {
+        const char *expression = nullptr;
+        const char *required_branch = nullptr;
+    };
+
     class SignalDefinition
     {
     public:
@@ -96,6 +104,8 @@ namespace ana
         float min_lambda_decay_sep_ = 0.50f;
         float min_reco_contained_fraction_ = -1.0f;
     };
+
+    SampleSelectionRule sample_selection_rule(const DatasetIO::Sample &sample);
 }
 
 #endif // SIGNAL_DEFINITION_HH

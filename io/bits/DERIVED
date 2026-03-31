@@ -297,11 +297,12 @@ For data and external samples:
     __event_category__ = 1
     __passes_signal_definition__ = false
 
-Orthogonal sample filtering
----------------------------
+Analysis-specific sample filtering
+----------------------------------
 
-EventListIO currently applies an additional orthogonal phase-space filter for
-some sample origins before writing the selected event tree:
+The canonical `ana` EventList build policy currently applies an additional
+analysis-specific phase-space filter for some sample origins before writing
+the selected event tree:
 
   overlay
     count_strange == 0
@@ -309,8 +310,8 @@ some sample origins before writing the selected event tree:
   signal
     count_strange > 0
 
-This orthogonalization is applied on top of the configured event-list
-selection expression.
+This filtering is applied on top of the configured event-list selection
+expression.
 
 Subrun tree
 -----------
