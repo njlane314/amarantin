@@ -13,7 +13,8 @@ void mk_sample(const char *output_path = "build/sample/beam-s0.sample.root",
             throw std::runtime_error("mk_sample: list_path is required");
 
         SampleIO sample;
-        sample.build(list_path,
+        sample.build("",
+                     {SampleIO::ShardInput{"", list_path}},
                      origin ? origin : "",
                      variation ? variation : "",
                      beam ? beam : "",

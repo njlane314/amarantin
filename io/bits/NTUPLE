@@ -412,12 +412,16 @@ Generator-level strange final-state summary:
   truth_has_nc_strangeness          bool
   truth_has_fs_lambda0              bool
   truth_has_fs_sigma0               bool
+  truth_has_g4_lambda0              bool
   truth_has_g4_lambda0_to_ppi       bool
+  truth_has_g4_lambda0_from_sigma0  bool
   truth_has_ks0                     bool
   truth_has_pi0                     bool
   truth_n_fs_lambda0                int
   truth_n_fs_sigma0                 int
+  truth_n_g4_lambda0                int
   truth_n_g4_lambda0_to_ppi         int
+  truth_n_g4_lambda0_from_sigma0    int
   truth_n_ks0                       int
   truth_n_pi0                       int
   truth_fs_lambda0_p                std::vector<float>
@@ -480,6 +484,41 @@ Notes on LambdaAnalysis_tool:
   The g4_lambda_pr_* and g4_lambda_*_true_hits branches are filled during
   analyseSlice() by matching the selected reconstructed slice content against
   the truth muon, proton, and pion track IDs.
+
+Additional all-lambda truth branches may also be present on newer ntuples:
+
+  g4_all_lambda_trackid
+  g4_all_lambda_pdg
+  g4_all_lambda_parent_trackid
+  g4_all_lambda_parent_pdg
+  g4_all_lambda_has_sigma0_ancestor
+  g4_all_lambda_sigma0_ancestor_trackid
+  g4_all_lambda_sigma0_ancestor_pdg
+  g4_all_lambda_sigma0_ancestor_p
+  g4_all_lambda_has_ppi_decay
+  g4_all_lambda_p_trackid
+  g4_all_lambda_pi_trackid
+  g4_all_lambda_p_mag
+  g4_all_lambda_p_p
+  g4_all_lambda_pi_p
+  g4_all_lambda_decay_sep
+  g4_all_lambda_endx
+  g4_all_lambda_endy
+  g4_all_lambda_endz
+  g4_all_lambda_p_endx
+  g4_all_lambda_p_endy
+  g4_all_lambda_p_endz
+  g4_all_lambda_pi_endx
+  g4_all_lambda_pi_endy
+  g4_all_lambda_pi_endz
+  g4_all_lambda_start_in_fv
+  g4_all_lambda_decay_in_fv
+  g4_all_lambda_p_end_in_fv
+  g4_all_lambda_pi_end_in_fv
+  g4_all_lambda_ppi_contained_in_fv
+
+Downstream `amarantin` signal classification prefers `g4_all_lambda_*` when
+available and falls back to the older `g4_lambda_*` inputs otherwise.
 
 Notes
 -----

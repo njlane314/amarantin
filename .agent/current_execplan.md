@@ -1,5 +1,49 @@
 # ExecPlan
 
+## ExecPlan Addendum: Spectrum And SampleIO Seam Trim
+
+### 1. Objective
+Implement the next two concrete `io/VISION.md` items without widening into a
+new file-format redesign:
+
+- rename `DistributionIO::Entry` to `DistributionIO::Spectrum`
+- move manifest / `@file` parsing out of `SampleIO` and into `app/mk_sample`
+
+### 2. Constraints
+- Keep `io/` persistence-only.
+- Preserve the documented `mk_sample` CLI behavior.
+- Avoid changing on-disk ROOT layout just to match in-memory names.
+- Leave unrelated dirty-worktree changes untouched.
+
+### 3. Scope
+- rename/update:
+  - `io/DistributionIO.hh`
+  - `io/DistributionIO.cc`
+  - `app/mk_xsec_fit.cc`
+  - `plot/EventListPlotting.hh`
+  - `plot/EventListPlotting.cc`
+  - `plot/macro/inspect_dist.C`
+  - `syst/bits/Detail.hh`
+  - `fit/README`
+  - `syst/README`
+  - `docs/adaptive-binning-plan.md`
+  - `io/SampleIO.hh`
+  - `io/SampleIO.cc`
+  - `app/mk_sample.cc`
+  - `io/macro/mk_sample.C`
+  - `io/VISION.md`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 4. Status
+- status: done
+- outcome:
+  - `DistributionIO` now exposes `Spectrum` as the cached-payload noun
+  - `SampleIO` now builds from already-resolved shard inputs instead of
+    parsing manifests or `@file` indirection itself
+  - the `mk_sample` app now owns the small workflow parsing layer that was
+    previously leaking into `io/`
+
 ## ExecPlan Addendum: ShardIO And Signal Naming Pass
 
 ### 1. Objective

@@ -127,15 +127,15 @@ record-style names and plain verbs over explanatory wrappers.
 Status: implementation of logical-sample build, read, and write.
 
 This file should keep one direct responsibility: build one persisted sample from
-input shard lists and attach the normalization surface needed downstream. It is
-allowed to talk to ROOT and the run database because that is part of producing
-the persisted sample record. It should not become a second CLI layer, and it
-should not absorb analysis-time weighting rules that belong in `ana/`.
+already-resolved shard inputs and attach the normalization surface needed
+downstream. It is allowed to talk to ROOT and the run database because that is
+part of producing the persisted sample record. It should not become a second
+CLI layer, and it should not absorb analysis-time weighting rules that belong
+in `ana/`.
 
-The current parsing helpers for manifests and `@file` path lists are acceptable
-while they stay small. If that parsing grows more complicated, the first move
-should be to push workflow-specific interpretation outward into `app/`, not to
-grow more local mini-framework inside `io/`.
+Manifest parsing and legacy `@file` expansion now belong in `app/mk_sample.cc`.
+Keep that workflow interpretation there rather than rebuilding a second parser
+inside `io/`.
 
 ### `io/DatasetIO.hh`
 

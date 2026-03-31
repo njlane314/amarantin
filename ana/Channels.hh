@@ -55,6 +55,7 @@ namespace channels
         bool require_lambda_decay_in_fv = false;
         bool require_ppi_endpoints_in_fv = false;
         bool require_sigma0_ancestor = false;
+        int required_lambda_pdg = 3122;
         float min_muon_p = 0.10f;
         float min_lambda_p = -1.0f;
         float max_lambda_p = -1.0f;
@@ -114,6 +115,8 @@ namespace channels
         if (ccnc != 0)
             return false;
         if (cfg.require_truth_vertex_in_fv && !truth_in_fiducial)
+            return false;
+        if (cfg.required_lambda_pdg != 0 && cand.lambda_pdg != cfg.required_lambda_pdg)
             return false;
         if (cfg.require_ppi_decay && !cand.has_ppi_decay)
             return false;

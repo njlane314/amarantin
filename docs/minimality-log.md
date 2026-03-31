@@ -2,6 +2,70 @@
 
 ## Current milestone
 - status: done
+- subsystem: `io/` cached-payload naming + sample-build seam
+- design rule from `DESIGN.md`: keep `io/` persistence-only and push workflow
+  orchestration back out into `app/`
+
+## What changed
+- renamed `DistributionIO::Entry` to `DistributionIO::Spectrum` and updated
+  the downstream consumers and docs that describe that cached payload surface
+- kept the on-disk `DistributionIO` payload layout unchanged; this is an
+  in-memory/API noun cleanup, not a file-format rewrite
+- removed manifest and `@file` parsing from `io/SampleIO.cc`
+- narrowed `SampleIO` to one plain build surface:
+  - sample name
+  - resolved shard list
+  - metadata
+  - optional run-db path
+- moved the small parsing helpers for:
+  - sample manifests
+  - legacy `@file` list expansion
+  into `app/mk_sample.cc`, where the CLI orchestration already belongs
+- updated the local macro `io/macro/mk_sample.C` to call that narrower
+  `SampleIO` build surface directly
+- updated `io/VISION.md` so it now describes `Spectrum` as current and says
+  explicitly that manifest parsing belongs in `app/`
+
+## Why this is simpler
+- `DistributionIO::Spectrum` says what the cached object is; `Entry` was too
+  vague for a persisted histogram-like payload
+- `io/` no longer owns text-file workflow parsing for `mk_sample`
+- `SampleIO` is closer to a plain persistence/builder surface and less like a
+  second CLI implementation hiding inside the library
+- the app now owns the small amount of legacy argument interpretation that
+  actually belongs there
+
+## Verification
+- local checks:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh io/DistributionIO.cc app/mk_xsec_fit.cc plot/EventListPlotting.hh plot/EventListPlotting.cc plot/macro/inspect_dist.C syst/bits/Detail.hh fit/README syst/README docs/adaptive-binning-plan.md io/SampleIO.hh io/SampleIO.cc app/mk_sample.cc io/macro/mk_sample.C io/VISION.md`
+  - `bash -n tools/run-macro`
+  - `cmake --build build --target IO --parallel`
+  - `cmake -S . -B .build/io-spectrum-check -DCMAKE_BUILD_TYPE=Release`
+- results:
+  - stale `DistributionIO::Entry` references were removed from the touched
+    code and docs
+  - stale `SampleIO` manifest / `@file` parser APIs were removed from `io/`
+  - `git diff --check` passed on the touched tracked files
+  - `bash -n tools/run-macro` passed
+  - the existing `build/` tree still points at `/usr/bin/cmake`
+  - a fresh configure is still blocked on missing ROOT / `root-config`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - the text-file parsing layer from `SampleIO`
+- shell branches removed: 0
+- docs/build artifacts removed:
+  - stale `DistributionIO::Entry` wording in current docs
+
+## Decisions
+- prefer `Spectrum` as the direct noun for one cached `DistributionIO`
+  payload
+- keep the CLI behavior but move its parsing seam into `app/mk_sample`
+- avoid widening this pass into a persisted layout or cache-key redesign
+
+## Current milestone
+- status: done
 - subsystem: `io/` naming convergence
 - design rule from `DESIGN.md`: keep names direct, keep current docs current,
   and remove wrapper ceremony when it does not buy real clarity

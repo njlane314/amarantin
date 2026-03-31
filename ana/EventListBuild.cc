@@ -417,7 +417,8 @@ namespace
                                               const DatasetIO::Sample &sample,
                                               const std::string &event_tree_name,
                                               const std::string &selection_expr,
-                                              const cuts::Config &cuts_config)
+                                              const cuts::Config &cuts_config,
+                                              const channels::SignalDefinition &signal_definition)
     {
         TChain chain(event_tree_name.c_str());
         for (const auto &path : sample.root_files)
@@ -490,12 +491,33 @@ namespace
         bool is_nu_mu_cc = false;
         bool truth_in_fiducial = false;
         float mu_p = std::numeric_limits<float>::quiet_NaN();
+        float contained_fraction = std::numeric_limits<float>::quiet_NaN();
 
         std::vector<int> *prim_pdg = nullptr;
         std::vector<int> *g4_lambda_pdg = nullptr;
+        std::vector<float> *g4_lambda_p_mag = nullptr;
         std::vector<float> *g4_lambda_p_p = nullptr;
         std::vector<float> *g4_lambda_pi_p = nullptr;
         std::vector<float> *g4_lambda_decay_sep = nullptr;
+        std::vector<float> *g4_lambda_endx = nullptr;
+        std::vector<float> *g4_lambda_endy = nullptr;
+        std::vector<float> *g4_lambda_endz = nullptr;
+        std::vector<int> *g4_all_lambda_pdg = nullptr;
+        std::vector<int> *g4_all_lambda_has_ppi_decay = nullptr;
+        std::vector<int> *g4_all_lambda_has_sigma0_ancestor = nullptr;
+        std::vector<float> *g4_all_lambda_p_mag = nullptr;
+        std::vector<float> *g4_all_lambda_p_p = nullptr;
+        std::vector<float> *g4_all_lambda_pi_p = nullptr;
+        std::vector<float> *g4_all_lambda_decay_sep = nullptr;
+        std::vector<float> *g4_all_lambda_endx = nullptr;
+        std::vector<float> *g4_all_lambda_endy = nullptr;
+        std::vector<float> *g4_all_lambda_endz = nullptr;
+        std::vector<float> *g4_all_lambda_p_endx = nullptr;
+        std::vector<float> *g4_all_lambda_p_endy = nullptr;
+        std::vector<float> *g4_all_lambda_p_endz = nullptr;
+        std::vector<float> *g4_all_lambda_pi_endx = nullptr;
+        std::vector<float> *g4_all_lambda_pi_endy = nullptr;
+        std::vector<float> *g4_all_lambda_pi_endz = nullptr;
 
         const bool has_weight_spline = chain.GetBranch("weightSpline") != nullptr;
         const bool has_weight_tune = chain.GetBranch("weightTune") != nullptr;
@@ -509,11 +531,41 @@ namespace
         const bool has_is_nu_mu_cc = chain.GetBranch("is_nu_mu_cc") != nullptr;
         const bool has_truth_in_fiducial = chain.GetBranch("nu_vtx_in_fv") != nullptr;
         const bool has_mu_p = chain.GetBranch("mu_p") != nullptr;
+        const bool has_contained_fraction = chain.GetBranch("contained_fraction") != nullptr;
         const bool has_prim_pdg = chain.GetBranch("prim_pdg") != nullptr;
         const bool has_g4_lambda_pdg = chain.GetBranch("g4_lambda_pdg") != nullptr;
+        const bool has_g4_lambda_p_mag = chain.GetBranch("g4_lambda_p_mag") != nullptr;
         const bool has_g4_lambda_p_p = chain.GetBranch("g4_lambda_p_p") != nullptr;
         const bool has_g4_lambda_pi_p = chain.GetBranch("g4_lambda_pi_p") != nullptr;
         const bool has_g4_lambda_decay_sep = chain.GetBranch("g4_lambda_decay_sep") != nullptr;
+        const bool has_g4_lambda_endx = chain.GetBranch("g4_lambda_endx") != nullptr;
+        const bool has_g4_lambda_endy = chain.GetBranch("g4_lambda_endy") != nullptr;
+        const bool has_g4_lambda_endz = chain.GetBranch("g4_lambda_endz") != nullptr;
+        const bool has_g4_all_lambda_pdg = chain.GetBranch("g4_all_lambda_pdg") != nullptr;
+        const bool has_g4_all_lambda_has_ppi_decay =
+            chain.GetBranch("g4_all_lambda_has_ppi_decay") != nullptr;
+        const bool has_g4_all_lambda_has_sigma0_ancestor =
+            chain.GetBranch("g4_all_lambda_has_sigma0_ancestor") != nullptr;
+        const bool has_g4_all_lambda_p_mag = chain.GetBranch("g4_all_lambda_p_mag") != nullptr;
+        const bool has_g4_all_lambda_p_p = chain.GetBranch("g4_all_lambda_p_p") != nullptr;
+        const bool has_g4_all_lambda_pi_p = chain.GetBranch("g4_all_lambda_pi_p") != nullptr;
+        const bool has_g4_all_lambda_decay_sep =
+            chain.GetBranch("g4_all_lambda_decay_sep") != nullptr;
+        const bool has_g4_all_lambda_endx = chain.GetBranch("g4_all_lambda_endx") != nullptr;
+        const bool has_g4_all_lambda_endy = chain.GetBranch("g4_all_lambda_endy") != nullptr;
+        const bool has_g4_all_lambda_endz = chain.GetBranch("g4_all_lambda_endz") != nullptr;
+        const bool has_g4_all_lambda_p_endx =
+            chain.GetBranch("g4_all_lambda_p_endx") != nullptr;
+        const bool has_g4_all_lambda_p_endy =
+            chain.GetBranch("g4_all_lambda_p_endy") != nullptr;
+        const bool has_g4_all_lambda_p_endz =
+            chain.GetBranch("g4_all_lambda_p_endz") != nullptr;
+        const bool has_g4_all_lambda_pi_endx =
+            chain.GetBranch("g4_all_lambda_pi_endx") != nullptr;
+        const bool has_g4_all_lambda_pi_endy =
+            chain.GetBranch("g4_all_lambda_pi_endy") != nullptr;
+        const bool has_g4_all_lambda_pi_endz =
+            chain.GetBranch("g4_all_lambda_pi_endz") != nullptr;
 
         if (!has_run || !has_subrun)
         {
@@ -544,16 +596,61 @@ namespace
             chain.SetBranchAddress("nu_vtx_in_fv", &truth_in_fiducial);
         if (has_mu_p)
             chain.SetBranchAddress("mu_p", &mu_p);
+        if (has_contained_fraction)
+            chain.SetBranchAddress("contained_fraction", &contained_fraction);
         if (has_prim_pdg)
             chain.SetBranchAddress("prim_pdg", &prim_pdg);
         if (has_g4_lambda_pdg)
             chain.SetBranchAddress("g4_lambda_pdg", &g4_lambda_pdg);
+        if (has_g4_lambda_p_mag)
+            chain.SetBranchAddress("g4_lambda_p_mag", &g4_lambda_p_mag);
         if (has_g4_lambda_p_p)
             chain.SetBranchAddress("g4_lambda_p_p", &g4_lambda_p_p);
         if (has_g4_lambda_pi_p)
             chain.SetBranchAddress("g4_lambda_pi_p", &g4_lambda_pi_p);
         if (has_g4_lambda_decay_sep)
             chain.SetBranchAddress("g4_lambda_decay_sep", &g4_lambda_decay_sep);
+        if (has_g4_lambda_endx)
+            chain.SetBranchAddress("g4_lambda_endx", &g4_lambda_endx);
+        if (has_g4_lambda_endy)
+            chain.SetBranchAddress("g4_lambda_endy", &g4_lambda_endy);
+        if (has_g4_lambda_endz)
+            chain.SetBranchAddress("g4_lambda_endz", &g4_lambda_endz);
+        if (has_g4_all_lambda_pdg)
+            chain.SetBranchAddress("g4_all_lambda_pdg", &g4_all_lambda_pdg);
+        if (has_g4_all_lambda_has_ppi_decay)
+            chain.SetBranchAddress("g4_all_lambda_has_ppi_decay",
+                                   &g4_all_lambda_has_ppi_decay);
+        if (has_g4_all_lambda_has_sigma0_ancestor)
+            chain.SetBranchAddress("g4_all_lambda_has_sigma0_ancestor",
+                                   &g4_all_lambda_has_sigma0_ancestor);
+        if (has_g4_all_lambda_p_mag)
+            chain.SetBranchAddress("g4_all_lambda_p_mag", &g4_all_lambda_p_mag);
+        if (has_g4_all_lambda_p_p)
+            chain.SetBranchAddress("g4_all_lambda_p_p", &g4_all_lambda_p_p);
+        if (has_g4_all_lambda_pi_p)
+            chain.SetBranchAddress("g4_all_lambda_pi_p", &g4_all_lambda_pi_p);
+        if (has_g4_all_lambda_decay_sep)
+            chain.SetBranchAddress("g4_all_lambda_decay_sep",
+                                   &g4_all_lambda_decay_sep);
+        if (has_g4_all_lambda_endx)
+            chain.SetBranchAddress("g4_all_lambda_endx", &g4_all_lambda_endx);
+        if (has_g4_all_lambda_endy)
+            chain.SetBranchAddress("g4_all_lambda_endy", &g4_all_lambda_endy);
+        if (has_g4_all_lambda_endz)
+            chain.SetBranchAddress("g4_all_lambda_endz", &g4_all_lambda_endz);
+        if (has_g4_all_lambda_p_endx)
+            chain.SetBranchAddress("g4_all_lambda_p_endx", &g4_all_lambda_p_endx);
+        if (has_g4_all_lambda_p_endy)
+            chain.SetBranchAddress("g4_all_lambda_p_endy", &g4_all_lambda_p_endy);
+        if (has_g4_all_lambda_p_endz)
+            chain.SetBranchAddress("g4_all_lambda_p_endz", &g4_all_lambda_p_endz);
+        if (has_g4_all_lambda_pi_endx)
+            chain.SetBranchAddress("g4_all_lambda_pi_endx", &g4_all_lambda_pi_endx);
+        if (has_g4_all_lambda_pi_endy)
+            chain.SetBranchAddress("g4_all_lambda_pi_endy", &g4_all_lambda_pi_endy);
+        if (has_g4_all_lambda_pi_endz)
+            chain.SetBranchAddress("g4_all_lambda_pi_endz", &g4_all_lambda_pi_endz);
 
         double event_weight_normalisation = 1.0;
         double event_weight_central_value = 1.0;
@@ -622,11 +719,42 @@ namespace
                 const int n_gamma = count_abs_pdg(prim_pdg, 22);
                 const int n_k0 = count_k0(prim_pdg);
                 const int n_sigma0 = count_abs_pdg(prim_pdg, 3212);
-                const int lambda_pdg = first_or_default(g4_lambda_pdg, 0);
-                const float proton_p = first_or_default(g4_lambda_p_p, std::numeric_limits<float>::quiet_NaN());
-                const float pion_p = first_or_default(g4_lambda_pi_p, std::numeric_limits<float>::quiet_NaN());
-                const float lambda_decay_sep =
-                    first_or_default(g4_lambda_decay_sep, std::numeric_limits<float>::quiet_NaN());
+                const channels::LambdaTruthCandidate lambda_candidate =
+                    has_g4_all_lambda_pdg
+                        ? first_passing_lambda_candidate(
+                              is_nu_mu_cc,
+                              int_ccnc,
+                              truth_in_fiducial,
+                              mu_p,
+                              contained_fraction,
+                              signal_definition,
+                              g4_all_lambda_pdg,
+                              g4_all_lambda_has_ppi_decay,
+                              g4_all_lambda_has_sigma0_ancestor,
+                              g4_all_lambda_p_mag,
+                              g4_all_lambda_p_p,
+                              g4_all_lambda_pi_p,
+                              g4_all_lambda_decay_sep,
+                              g4_all_lambda_endx,
+                              g4_all_lambda_endy,
+                              g4_all_lambda_endz,
+                              g4_all_lambda_p_endx,
+                              g4_all_lambda_p_endy,
+                              g4_all_lambda_p_endz,
+                              g4_all_lambda_pi_endx,
+                              g4_all_lambda_pi_endy,
+                              g4_all_lambda_pi_endz)
+                        : legacy_lambda_candidate(g4_lambda_pdg,
+                                                  g4_lambda_p_mag,
+                                                  g4_lambda_p_p,
+                                                  g4_lambda_pi_p,
+                                                  g4_lambda_decay_sep,
+                                                  g4_lambda_endx,
+                                                  g4_lambda_endy,
+                                                  g4_lambda_endz);
+                const bool has_sigma0_lambda_ancestor =
+                    has_g4_all_lambda_has_sigma0_ancestor &&
+                    any_nonzero(g4_all_lambda_has_sigma0_ancestor);
 
                 if (is_data_origin(sample))
                 {
@@ -643,11 +771,10 @@ namespace
                     is_signal = channels::is_signal(is_nu_mu_cc,
                                                     int_ccnc,
                                                     truth_in_fiducial,
-                                                    lambda_pdg,
                                                     mu_p,
-                                                    proton_p,
-                                                    pion_p,
-                                                    lambda_decay_sep);
+                                                    contained_fraction,
+                                                    lambda_candidate,
+                                                    signal_definition);
                     analysis_channel = channels::to_int(
                         channels::classify(truth_in_fiducial,
                                            nu_pdg,
@@ -659,12 +786,8 @@ namespace
                                            n_gamma,
                                            n_k0,
                                            n_sigma0,
-                                           is_nu_mu_cc,
-                                           lambda_pdg,
-                                           mu_p,
-                                           proton_p,
-                                           pion_p,
-                                           lambda_decay_sep));
+                                           has_sigma0_lambda_ancestor,
+                                           is_signal));
                 }
                 else
                 {
@@ -767,12 +890,13 @@ namespace ana
                                                             cuts_config);
             }
 
-            std::unique_ptr<TTree> selected =
-                copy_selected_tree(key,
-                                   sample,
-                                   config.event_tree_name,
-                                   effective_selection_expr,
-                                   cuts_config);
+                std::unique_ptr<TTree> selected =
+                    copy_selected_tree(key,
+                                       sample,
+                                       config.event_tree_name,
+                                       effective_selection_expr,
+                                       cuts_config,
+                                       config.signal_definition);
             std::unique_ptr<TTree> subruns =
                 copy_subrun_tree(sample, config.subrun_tree_name);
 

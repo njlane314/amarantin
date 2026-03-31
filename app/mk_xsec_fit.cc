@@ -321,7 +321,7 @@ namespace
             LoadedSource source;
             source.name = row.name;
             source.kind = row.kind;
-            source.entry = dist.read(row.sample_key, pick_cache_key(dist, row.sample_key, row.cache_key));
+            source.spectrum = dist.read(row.sample_key, pick_cache_key(dist, row.sample_key, row.cache_key));
             sources.push_back(std::move(source));
         }
 
@@ -331,10 +331,10 @@ namespace
     fit::Channel build_legacy_channel(const CliOptions &options,
                                       const DistributionIO &dist)
     {
-        const DistributionIO::Entry signal =
+        const DistributionIO::Spectrum signal =
             dist.read(options.signal_sample_key,
                       pick_cache_key(dist, options.signal_sample_key, options.signal_cache_key));
-        const DistributionIO::Entry background =
+        const DistributionIO::Spectrum background =
             dist.read(options.background_sample_key,
                       pick_cache_key(dist,
                                      options.background_sample_key,
@@ -368,11 +368,11 @@ namespace
             throw std::runtime_error("mk_xsec_fit: manifest does not contain any fit inputs");
 
         const std::vector<LoadedSource> sources = load_manifest_sources(dist, rows);
-        const DistributionIO::Entry &reference = sources.front().entry;
+        const DistributionIO::Spectrum &reference = sources.front().spectrum;
         for (std::size_t i = 1; i < sources.size(); ++i)
         {
             require_matching_specs(reference,
-                                   sources[i].entry,
+                                   sources[i].spectrum,
                                    "manifest input " + sources[i].name);
         }
 
@@ -391,14 +391,14 @@ namespace
             if (source.kind == fit::ProcessKind::kData)
             {
                 add_bins_in_place(observed_data,
-                                  source.entry.nominal,
+                                  source.spectrum.nominal,
                                   "manifest data input " + source.name);
-                channel.data_source_keys.push_back(source.entry.spec.sample_key);
+                channel.data_source_keys.push_back(source.spectrum.spec.sample_key);
                 have_observed_data = true;
                 continue;
             }
 
-            channel.processes.push_back(make_process(source.entry, source.name, source.kind));
+            channel.processes.push_back(make_process(source.spectrum, source.name, source.kind));
         }
 
         if (channel.processes.empty())

@@ -1,5 +1,8 @@
 #include <exception>
+#include <fstream>
 #include <iostream>
+#include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -32,6 +35,129 @@ namespace
     {
         print_usage(std::cerr);
         throw std::runtime_error("mk_sample: invalid arguments");
+    }
+
+    std::string trim_copy(const std::string &input)
+    {
+        const std::string::size_type first = input.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos)
+            return "";
+
+        const std::string::size_type last = input.find_last_not_of(" \t\r\n");
+        return input.substr(first, last - first + 1);
+    }
+
+    std::string strip_comment(const std::string &line)
+    {
+        const std::string::size_type pos = line.find('#');
+        if (pos == std::string::npos)
+            return line;
+        return line.substr(0, pos);
+    }
+
+    std::vector<std::string> split_fields(const std::string &line)
+    {
+        std::istringstream input(line);
+        std::vector<std::string> out;
+        std::string field;
+        while (input >> field)
+            out.push_back(field);
+        return out;
+    }
+
+    std::vector<std::string> read_list_file(const std::string &path)
+    {
+        std::ifstream file(path);
+        if (!file)
+            throw std::runtime_error("mk_sample: failed to open input path file: " + path);
+
+        std::vector<std::string> paths;
+        std::string line;
+        while (std::getline(file, line))
+        {
+            const std::string trimmed = trim_copy(strip_comment(line));
+            if (trimmed.empty())
+                continue;
+            paths.push_back(trimmed);
+        }
+
+        if (paths.empty())
+            throw std::runtime_error("mk_sample: no input paths found in file: " + path);
+        return paths;
+    }
+
+    std::vector<SampleIO::ShardInput> read_manifest(const std::string &path)
+    {
+        std::ifstream input(path);
+        if (!input)
+            throw std::runtime_error("mk_sample: failed to open manifest: " + path);
+
+        std::vector<SampleIO::ShardInput> shards;
+        std::set<std::string> shard_names;
+        std::string line;
+        int line_number = 0;
+        while (std::getline(input, line))
+        {
+            ++line_number;
+            const std::string trimmed = trim_copy(strip_comment(line));
+            if (trimmed.empty())
+                continue;
+
+            const std::vector<std::string> fields = split_fields(trimmed);
+            if (fields.size() != 2)
+            {
+                throw std::runtime_error("mk_sample: expected 2 fields at line " +
+                                         std::to_string(line_number) + " in " + path);
+            }
+
+            SampleIO::ShardInput shard;
+            shard.shard = fields[0];
+            shard.sample_list_path = fields[1];
+            if (shard.shard.empty())
+            {
+                throw std::runtime_error("mk_sample: empty shard name at line " +
+                                         std::to_string(line_number) + " in " + path);
+            }
+            if (!shard_names.insert(shard.shard).second)
+            {
+                throw std::runtime_error("mk_sample: duplicate shard name '" +
+                                         shard.shard + "' in " + path);
+            }
+
+            shards.push_back(std::move(shard));
+        }
+
+        if (shards.empty())
+            throw std::runtime_error("mk_sample: manifest is empty: " + path);
+        return shards;
+    }
+
+    std::vector<SampleIO::ShardInput> resolve_shards(const CliOptions &options)
+    {
+        if (options.use_manifest)
+        {
+            if (trim_copy(options.sample).empty())
+                throw std::runtime_error("mk_sample: sample name must not be empty");
+            return read_manifest(options.manifest_path);
+        }
+
+        const std::string list_path = trim_copy(options.list_path);
+        if (list_path.empty())
+            throw std::runtime_error("mk_sample: input list path is empty");
+
+        if (list_path.front() != '@')
+            return {SampleIO::ShardInput{"", list_path}};
+
+        const std::string path_file = trim_copy(list_path.substr(1));
+        if (path_file.empty())
+            throw std::runtime_error("mk_sample: input path file is empty");
+
+        std::vector<SampleIO::ShardInput> shards;
+        const auto paths = read_list_file(path_file);
+        shards.reserve(paths.size());
+        for (const auto &path : paths)
+            shards.push_back(SampleIO::ShardInput{"", path});
+        return shards;
     }
 
     CliOptions parse_args(int argc, char **argv)
@@ -116,27 +242,16 @@ int main(int argc, char **argv)
     try
     {
         const CliOptions options = parse_args(argc, argv);
+        const std::vector<SampleIO::ShardInput> shards = resolve_shards(options);
 
         SampleIO sample;
-        if (options.use_manifest)
-        {
-            sample.build_from_manifest(options.sample,
-                                       options.manifest_path,
-                                       options.origin,
-                                       options.variation,
-                                       options.beam,
-                                       options.polarity,
-                                       options.run_db_path);
-        }
-        else
-        {
-            sample.build(options.list_path,
-                         options.origin,
-                         options.variation,
-                         options.beam,
-                         options.polarity,
-                         options.run_db_path);
-        }
+        sample.build(options.use_manifest ? options.sample : std::string(),
+                     shards,
+                     options.origin,
+                     options.variation,
+                     options.beam,
+                     options.polarity,
+                     options.run_db_path);
         sample.write(options.output_path);
 
         std::cout << "mk_sample: wrote " << options.output_path;

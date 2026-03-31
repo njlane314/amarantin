@@ -95,8 +95,8 @@ namespace fit
 
 Useful follow-on helpers:
 
-- derive adaptive edges from one or more `DistributionIO::Entry` values
-- rebin one `DistributionIO::Entry` onto a supplied coarse edge map
+- derive adaptive edges from one or more `DistributionIO::Spectrum` values
+- rebin one `DistributionIO::Spectrum` onto a supplied coarse edge map
 - assemble a coarse in-memory `fit::Channel` from rebinned cached entries
 
 ## Open Questions

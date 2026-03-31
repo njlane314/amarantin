@@ -246,12 +246,36 @@ Current derivation inputs:
   int_ccnc
   is_nu_mu_cc
   nu_vtx_in_fv
+  contained_fraction
   prim_pdg
   mu_p
+  g4_all_lambda_pdg
+  g4_all_lambda_has_ppi_decay
+  g4_all_lambda_has_sigma0_ancestor
+  g4_all_lambda_p_mag
+  g4_all_lambda_p_p
+  g4_all_lambda_pi_p
+  g4_all_lambda_decay_sep
+  g4_all_lambda_endx
+  g4_all_lambda_endy
+  g4_all_lambda_endz
+  g4_all_lambda_p_endx
+  g4_all_lambda_p_endy
+  g4_all_lambda_p_endz
+  g4_all_lambda_pi_endx
+  g4_all_lambda_pi_endy
+  g4_all_lambda_pi_endz
+
+Legacy fallback inputs when `g4_all_lambda_*` are absent:
+
   g4_lambda_pdg
+  g4_lambda_p_mag
   g4_lambda_p_p
   g4_lambda_pi_p
   g4_lambda_decay_sep
+  g4_lambda_endx
+  g4_lambda_endy
+  g4_lambda_endz
 
 For data and external samples:
 
