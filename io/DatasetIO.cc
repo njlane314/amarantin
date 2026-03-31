@@ -1,53 +1,8 @@
-/**
- * NAME
- *   DatasetIO.cc — ROOT I/O for dataset containers.
- *
- * SYNOPSIS
- *   DatasetIO::DatasetIO(path)              // open READ
- *   DatasetIO::DatasetIO(path, context)     // open WRITE (RECREATE)
- *   ds.samples()                            // enumerate samples
- *   ds.samples(Variation)                   // enumerate variation subset
- *
- * DESCRIPTION
- *   Implements persistence for a single-file dataset container storing sample records
- *   and embedded root file provenances, with deterministic enumeration.
- *
- * LAYOUT
- *   meta/context             TNamed
- *   sample/<key>/            TDirectory
- *     sample                TNamed
- *     origin                 TNamed
- *     variation              TNamed
- *     beam                   TNamed
- *     polarity               TNamed
- *     normalisation_mode     TNamed
- *     subrun_pot_sum         TParameter<double>
- *     db_tortgt_pot_sum      TParameter<double>
- *     normalisation          TParameter<double>
- *     nominal                TNamed
- *     tag                    TNamed
- *     role                   TNamed
- *     defname                TNamed
- *     campaign               TNamed
- *     run_subrun_normalisation TTree(run,subrun,generated_exposure,target_exposure,normalisation)
- *     root_files             TTree(root_file)
- *     prov/pNNNN/            TDirectory
- *       scale                TParameter<double>
- *       shard                TNamed
- *       sample_list_path     TNamed
- *       pot_sum              TParameter<double>
- *       entries              TParameter<long long>
- *       input_files          TObjArray(TObjString)
- *       run_subrun           TTree(run,subrun,generated_exposure)
- *
- * DIAGNOSTICS
- *   Throws std::runtime_error on missing keys, missing directories, invalid types, or file open failures.
- */
- 
 #include "DatasetIO.hh"
 #include "bits/RootUtils.hh"
 
 #include <cstdio>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -200,6 +155,15 @@ namespace
 
         return out;
     }
+
+    int read_optional_provenance_count(TDirectory *d)
+    {
+        TObject *obj = d ? d->Get("provenance_count") : nullptr;
+        auto *count = dynamic_cast<TParameter<int> *>(obj);
+        if (!count)
+            return -1;
+        return count->GetVal();
+    }
 }
 
 const char *DatasetIO::Sample::origin_name(Origin o)
@@ -210,7 +174,7 @@ const char *DatasetIO::Sample::origin_name(Origin o)
         case Origin::kExternal: return "external";
         case Origin::kOverlay: return "overlay";
         case Origin::kDirt: return "dirt";
-        case Origin::kEnriched: return "enriched";
+        case Origin::kSignal: return "signal";
         default: return "unknown";
     }
 }
@@ -222,7 +186,7 @@ DatasetIO::Sample::Origin DatasetIO::Sample::origin_from(const std::string &s)
     if (o == "external" || o == "ext") return Origin::kExternal;
     if (o == "overlay") return Origin::kOverlay;
     if (o == "dirt") return Origin::kDirt;
-    if (o == "enriched") return Origin::kEnriched;
+    if (o == "signal" || o == "enriched") return Origin::kSignal;
     return Origin::kUnknown;
 }
 
@@ -280,10 +244,6 @@ DatasetIO::Sample::Variation DatasetIO::Sample::variation_from(const std::string
     return Variation::kUnknown;
 }
 
-/** PROVENANCE
- *  Serialisation for per-sample provenances(scale, exposure summary, input file list, run/subrun set).
- */
-
 void DatasetIO::Provenance::write(TDirectory *d) const
 {
     d->cd();
@@ -335,10 +295,6 @@ DatasetIO::Provenance DatasetIO::Provenance::read(TDirectory *d)
     return p;
 }
 
-/** SAMPLE
- *  Serialisation for sample records (classification tags, normalisation scalars, resolved ROOT files, provenance list).
- */
-
 void DatasetIO::Sample::write(TDirectory *d) const
 {
     d->cd();
@@ -359,6 +315,10 @@ void DatasetIO::Sample::write(TDirectory *d) const
     TNamed("role", role.c_str()).Write("role", TObject::kOverwrite);
     TNamed("defname", defname.c_str()).Write("defname", TObject::kOverwrite);
     TNamed("campaign", campaign.c_str()).Write("campaign", TObject::kOverwrite);
+    if (provenance_list.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+        throw std::runtime_error("DatasetIO: provenance_list is too large to persist");
+    TParameter<int>("provenance_count", static_cast<int>(provenance_list.size()))
+        .Write("provenance_count", TObject::kOverwrite);
     write_run_subrun_normalisations(run_subrun_normalisations);
 
     {
@@ -433,8 +393,28 @@ DatasetIO::Sample DatasetIO::Sample::read(TDirectory *d)
         }
     }
 
+    const int provenance_count = read_optional_provenance_count(d);
     TDirectory *prov_root = d->GetDirectory("prov");
-    if (!prov_root) return s;
+    if (!prov_root)
+    {
+        if (provenance_count > 0)
+            throw std::runtime_error("DatasetIO: missing sample/prov directory");
+        return s;
+    }
+
+    if (provenance_count >= 0)
+    {
+        s.provenance_list.reserve(static_cast<std::size_t>(provenance_count));
+        for (int i = 0; i < provenance_count; ++i)
+        {
+            char key[32];
+            std::snprintf(key, sizeof(key), "p%04d", i);
+            TDirectory *pd = prov_root->GetDirectory(key);
+            if (!pd) throw std::runtime_error("DatasetIO: missing sample/prov/" + std::string(key));
+            s.provenance_list.push_back(Provenance::read(pd));
+        }
+        return s;
+    }
 
     const auto keys = utils::list_keys(prov_root);
     s.provenance_list.reserve(keys.size());
@@ -448,14 +428,9 @@ DatasetIO::Sample DatasetIO::Sample::read(TDirectory *d)
     return s;
 }
 
-/** DATASET
- *  File lifecycle, minimal layout creation (meta/ and sample/), and sample enumeration/filtering.
- */
-
 DatasetIO::DatasetIO(const std::string &path)
 {
     path_ = path;
-    write_ = false;
 
     file_ = TFile::Open(path.c_str(), "READ");
     if (!file_ || file_->IsZombie())
@@ -488,7 +463,6 @@ DatasetIO::~DatasetIO()
         if (write_) file_->Write();
         file_->Close();
         delete file_;
-        file_ = nullptr;
     }
 }
 
@@ -528,10 +502,7 @@ TDirectory *DatasetIO::sample_dir_(TDirectory *samples_root, const std::string &
 void DatasetIO::ensure_layout_()
 {
     require_open_();
-
-    TDirectory *meta = must_dir_(file_, "meta", true);
-    utils::write_named(meta, "context", context_);
-
+    utils::write_named(must_dir_(file_, "meta", true), "context", context_);
     samples_root_(true);
 }
 
@@ -539,10 +510,7 @@ void DatasetIO::add_sample_(const std::string &key, const Sample &s)
 {
     require_open_();
     if (!write_) throw std::runtime_error("DatasetIO: add_sample_ requires write mode");
-
-    TDirectory *root = samples_root_(true);
-    TDirectory *sd = sample_dir_(root, key, true);
-    s.write(sd);
+    s.write(sample_dir_(samples_root_(true), key, true));
 }
 
 void DatasetIO::add_sample(const std::string &key, const Sample &s)
@@ -555,20 +523,13 @@ void DatasetIO::add_sample(const std::string &key, const Sample &s)
 DatasetIO::Sample DatasetIO::get_sample_(const std::string &key) const
 {
     require_open_();
-
-    TDirectory *root = samples_root_(false);
-    TDirectory *sd = sample_dir_(root, key, false);
-    return Sample::read(sd);
+    return Sample::read(sample_dir_(samples_root_(false), key, false));
 }
 
 std::vector<std::string> DatasetIO::sample_keys() const
 {
     require_open_();
-
-    TDirectory *root = samples_root_(false);
-    if (!root) return {};
-
-    return utils::list_keys(root);
+    return utils::list_keys(samples_root_(false));
 }
 
 DatasetIO::Sample DatasetIO::sample(const std::string &key) const

@@ -50,7 +50,7 @@ public:
         }
     };
 
-    struct Entry
+    struct Spectrum
     {
         Spec spec;
         std::vector<double> nominal;
@@ -83,10 +83,10 @@ public:
     std::vector<std::string> sample_keys() const;
     std::vector<std::string> dist_keys(const std::string &sample_key) const;
     bool has(const std::string &sample_key, const std::string &cache_key) const;
-    Entry read(const std::string &sample_key, const std::string &cache_key) const;
+    Spectrum read(const std::string &sample_key, const std::string &cache_key) const;
     void write(const std::string &sample_key,
                const std::string &cache_key,
-               const Entry &entry);
+               const Spectrum &spectrum);
 
 private:
     void require_open_() const;

@@ -42,7 +42,7 @@ namespace
 
         if (sample.origin == Origin::kOverlay)
             return "count_strange == 0";
-        if (sample.origin == Origin::kEnriched)
+        if (sample.origin == Origin::kSignal)
             return "count_strange > 0";
         return nullptr;
     }
@@ -112,7 +112,7 @@ namespace
     {
         return sample.origin == DatasetIO::Sample::Origin::kOverlay ||
                sample.origin == DatasetIO::Sample::Origin::kDirt ||
-               sample.origin == DatasetIO::Sample::Origin::kEnriched;
+               sample.origin == DatasetIO::Sample::Origin::kSignal;
     }
 
     bool is_external_origin(const DatasetIO::Sample &sample)

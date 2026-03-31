@@ -1,4 +1,4 @@
-#include "bits/SystematicsInternal.hh"
+#include "bits/Detail.hh"
 
 #include <algorithm>
 #include <cstdint>
@@ -34,6 +34,7 @@ namespace syst::detail
            << ";flux=" << options.enable_flux
            << ";reint=" << options.enable_reint
            << ";cov=" << options.persist_covariance
+           << ";hist=" << options.retain_universe_histograms
            << ";modes=" << options.enable_eigenmode_compression
            << ";maxmodes=" << options.max_eigenmodes
            << ";frac=" << std::setprecision(17) << options.eigenmode_fraction;

@@ -2,6 +2,184 @@
 
 ## Current milestone
 - status: done
+- subsystem: `io/` naming convergence
+- design rule from `DESIGN.md`: keep names direct, keep current docs current,
+  and remove wrapper ceremony when it does not buy real clarity
+
+## What changed
+- renamed the public shard-edge helper from `InputPartitionIO` to `ShardIO`
+  and installed `io/ShardIO.hh` instead of the old header
+- cleaned up the matching shard-facing names in `io/ShardIO.cc` and
+  `io/SampleIO.*`:
+  - `list_path`
+  - `files`
+  - `subruns`
+  - `entries`
+  - `shards_`
+- renamed `kEnriched` to `kSignal` in `SampleIO`, `DatasetIO`, and the
+  downstream call sites that branch on sample origin
+- kept backward reads for older persisted files by accepting both
+  `"signal"` and `"enriched"` on input while writing `"signal"` going
+  forward
+- trimmed the small `DatasetIO.cc` redundancies identified in review:
+  - removed a redundant read-mode assignment
+  - removed a dead null check
+  - removed a destructor reset that did not matter at object teardown
+  - inlined a few one-use wrapper locals
+- updated current docs/install surfaces so they describe `ShardIO` and
+  `signal` rather than stale historical names
+
+## Why this is simpler
+- the public type name now matches the role of the object instead of carrying
+  historical partition language
+- the workflow language is more direct with `signal` than `enriched`
+- current docs and installed headers now describe the code that actually
+  exists
+- `DatasetIO.cc` keeps the same persistence work with a little less wrapper
+  ceremony
+
+## Verification
+- local checks:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/CMakeLists.txt io/ShardIO.hh io/ShardIO.cc io/SampleIO.hh io/SampleIO.cc io/DatasetIO.hh io/DatasetIO.cc io/macro/print_sample.C io/README io/VISION.md VISION.md INSTALL USAGE docs/repo-internals.puml io/bits/DERIVED ana/EventListBuild.cc plot/PlottingHelper.cc`
+  - `bash -n tools/run-macro`
+  - `cmake --build build --target IO --parallel`
+  - `cmake -S . -B .build/io-rename-check -DCMAKE_BUILD_TYPE=Release`
+- results:
+  - current-surface `InputPartitionIO` / `kEnriched` references were removed
+    from the touched code and docs
+  - backward-read support for old `"enriched"` payloads was preserved in the
+    enum parsers
+  - `git diff --check` passed on the touched tracked files
+  - `bash -n tools/run-macro` passed
+  - the existing `build/` tree is stale and still references `/usr/bin/cmake`
+  - a fresh configure is still blocked on missing ROOT / `root-config`
+
+## Reduction ledger
+- files deleted: 1 installed public header path renamed out of the tree
+- wrappers removed:
+  - old partition naming at the shard-edge public surface
+- shell branches removed: 0
+- docs/build artifacts removed:
+  - stale current-surface `InputPartitionIO` / `enriched` wording
+
+## Decisions
+- rename the public shard helper directly to `ShardIO` instead of keeping an
+  `Input*` prefix
+- preserve backward reads for old origin strings rather than forcing an
+  immediate file-format break
+- keep persisted `part/partition_*` subdirectories in `SampleIO` unchanged in
+  this pass to avoid widening into a compatibility rewrite
+
+## Current milestone
+- status: done
+- subsystem: `io/` compatibility-layer removal
+- design rule from `DESIGN.md`: keep `io/` persistence-only and delete stale
+  compatibility scaffolding once the direct path exists
+
+## What changed
+- deleted `io/ChannelIO.hh` and `io/ChannelIO.cc`
+- deleted the last local helper macros that still depended on that layer:
+  - `fit/macro/fit_channel.C`
+  - `fit/macro/scan_mu.C`
+  - `plot/macro/plot_channel.C`
+- removed `ChannelIO` from the `IO` library source/header lists
+- updated current docs so they no longer describe `ChannelIO` or `mk_channel`
+  as live workflow surfaces
+- rewrote `docs/adaptive-binning-plan.md` around a `DistributionIO`-first,
+  downstream-assembly path
+
+## Why this is simpler
+- there is one fewer persisted surface to explain, maintain, and keep in sync
+- the tree no longer carries a compatibility layer whose only live users were
+  local macros
+- current docs now point at the direct downstream path instead of a deleted
+  adapter format
+
+## Verification
+- shell checks:
+  - `git diff --check -- io/CMakeLists.txt INSTALL COMMANDS io/README io/VISION.md docs/repo-internals.puml docs/adaptive-binning-plan.md .agent/current_execplan.md docs/minimality-log.md`
+- smoke checks:
+  - none run for ROOT macros; the dependent macros were deleted in this pass
+
+## Reduction ledger
+- files deleted: 5
+- wrappers removed: 1 persisted compatibility layer
+- docs/build artifacts removed: `ChannelIO` from current module/build docs
+
+## Decisions
+- remove `ChannelIO` outright instead of keeping a no-longer-used compatibility
+  surface
+- prefer direct downstream assembly from `DistributionIO` over a second
+  persisted bundle format
+
+## Current milestone
+- status: done
+- subsystem: `io/` correctness guards
+- design rule from `DESIGN.md`: keep `io/` on persistence contracts and fail
+  early when persisted inputs are incomplete or inconsistent
+
+## What changed
+- hardened shard subrun scanning in `io/ShardIO.cc`:
+  - every file must expose a `SubRun` tree
+  - one sample list may not mix `nuselection/SubRun` and `SubRun`
+  - malformed lists now fail before `TChain` can silently skip files
+- hardened run-database lookup in `io/SampleIO.cc`:
+  - partial `(run, subrun)` coverage now throws
+  - the old silent zero-weight fallback for missing rows is gone
+- guarded `DatasetIO` sample overwrite readback in `io/DatasetIO.cc`:
+  - persist `provenance_count`
+  - prefer that count on read so stale `prov/pNNNN` directories are ignored
+  - keep the old directory-enumeration fallback for older files
+- extended `io/ChannelIO.cc` so `DistributionIO::Family::universe_histograms`
+  survives write/read round-trips, while keeping backward-compatible reads
+  for older payloads that do not have those branches
+
+## Why this is simpler
+- malformed sample lists now fail at the persistence boundary instead of
+  showing up later as missing exposure or dropped events
+- run-database handling now has two explicit modes:
+  - fully covered `run_subrun_pot`
+  - all-missing `unit`
+  instead of an ambiguous partial-coverage state
+- one persisted provenance-count guard is smaller than trying to clean up old
+  ROOT directories during every overwrite
+- `ChannelIO` now matches the full `DistributionIO::Family` payload instead of
+  maintaining a silent partial copy
+
+## Verification
+- configure/build commands:
+  - `cmake -S . -B .build/io-guards-check -DCMAKE_BUILD_TYPE=Release`
+- target-only commands:
+  - not run; configure is blocked on missing ROOT
+- shell checks:
+  - `bash -n tools/run-macro`
+- smoke checks:
+  - none added in-tree for this path
+- results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/ShardIO.cc io/SampleIO.cc io/DatasetIO.cc io/ChannelIO.cc` passed
+  - `bash -n tools/run-macro` passed
+  - fresh configure failed because this host has no ROOT environment and no
+    `root-config` on `PATH`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta: roughly +110 / -13 in the code touched for the fixes
+
+## Decisions
+- prefer explicit runtime errors over silent zero-weight fallbacks for partial
+  persisted normalisation data
+- preserve backward-readable ROOT payloads by making the new provenance-count
+  and universe-histogram handling additive
+
+## Remaining hotspots
+- host-side build verification still depends on a ROOT environment that is not
+  available in this session
+
+## Current milestone
+- status: done
 - subsystem: `tools/` + top-level workflow docs
 - design rule from `DESIGN.md`: delete stale scaffolding after feature work,
   keep workflows direct, and reduce wrapper ceremony when the native path is

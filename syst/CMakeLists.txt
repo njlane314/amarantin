@@ -1,9 +1,9 @@
 set(AMARANTIN_SYST_SOURCES
   Systematics.cc
-  SystematicsDetector.cc
-  SystematicsSupport.cc
-  SystematicsUniverseFill.cc
-  SystematicsUniverseSummary.cc
+  Detector.cc
+  Support.cc
+  UniverseFill.cc
+  UniverseSummary.cc
 )
 
 set(AMARANTIN_SYST_PUBLIC_HEADERS
@@ -11,7 +11,7 @@ set(AMARANTIN_SYST_PUBLIC_HEADERS
 )
 
 set(AMARANTIN_SYST_INTERNAL_HEADERS
-  bits/SystematicsInternal.hh
+  bits/Detail.hh
 )
 
 add_library(Syst SHARED

@@ -10,7 +10,7 @@ void print_sample(const char *read_path = nullptr)
         std::cout << "origin=" << SampleIO::origin_name(sample.origin_)
                   << " beam=" << SampleIO::beam_name(sample.beam_)
                   << " polarity=" << SampleIO::polarity_name(sample.polarity_)
-                  << " partitions=" << sample.partitions_.size()
+                  << " shards=" << sample.shards_.size()
                   << " normalised_pot_sum=" << sample.normalised_pot_sum_
                   << "\n";
     });

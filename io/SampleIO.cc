@@ -3,6 +3,7 @@
 #include "bits/RootUtils.hh"
 #include "bits/RunDatabaseService.hh"
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -75,19 +76,43 @@ namespace
 
     using RunSubrunKey = std::pair<int, int>;
 
-    std::map<RunSubrunKey, double> aggregate_generated_exposures(const std::vector<InputPartitionIO> &partitions)
+    std::string format_run_subrun_pair(const RunSubrunKey &pair)
+    {
+        return "(" + std::to_string(pair.first) + ", " + std::to_string(pair.second) + ")";
+    }
+
+    std::string summarise_missing_pairs(const std::vector<RunSubrunKey> &pairs,
+                                        std::size_t limit)
+    {
+        if (pairs.empty())
+            return "";
+
+        std::string out;
+        const std::size_t n = std::min(limit, pairs.size());
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            if (!out.empty())
+                out += ", ";
+            out += format_run_subrun_pair(pairs[i]);
+        }
+        if (pairs.size() > n)
+            out += ", ...";
+        return out;
+    }
+
+    std::map<RunSubrunKey, double> aggregate_generated_exposures(const std::vector<ShardIO> &shards)
     {
         std::map<RunSubrunKey, double> out;
-        for (const auto &partition : partitions)
+        for (const auto &shard : shards)
         {
-            if (!partition.generated_exposures().empty())
+            if (!shard.generated_exposures().empty())
             {
-                for (const auto &entry : partition.generated_exposures())
+                for (const auto &entry : shard.generated_exposures())
                     out[RunSubrunKey{entry.run, entry.subrun}] += entry.generated_exposure;
                 continue;
             }
 
-            for (const auto &pair : partition.run_subruns())
+            for (const auto &pair : shard.subruns())
                 out.emplace(pair, 0.0);
         }
 
@@ -220,7 +245,7 @@ void SampleIO::build_from_shards(const std::vector<ShardInput> &shards)
     if (input_paths_.empty())
         throw std::runtime_error("SampleIO: input_paths is empty");
 
-    partitions_.clear();
+    shards_.clear();
     run_subrun_normalisations_.clear();
     normalisation_mode_.clear();
     subrun_pot_sum_ = 0.0;
@@ -229,12 +254,12 @@ void SampleIO::build_from_shards(const std::vector<ShardInput> &shards)
     normalised_pot_sum_ = 0.0;
     built_ = false;
 
-    partitions_.reserve(shards.size());
+    shards_.reserve(shards.size());
     for (const auto &shard : shards)
     {
-        InputPartitionIO partition_provenance(shard.sample_list_path, shard.shard);
-        subrun_pot_sum_ += partition_provenance.subrun_pot_sum();
-        partitions_.push_back(std::move(partition_provenance));
+        ShardIO shard_io(shard.sample_list_path, shard.shard);
+        subrun_pot_sum_ += shard_io.subrun_pot_sum();
+        shards_.push_back(std::move(shard_io));
     }
 }
 
@@ -242,7 +267,7 @@ void SampleIO::load_run_database_normalisation(const std::string &run_db_path)
 {
     run_subrun_normalisations_.clear();
 
-    const auto generated_exposures = aggregate_generated_exposures(partitions_);
+    const auto generated_exposures = aggregate_generated_exposures(shards_);
     if (generated_exposures.empty())
     {
         normalisation_mode_.clear();
@@ -263,6 +288,21 @@ void SampleIO::load_run_database_normalisation(const std::string &run_db_path)
         for (const auto &entry : db.lookup_tortgt(pairs))
             target_exposures[RunSubrunKey{entry.run, entry.subrun}] =
                 entry.tortgt * kRunDatabasePotScale;
+
+        if (!target_exposures.empty() && target_exposures.size() != generated_exposures.size())
+        {
+            std::vector<RunSubrunKey> missing_pairs;
+            missing_pairs.reserve(generated_exposures.size() - target_exposures.size());
+            for (const auto &entry : generated_exposures)
+            {
+                if (target_exposures.find(entry.first) == target_exposures.end())
+                    missing_pairs.push_back(entry.first);
+            }
+
+            throw std::runtime_error("SampleIO: partial run-database coverage for " +
+                                     resolved_run_db_path + "; missing run/subrun pairs " +
+                                     summarise_missing_pairs(missing_pairs, 8));
+        }
     }
 
     db_tortgt_pot_sum_ = 0.0;
@@ -342,9 +382,9 @@ void SampleIO::write(const std::string &output_path) const
         TTree part_t("input_paths", "");
         std::string input_path;
         part_t.Branch("input_path", &input_path);
-        for (const auto &partition : input_paths_)
+        for (const auto &path : input_paths_)
         {
-            input_path = partition;
+            input_path = path;
             part_t.Fill();
         }
         part_t.Write("input_paths", TObject::kOverwrite);
@@ -387,8 +427,8 @@ void SampleIO::write(const std::string &output_path) const
         }
 
         TDirectory *pr = utils::must_dir(f.get(), "part", true);
-        for (size_t i = 0; i < partitions_.size(); ++i)
-            partitions_[i].write(utils::must_subdir(pr, "partition_" + std::to_string(i), true, "part"));
+        for (size_t i = 0; i < shards_.size(); ++i)
+            shards_[i].write(utils::must_subdir(pr, "partition_" + std::to_string(i), true, "part"));
 
         f->Write();
         f->Close();
@@ -421,19 +461,19 @@ DatasetIO::Sample SampleIO::to_dataset_sample() const
     out.db_tortgt_pot_sum = db_tortgt_pot_sum_;
     out.normalisation = normalisation_;
 
-    out.provenance_list.reserve(partitions_.size());
-    for (const auto &partition : partitions_)
+    out.provenance_list.reserve(shards_.size());
+    for (const auto &shard : shards_)
     {
         DatasetIO::Provenance provenance;
         provenance.scale = normalisation_;
-        provenance.shard = partition.shard();
-        provenance.sample_list_path = partition.sample_list_path();
-        provenance.input_files = partition.sample_files();
-        provenance.pot_sum = partition.subrun_pot_sum();
-        provenance.n_entries = partition.n_events();
-        provenance.run_subruns = partition.run_subruns();
-        provenance.generated_exposures.reserve(partition.generated_exposures().size());
-        for (const auto &entry : partition.generated_exposures())
+        provenance.shard = shard.shard();
+        provenance.sample_list_path = shard.list_path();
+        provenance.input_files = shard.files();
+        provenance.pot_sum = shard.subrun_pot_sum();
+        provenance.n_entries = shard.entries();
+        provenance.run_subruns = shard.subruns();
+        provenance.generated_exposures.reserve(shard.generated_exposures().size());
+        for (const auto &entry : shard.generated_exposures())
         {
             provenance.generated_exposures.push_back(
                 DatasetIO::RunSubrunExposure{entry.run, entry.subrun, entry.generated_exposure});
@@ -581,16 +621,16 @@ void SampleIO::read(const std::string &path)
                                       ? ((normalisation_ > 0.0) ? "scalar" : std::string())
                                       : "run_subrun_pot";
 
-        partitions_.clear();
+        shards_.clear();
         if (TDirectory *pr = f->GetDirectory("part"))
         {
             const auto names = utils::list_keys(pr);
-            partitions_.reserve(names.size());
+            shards_.reserve(names.size());
             for (const auto &name : names)
             {
                 TDirectory *pd = pr->GetDirectory(name.c_str());
                 if (!pd) throw std::runtime_error("SampleIO: missing part/" + name);
-                partitions_.push_back(InputPartitionIO::read(pd));
+                shards_.push_back(ShardIO::read(pd));
             }
         }
 

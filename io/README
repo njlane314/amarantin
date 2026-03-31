@@ -11,7 +11,7 @@ The classes form a simple chain:
   input ROOT files
       |
       v
-  InputPartitionIO
+  ShardIO
       |
       v
   SampleIO
@@ -27,8 +27,8 @@ The classes form a simple chain:
 
 More concretely:
 
-  InputPartitionIO --scans--> one input file list / partition
-  SampleIO         --builds--> one sample container from one or more partitions
+  ShardIO          --scans--> one input file list / shard
+  SampleIO         --builds--> one sample container from one or more shards
   SampleIO         --exports-> DatasetIO::Sample metadata
   DatasetIO        --holds--> many named samples and their metadata
   EventListIO      --writes-> selected event trees and subrun trees
@@ -36,13 +36,13 @@ More concretely:
 
 Class notes
 -----------
-InputPartitionIO
-  Small record for one partition of input ROOT files. It scans subruns, POT,
-  and event counts and can write or read that partition summary.
+ShardIO
+  Small record for one shard of input ROOT files. It scans subruns, POT, and
+  event counts and can write or read that shard summary.
 
 SampleIO
-  Builds a sample-level container from one or more InputPartitionIO
-  partitions. It is the bridge between raw input lists and DatasetIO::Sample
+  Builds a sample-level container from one or more shard inputs. It is the
+  bridge between raw input lists and DatasetIO::Sample
   metadata. The intended logical-sample surface now includes:
   - optional logical sample identity
   - shard/sample-list provenance
@@ -67,10 +67,6 @@ Private material
 ----------------
 bits/
   Private helper code and schema notes used by io/ itself.
-
-Local-only legacy helpers such as `ChannelIO` may still exist in-tree for ad
-hoc macros or migration support, but they are not part of the installed public
-workflow surface.
 
 bits/NTUPLE
   Reference for the upstream input ntuple schema.

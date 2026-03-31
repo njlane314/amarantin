@@ -153,7 +153,7 @@ Typical installed outputs are:
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libSyst.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libPlot.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libFit.<shared-library>
-  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/InputPartitionIO.hh
+  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/ShardIO.hh
   ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/DistributionIO.hh
   ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/EventListIO.hh
   ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/DatasetIO.hh
@@ -162,9 +162,6 @@ Typical installed outputs are:
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfig.cmake
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfigVersion.cmake
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinTargets.cmake
-
-`ChannelIO.hh` remains an in-tree helper header for local legacy tooling, but
-it is no longer part of the installed public header surface.
 
 Downstream CMake use
 --------------------

@@ -32,6 +32,12 @@ target_link_libraries(Ana
     amarantin_build_options
 )
 
+if(nlohmann_json_FOUND)
+  target_link_libraries(Ana PRIVATE nlohmann_json::nlohmann_json)
+elseif(NLOHMANN_JSON_INC)
+  target_include_directories(Ana PRIVATE "${NLOHMANN_JSON_INC}")
+endif()
+
 set_target_properties(Ana PROPERTIES
   OUTPUT_NAME Ana
   VERSION ${PROJECT_VERSION}

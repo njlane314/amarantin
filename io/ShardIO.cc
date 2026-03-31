@@ -1,4 +1,4 @@
-#include "InputPartitionIO.hh"
+#include "ShardIO.hh"
 #include "bits/RootUtils.hh"
 
 #include <algorithm>
@@ -16,30 +16,44 @@
 #include <TObject.h>
 #include <TTree.h>
 
-InputPartitionIO::InputPartitionIO(const std::string &input_path,
-                                   const std::string &shard)
+namespace
 {
-    sample_list_path_ = input_path;
-    shard_ = shard;
-    input_files_ = read_sample_list(input_path);
-    if (!input_files_.empty()) scan_subruns(input_files_);
+    std::string find_subrun_tree_path(TFile &file,
+                                      const std::vector<std::string> &candidates)
+    {
+        for (const auto &name : candidates)
+        {
+            if (dynamic_cast<TTree *>(file.Get(name.c_str())))
+                return name;
+        }
+        return "";
+    }
 }
 
-void InputPartitionIO::write(TDirectory *d) const
+ShardIO::ShardIO(const std::string &list_path,
+                 const std::string &shard)
 {
-    if (!d) throw std::runtime_error("InputPartitionIO::write: null directory");
+    list_path_ = list_path;
+    shard_ = shard;
+    files_ = read_list(list_path);
+    if (!files_.empty()) scan(files_);
+}
+
+void ShardIO::write(TDirectory *d) const
+{
+    if (!d) throw std::runtime_error("ShardIO::write: null directory");
     d->cd();
 
-    utils::write_named(d, "sample_list_path", sample_list_path_);
+    utils::write_named(d, "sample_list_path", list_path_);
     utils::write_named(d, "shard", shard_);
     utils::write_param<double>(d, "pot_sum", subrun_pot_sum());
-    utils::write_param<long long>(d, "entries", n_events());
+    utils::write_param<long long>(d, "entries", entries());
 
     {
         TTree files_t("root_files", "");
         std::string root_file;
         files_t.Branch("root_file", &root_file);
-        for (const auto &path : sample_files())
+        for (const auto &path : files())
         {
             root_file = path;
             files_t.Fill();
@@ -67,7 +81,7 @@ void InputPartitionIO::write(TDirectory *d) const
         }
         else
         {
-            for (const auto &pair : run_subruns())
+            for (const auto &pair : subruns())
             {
                 run = pair.first;
                 subrun = pair.second;
@@ -79,36 +93,36 @@ void InputPartitionIO::write(TDirectory *d) const
     }
 }
 
-InputPartitionIO InputPartitionIO::read(TDirectory *d)
+ShardIO ShardIO::read(TDirectory *d)
 {
-    if (!d) throw std::runtime_error("InputPartitionIO::read: null directory");
+    if (!d) throw std::runtime_error("ShardIO::read: null directory");
 
-    InputPartitionIO out;
-    out.sample_list_path_ = utils::read_named_or(d, "sample_list_path");
+    ShardIO out;
+    out.list_path_ = utils::read_named_or(d, "sample_list_path");
     out.shard_ = utils::read_named_or(d, "shard");
     out.pot_sum_ = utils::read_param<double>(d, "pot_sum");
-    out.n_events_ = utils::read_param<long long>(d, "entries");
+    out.entries_ = utils::read_param<long long>(d, "entries");
 
     {
         auto *t = dynamic_cast<TTree *>(d->Get("root_files"));
-        if (!t) throw std::runtime_error("InputPartitionIO: missing root_files tree in part/" + std::string(d->GetName()));
+        if (!t) throw std::runtime_error("ShardIO: missing root_files tree in part/" + std::string(d->GetName()));
 
         std::string *root_file = nullptr;
         t->SetBranchAddress("root_file", &root_file);
 
         const Long64_t n = t->GetEntries();
-        out.input_files_.reserve(static_cast<size_t>(n));
+        out.files_.reserve(static_cast<size_t>(n));
         for (Long64_t i = 0; i < n; ++i)
         {
             t->GetEntry(i);
-            if (!root_file) throw std::runtime_error("InputPartitionIO: root_files missing root_file in part/" + std::string(d->GetName()));
-            out.input_files_.push_back(*root_file);
+            if (!root_file) throw std::runtime_error("ShardIO: root_files missing root_file in part/" + std::string(d->GetName()));
+            out.files_.push_back(*root_file);
         }
     }
 
     {
         auto *t = dynamic_cast<TTree *>(d->Get("run_subrun"));
-        if (!t) throw std::runtime_error("InputPartitionIO: missing run_subrun tree in part/" + std::string(d->GetName()));
+        if (!t) throw std::runtime_error("ShardIO: missing run_subrun tree in part/" + std::string(d->GetName()));
 
         Int_t run = 0;
         Int_t subrun = 0;
@@ -121,11 +135,11 @@ InputPartitionIO InputPartitionIO::read(TDirectory *d)
 
         const Long64_t n = t->GetEntries();
         out.generated_exposures_.reserve(static_cast<size_t>(n));
-        out.run_subruns_.reserve(static_cast<size_t>(n));
+        out.subruns_.reserve(static_cast<size_t>(n));
         for (Long64_t i = 0; i < n; ++i)
         {
             t->GetEntry(i);
-            out.run_subruns_.emplace_back(static_cast<int>(run), static_cast<int>(subrun));
+            out.subruns_.emplace_back(static_cast<int>(run), static_cast<int>(subrun));
             RunSubrunExposure entry;
             entry.run = static_cast<int>(run);
             entry.subrun = static_cast<int>(subrun);
@@ -137,10 +151,10 @@ InputPartitionIO InputPartitionIO::read(TDirectory *d)
     return out;
 }
 
-std::vector<std::string> InputPartitionIO::read_sample_list(const std::string &path)
+std::vector<std::string> ShardIO::read_list(const std::string &path)
 {
     std::ifstream in(path);
-    if (!in) throw std::runtime_error("InputPartitionIO: failed to open sample list: " + path);
+    if (!in) throw std::runtime_error("ShardIO: failed to open sample list: " + path);
 
     std::vector<std::string> out;
     std::string line;
@@ -155,15 +169,15 @@ std::vector<std::string> InputPartitionIO::read_sample_list(const std::string &p
     return out;
 }
 
-void InputPartitionIO::scan_subruns(const std::vector<std::string> &files)
+void ShardIO::scan(const std::vector<std::string> &files)
 {
-    if (files.empty()) throw std::runtime_error("InputPartitionIO: no input files provided for subrun scan.");
+    if (files.empty()) throw std::runtime_error("ShardIO: no input files provided for subrun scan.");
 
-    run_subruns_.clear();
+    subruns_.clear();
     generated_exposures_.clear();
 
     pot_sum_ = 0.0;
-    n_events_ = 0;
+    entries_ = 0;
 
     const std::vector<std::string> candidates = {"nuselection/SubRun", "SubRun"};
     std::string tree_path;
@@ -172,29 +186,36 @@ void InputPartitionIO::scan_subruns(const std::vector<std::string> &files)
     {
         std::unique_ptr<TFile> file(TFile::Open(f.c_str(), "READ"));
         if (!file || file->IsZombie())
-            throw std::runtime_error("Failed to open input ROOT file: " + f);
+            throw std::runtime_error("ShardIO: failed to open input ROOT file: " + f);
 
-        for (const auto &name : candidates)
+        const std::string file_tree_path = find_subrun_tree_path(*file, candidates);
+        if (file_tree_path.empty())
         {
-            if (dynamic_cast<TTree *>(file->Get(name.c_str())))
-            {
-                tree_path = name;
-                break;
-            }
+            throw std::runtime_error("ShardIO: input ROOT file is missing a SubRun tree: " + f);
         }
 
-        if (!tree_path.empty()) break;
+        if (tree_path.empty())
+        {
+            tree_path = file_tree_path;
+            continue;
+        }
+
+        if (file_tree_path != tree_path)
+        {
+            throw std::runtime_error("ShardIO: mixed SubRun tree layouts in sample list: expected " +
+                                     tree_path + " but found " + file_tree_path + " in " + f);
+        }
     }
 
     if (tree_path.empty())
-        throw std::runtime_error("No input files contained a SubRun tree.");
+        throw std::runtime_error("ShardIO: no input files contained a SubRun tree.");
 
     TChain chain(tree_path.c_str());
     for (const auto &f : files)
         chain.Add(f.c_str());
 
     if (!chain.GetBranch("run") || !chain.GetBranch("subRun") || !chain.GetBranch("pot"))
-        throw std::runtime_error("SubRun tree missing required branches (run, subrun, pot).");
+        throw std::runtime_error("ShardIO: SubRun tree missing required branches (run, subRun, pot).");
 
     Int_t run = 0;
     Int_t subrun = 0;
@@ -205,7 +226,7 @@ void InputPartitionIO::scan_subruns(const std::vector<std::string> &files)
     chain.SetBranchAddress("pot", &pot);
 
     const Long64_t n = chain.GetEntries();
-    n_events_ = static_cast<long long>(n);
+    entries_ = static_cast<long long>(n);
 
     std::map<std::pair<int, int>, double> exposures;
 
@@ -216,11 +237,11 @@ void InputPartitionIO::scan_subruns(const std::vector<std::string> &files)
         exposures[std::make_pair(static_cast<int>(run), static_cast<int>(subrun))] += static_cast<double>(pot);
     }
 
-    run_subruns_.reserve(exposures.size());
+    subruns_.reserve(exposures.size());
     generated_exposures_.reserve(exposures.size());
     for (const auto &entry : exposures)
     {
-        run_subruns_.push_back(entry.first);
+        subruns_.push_back(entry.first);
         generated_exposures_.push_back(
             RunSubrunExposure{entry.first.first, entry.first.second, entry.second});
     }

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
@@ -10,10 +11,24 @@
 #include "TH1D.h"
 #include "TTree.h"
 
-#include "bits/SystematicsInternal.hh"
+#include "bits/Detail.hh"
 
 namespace
 {
+    enum class PersistentCacheState
+    {
+        kEmpty,
+        kCompatible,
+        kIncompatible
+    };
+
+    struct PersistentCacheInspection
+    {
+        PersistentCacheState state = PersistentCacheState::kEmpty;
+        DistributionIO::Metadata metadata;
+        bool metadata_present = false;
+    };
+
     std::mutex &memory_cache_mutex()
     {
         static std::mutex mutex;
@@ -24,6 +39,73 @@ namespace
     {
         static std::unordered_map<std::string, syst::SystematicsResult> cache;
         return cache;
+    }
+
+    PersistentCacheInspection inspect_persistent_cache(const EventListIO &eventlist,
+                                                       const DistributionIO &distfile)
+    {
+        PersistentCacheInspection inspection;
+
+        bool has_entries = false;
+        try
+        {
+            has_entries = !distfile.sample_keys().empty();
+        }
+        catch (...)
+        {
+            has_entries = false;
+        }
+
+        if (!has_entries)
+            return inspection;
+
+        try
+        {
+            inspection.metadata = distfile.metadata();
+            inspection.metadata_present = true;
+            if (inspection.metadata.eventlist_path == eventlist.path() &&
+                inspection.metadata.build_version == syst::detail::kSystematicsCacheVersion)
+            {
+                inspection.state = PersistentCacheState::kCompatible;
+                return inspection;
+            }
+        }
+        catch (...)
+        {
+        }
+
+        inspection.state = PersistentCacheState::kIncompatible;
+        return inspection;
+    }
+
+    [[noreturn]] void throw_incompatible_persistent_cache(const EventListIO &eventlist,
+                                                          const DistributionIO &distfile,
+                                                          const PersistentCacheInspection &inspection)
+    {
+        std::ostringstream os;
+        os << "SystematicsEngine: persistent cache file " << distfile.path()
+           << " does not match event list " << eventlist.path();
+        if (inspection.metadata_present)
+        {
+            os << " (found event list " << inspection.metadata.eventlist_path
+               << ", build version " << inspection.metadata.build_version
+               << "; expected build version " << syst::detail::kSystematicsCacheVersion << ")";
+        }
+        else
+        {
+            os << " (missing metadata for a non-empty cache file)";
+        }
+        os << ". Use a fresh DistributionIO path for this EventListIO.";
+        throw std::runtime_error(os.str());
+    }
+
+    void write_persistent_cache_metadata(const EventListIO &eventlist,
+                                         DistributionIO &distfile)
+    {
+        DistributionIO::Metadata metadata;
+        metadata.eventlist_path = eventlist.path();
+        metadata.build_version = syst::detail::kSystematicsCacheVersion;
+        distfile.write_metadata(metadata);
     }
 
     std::vector<double> combine_total_up(const std::vector<double> &nominal,
@@ -301,16 +383,17 @@ namespace syst
 
         const bool use_persistent_cache = options.persistent_cache != CachePolicy::kMemoryOnly;
         const bool can_write_persistent_cache = distfile.mode() != DistributionIO::Mode::kRead;
+        const PersistentCacheInspection cache_inspection =
+            use_persistent_cache ? inspect_persistent_cache(eventlist, distfile)
+                                 : PersistentCacheInspection{};
 
-        if (use_persistent_cache && can_write_persistent_cache)
+        if (cache_inspection.state == PersistentCacheState::kIncompatible)
         {
-            DistributionIO::Metadata metadata;
-            metadata.eventlist_path = eventlist.path();
-            metadata.build_version = detail::kSystematicsCacheVersion;
-            distfile.write_metadata(metadata);
+            throw_incompatible_persistent_cache(eventlist, distfile, cache_inspection);
         }
 
         if (use_persistent_cache &&
+            cache_inspection.state == PersistentCacheState::kCompatible &&
             options.persistent_cache != CachePolicy::kRebuild &&
             distfile.has(sample_key, persistent_key))
         {
@@ -345,6 +428,8 @@ namespace syst
 
             if (use_persistent_cache && can_write_persistent_cache)
             {
+                if (cache_inspection.state == PersistentCacheState::kEmpty)
+                    write_persistent_cache_metadata(eventlist, distfile);
                 distfile.write(sample_key, persistent_key, entry);
                 distfile.flush();
             }
@@ -403,10 +488,11 @@ namespace syst
         if (distfile.mode() == DistributionIO::Mode::kRead)
             throw std::runtime_error("syst::build_systematics_cache: distribution file must be writable");
 
-        DistributionIO::Metadata metadata;
-        metadata.eventlist_path = eventlist.path();
-        metadata.build_version = detail::kSystematicsCacheVersion;
-        distfile.write_metadata(metadata);
+        const PersistentCacheInspection cache_inspection = inspect_persistent_cache(eventlist, distfile);
+        if (cache_inspection.state == PersistentCacheState::kIncompatible)
+            throw_incompatible_persistent_cache(eventlist, distfile, cache_inspection);
+        if (cache_inspection.state == PersistentCacheState::kEmpty)
+            write_persistent_cache_metadata(eventlist, distfile);
 
         for (const auto &request : options.requests)
         {

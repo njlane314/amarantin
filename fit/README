@@ -36,7 +36,7 @@ data rows, pass `--data-bins` or use `--allow-zero-data` when an empty
 observation is intentional.
 
 For programmatic use, `app/mk_xsec_fit.cc` is the reference path for turning
-cached `DistributionIO::Entry` payloads into one `fit::Channel`.
+cached `DistributionIO::Spectrum` payloads into one `fit::Channel`.
 
 The default problem builder now shares family nuisances across processes,
 includes detector/statistical payloads from cached `DistributionIO` entries,

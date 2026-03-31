@@ -1,5 +1,5 @@
-#ifndef SYST_BITS_SYSTEMATICS_INTERNAL_HH
-#define SYST_BITS_SYSTEMATICS_INTERNAL_HH
+#ifndef SYST_BITS_DETAIL_HH
+#define SYST_BITS_DETAIL_HH
 
 #include <cstddef>
 #include <string>
@@ -16,7 +16,7 @@ namespace syst::detail
     constexpr const char *kCentralWeightBranch = "__w__";
     constexpr int kSystematicsCacheVersion = 2;
 
-    using CacheEntry = DistributionIO::Entry;
+    using CacheEntry = DistributionIO::Spectrum;
     using FamilyCache = DistributionIO::Family;
     using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
@@ -92,4 +92,4 @@ namespace syst::detail
                                                   bool retain_universe_histograms);
 }
 
-#endif // SYST_BITS_SYSTEMATICS_INTERNAL_HH
+#endif // SYST_BITS_DETAIL_HH

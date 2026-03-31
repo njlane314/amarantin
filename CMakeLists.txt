@@ -4,6 +4,7 @@ project(amarantin VERSION 0.1.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
+include(CheckIncludeFileCXX)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
   message(FATAL_ERROR
@@ -74,6 +75,36 @@ endif()
 find_package(nlohmann_json QUIET)
 set(NLOHMANN_JSON_INC "" CACHE PATH
   "Optional path to nlohmann_json headers when no CMake package is available")
+if(NOT nlohmann_json_FOUND AND NOT NLOHMANN_JSON_INC)
+  set(AMARANTIN_NLOHMANN_JSON_HINTS "")
+  if(DEFINED ENV{NLOHMANN_JSON_INC} AND NOT "$ENV{NLOHMANN_JSON_INC}" STREQUAL "")
+    list(APPEND AMARANTIN_NLOHMANN_JSON_HINTS "$ENV{NLOHMANN_JSON_INC}")
+  endif()
+  if(DEFINED ENV{NLOHMANN_JSON_FQ_DIR} AND NOT "$ENV{NLOHMANN_JSON_FQ_DIR}" STREQUAL "")
+    list(APPEND AMARANTIN_NLOHMANN_JSON_HINTS "$ENV{NLOHMANN_JSON_FQ_DIR}/include")
+  endif()
+  if(DEFINED ENV{NLOHMANN_JSON_DIR} AND NOT "$ENV{NLOHMANN_JSON_DIR}" STREQUAL "")
+    list(APPEND AMARANTIN_NLOHMANN_JSON_HINTS "$ENV{NLOHMANN_JSON_DIR}/include")
+  endif()
+  find_path(AMARANTIN_NLOHMANN_JSON_INC
+    NAMES nlohmann/json.hpp
+    HINTS
+      ${AMARANTIN_NLOHMANN_JSON_HINTS}
+  )
+  if(AMARANTIN_NLOHMANN_JSON_INC)
+    set(NLOHMANN_JSON_INC "${AMARANTIN_NLOHMANN_JSON_INC}" CACHE PATH
+      "Optional path to nlohmann_json headers when no CMake package is available" FORCE)
+  endif()
+endif()
+if(NOT nlohmann_json_FOUND AND NOT NLOHMANN_JSON_INC)
+  check_include_file_cxx("nlohmann/json.hpp" AMARANTIN_HAS_NLOHMANN_JSON_HEADER)
+  if(NOT AMARANTIN_HAS_NLOHMANN_JSON_HEADER)
+    message(FATAL_ERROR
+      "nlohmann/json.hpp not found. Source ./.setup.sh, run setup nlohmann_json, "
+      "or configure with -DNLOHMANN_JSON_INC=/path/to/include."
+    )
+  endif()
+endif()
 
 add_library(amarantin_build_options INTERFACE)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")

@@ -1,6 +1,5 @@
 set(AMARANTIN_IO_SOURCES
-  ChannelIO.cc
-  InputPartitionIO.cc
+  ShardIO.cc
   DatasetIO.cc
   DistributionIO.cc
   EventListIO.cc
@@ -9,7 +8,7 @@ set(AMARANTIN_IO_SOURCES
 )
 
 set(AMARANTIN_IO_PUBLIC_HEADERS
-  InputPartitionIO.hh
+  ShardIO.hh
   DistributionIO.hh
   EventListIO.hh
   DatasetIO.hh
@@ -17,7 +16,6 @@ set(AMARANTIN_IO_PUBLIC_HEADERS
 )
 
 set(AMARANTIN_IO_INTERNAL_HEADERS
-  ChannelIO.hh
   bits/RootUtils.hh
   bits/RunDatabaseService.hh
 )

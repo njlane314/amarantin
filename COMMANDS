@@ -289,9 +289,8 @@ Notes
 
 `mk_dist`, `mk_xsec_fit`
   Are the preferred scripted cache / fit entrypoints.
-  Older helper macros such as `cache_systematics.C`, `write_channel.C`,
-  `fit_channel.C`, and `scan_mu.C` may remain useful for ad hoc ROOT
-  sessions, but they are no longer the documented workflow.
+  Older helper macros such as `cache_systematics.C` may remain useful for ad
+  hoc ROOT sessions, but they are no longer the documented workflow.
 
 Generated `samples/generated/datasets.mk`
   Also carries `dataset_defs.<dataset>`, `dataset_manifest.<dataset>`,

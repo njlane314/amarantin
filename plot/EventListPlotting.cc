@@ -59,10 +59,10 @@ namespace plot_utils
         return hist;
     }
 
-    std::unique_ptr<TH1D> make_histogram(const DistributionIO::Entry &entry,
+    std::unique_ptr<TH1D> make_histogram(const DistributionIO::Spectrum &spectrum,
                                          const char *hist_name)
     {
-        const auto &spec = entry.spec;
+        const auto &spec = spectrum.spec;
         if (spec.nbins <= 0)
             throw std::runtime_error("plot_utils::make_histogram: nbins must be positive");
 
@@ -75,11 +75,11 @@ namespace plot_utils
         hist->Sumw2();
 
         const std::size_t nbins = static_cast<std::size_t>(spec.nbins);
-        for (std::size_t bin = 0; bin < nbins && bin < entry.nominal.size(); ++bin)
+        for (std::size_t bin = 0; bin < nbins && bin < spectrum.nominal.size(); ++bin)
         {
-            hist->SetBinContent(static_cast<int>(bin + 1), entry.nominal[bin]);
-            if (bin < entry.sumw2.size())
-                hist->SetBinError(static_cast<int>(bin + 1), std::sqrt(std::max(0.0, entry.sumw2[bin])));
+            hist->SetBinContent(static_cast<int>(bin + 1), spectrum.nominal[bin]);
+            if (bin < spectrum.sumw2.size())
+                hist->SetBinError(static_cast<int>(bin + 1), std::sqrt(std::max(0.0, spectrum.sumw2[bin])));
         }
 
         return hist;

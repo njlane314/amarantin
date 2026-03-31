@@ -63,7 +63,7 @@ namespace
     {
         std::string name;
         fit::ProcessKind kind = fit::ProcessKind::kBackground;
-        DistributionIO::Entry entry;
+        DistributionIO::Spectrum spectrum;
     };
 
     void print_usage(std::ostream &os)
@@ -184,8 +184,8 @@ namespace
         return out;
     }
 
-    void require_matching_specs(const DistributionIO::Entry &reference,
-                                const DistributionIO::Entry &candidate,
+    void require_matching_specs(const DistributionIO::Spectrum &reference,
+                                const DistributionIO::Spectrum &candidate,
                                 const std::string &context)
     {
         if (reference.spec.nbins != candidate.spec.nbins ||
@@ -209,7 +209,7 @@ namespace
         }
     }
 
-    std::string resolve_selection_expr(const DistributionIO::Entry &reference,
+    std::string resolve_selection_expr(const DistributionIO::Spectrum &reference,
                                        const std::string &requested)
     {
         const std::string &cached = reference.spec.selection_expr;
@@ -233,26 +233,26 @@ namespace
             target[i] += source[i];
     }
 
-    fit::Process make_process(const DistributionIO::Entry &entry,
+    fit::Process make_process(const DistributionIO::Spectrum &spectrum,
                               const std::string &name,
                               fit::ProcessKind kind)
     {
         fit::Process process;
         process.name = name;
         process.kind = kind;
-        process.source_keys = {entry.spec.sample_key};
-        process.detector_sample_keys = entry.detector_sample_keys;
-        process.nominal = entry.nominal;
-        process.sumw2 = entry.sumw2;
-        process.detector_down = entry.detector_down;
-        process.detector_up = entry.detector_up;
-        process.detector_templates = entry.detector_templates;
-        process.detector_template_count = entry.detector_template_count;
-        process.genie = entry.genie;
-        process.flux = entry.flux;
-        process.reint = entry.reint;
-        process.total_down = entry.total_down;
-        process.total_up = entry.total_up;
+        process.source_keys = {spectrum.spec.sample_key};
+        process.detector_sample_keys = spectrum.detector_sample_keys;
+        process.nominal = spectrum.nominal;
+        process.sumw2 = spectrum.sumw2;
+        process.detector_down = spectrum.detector_down;
+        process.detector_up = spectrum.detector_up;
+        process.detector_templates = spectrum.detector_templates;
+        process.detector_template_count = spectrum.detector_template_count;
+        process.genie = spectrum.genie;
+        process.flux = spectrum.flux;
+        process.reint = spectrum.reint;
+        process.total_down = spectrum.total_down;
+        process.total_up = spectrum.total_up;
         return process;
     }
 

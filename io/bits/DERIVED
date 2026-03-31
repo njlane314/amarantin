@@ -272,7 +272,7 @@ some sample origins before writing the selected event tree:
   overlay
     count_strange == 0
 
-  enriched
+  signal
     count_strange > 0
 
 This orthogonalization is applied on top of the configured event-list

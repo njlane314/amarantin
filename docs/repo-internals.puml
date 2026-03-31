@@ -1,24 +1,21 @@
 @startuml
 ' =============================================================================
 ' amarantin internals
-' Workflow + persistent surfaces
-' Intended to read like the EventSelectionFilter example: portrait, staged,
-' and biased toward a narrow top-to-bottom flow.
+' Cleaner repo flow: write path, persistent surfaces, and read-side consumers.
 ' =============================================================================
 !pragma layout smetana
 
-top to bottom direction
-' A4 portrait @160dpi ~ 1320x1870px: bias toward a taller-than-wide layout.
-scale max 980*1750
+left to right direction
+' A4-ish landscape @160dpi: keep enough width for three clean columns.
+scale max 1750*1100
 
 skinparam defaultFontSize 10
-skinparam wrapWidth 160
-skinparam nodesep 8
-skinparam ranksep 20
-skinparam padding 1
+skinparam wrapWidth 140
+skinparam nodesep 14
+skinparam ranksep 24
+skinparam padding 2
 
 !$INK     = "#111827"
-!$MUTED   = "#6B7280"
 !$ART     = "#1D4ED8"
 !$TOOLS   = "#15803D"
 !$CFG     = "#B45309"
@@ -87,123 +84,81 @@ skinparam note {
 }
 
 ' =============================================================================
-' Configuration (minimal)
+' Configuration
 ' =============================================================================
 component "Shell / make / scripts\ninvoke mk_* binaries" as USER <<cfg>>
-artifact "Workflow inputs\nsample list\nsample defs\nselection preset /\nselection expr\noptional cache spec" as CFG <<cfg>>
+artifact "Workflow inputs\nmanifests / defs\nselection / cache / fit args" as CFG <<cfg>>
 
 ' =============================================================================
-' Workflow stages
+' Write path
 ' =============================================================================
-package "Workflow stages" <<art>> {
-  component "mk_sample\n(app)" as MK_SAMPLE <<art>>
-  component "mk_dataset\n(app)" as MK_DATASET <<art>>
-  component "mk_eventlist\n(app)" as MK_EVENTLIST <<art>>
-  component "ana::build_event_list(...)" as BUILD_EVENTLIST <<tools>>
-  component "syst::build_systematics_cache(...)" as BUILD_SYST <<tools>>
+package "Write path" <<art>> {
+  component "mk_sample\nscan + assemble" as MK_SAMPLE <<art>>
+  component "mk_dataset" as MK_DATASET <<art>>
+  component "mk_eventlist\nuses ana::build_event_list(...)" as MK_EVENTLIST <<art>>
+  component "mk_dist\nuses syst::build_systematics_cache(...)" as MK_DIST <<art>>
 
   MK_SAMPLE -down-> MK_DATASET : workflow
   MK_DATASET -down-> MK_EVENTLIST : workflow
-
-  MK_EVENTLIST -[hidden]down-> BUILD_EVENTLIST
-  BUILD_EVENTLIST -[hidden]down-> BUILD_SYST
+  MK_EVENTLIST -down-> MK_DIST : optional
 }
 
 ' =============================================================================
-' Persistent products
+' Persistent surfaces
 ' =============================================================================
-package "Persistent products" {
-  artifact "InputPartitionIO\nfile list + subrun scan" as INPUT <<data>>
-  artifact "SampleIO\nsample ROOT container" as SAMPLE <<data>>
+package "Persistent surfaces" {
+  artifact "ShardIO\nscan state" as INPUT <<data>>
+  artifact "SampleIO\nsample container" as SAMPLE <<data>>
   artifact "DatasetIO\nkeyed samples\n+ provenance" as DATASET <<data>>
-  artifact "EventListIO\nselected trees\n+ subrun trees\n+ selection metadata" as EVENTLIST <<data>>
-  artifact "DistributionIO\nbin-wise caches\n+ systematics payloads" as DIST <<data>>
-  artifact "ChannelIO\nprocess / channel view" as CHANNEL <<data>>
+  artifact "EventListIO\nselected trees\n+ subruns\n+ weights" as EVENTLIST <<data>>
+  artifact "DistributionIO\ncached bins\n+ syst payloads" as DIST <<data>>
 
-  INPUT -down-> SAMPLE
+  INPUT -right-> SAMPLE : assemble
   SAMPLE -down-> DATASET
   DATASET -down-> EVENTLIST
   EVENTLIST -down-> DIST
-  DIST -down-> CHANNEL
 }
 
 ' =============================================================================
-' Downstream consumers
+' Read side
 ' =============================================================================
-package "Downstream consumers" <<art>> {
-  component "snapshot::sample(...)\nsnapshot::merged(...)" as SNAPSHOT <<tools>>
-  component "syst::evaluate(...)" as EVAL_SYST <<tools>>
-  component "plot_utils::make_histogram(...)" as PLOT_HIST <<tools>>
-  component "plot_utils::draw_event_display(...)" as PLOT_DISPLAY <<tools>>
+package "Read side" <<art>> {
+  component "row-wise reads\nsnapshot::*\ndraw_event_display(...)\nevaluate(... direct)" as ROW_READ <<tools>>
+  component "cached reads\nmake_histogram(...)\nevaluate(... cached)" as BIN_READ <<tools>>
+  component "mk_xsec_fit\nuses fit::profile_signal_strength(...)" as FIT <<art>>
+  artifact "fit report\nplain-text summary" as REPORT <<data>>
 
-  SNAPSHOT -[hidden]down-> EVAL_SYST
-  EVAL_SYST -[hidden]down-> PLOT_HIST
-  PLOT_HIST -[hidden]down-> PLOT_DISPLAY
+  ROW_READ -[hidden]down-> BIN_READ
+  BIN_READ -[hidden]down-> FIT
+  FIT -down-> REPORT : writes
 }
 
 ' =============================================================================
-' Layout nudges: three clean portrait columns
+' Layout nudges
 ' =============================================================================
-USER -down-> CFG : selects\nworkflow
+USER -right-> CFG : selects\nworkflow
 CFG -[hidden]down-> MK_SAMPLE
 MK_SAMPLE -[hidden]right-> INPUT
+INPUT -[hidden]right-> SAMPLE
 MK_DATASET -[hidden]right-> DATASET
-BUILD_EVENTLIST -[hidden]right-> EVENTLIST
-BUILD_SYST -[hidden]right-> DIST
-EVENTLIST -[hidden]right-> SNAPSHOT
-DIST -[hidden]right-> EVAL_SYST
-CHANNEL -[hidden]right-> PLOT_HIST
-EVENTLIST -[hidden]right-> PLOT_DISPLAY
+MK_EVENTLIST -[hidden]right-> EVENTLIST
+MK_DIST -[hidden]right-> DIST
+EVENTLIST -[hidden]right-> ROW_READ
+DIST -[hidden]right-> BIN_READ
+DIST -[hidden]right-> FIT
 
 ' =============================================================================
-' Wiring: configuration
+' Wiring
 ' =============================================================================
-CFG ..> MK_SAMPLE : input list +\nmetadata args
-CFG ..> MK_DATASET : optional defs
-CFG ..> MK_EVENTLIST : selection +\ncache args
+CFG ..> MK_SAMPLE : drives\nworkflow
 
-' =============================================================================
-' Wiring: production + consumption
-' =============================================================================
-MK_SAMPLE --> INPUT : scans files
 MK_SAMPLE --> SAMPLE : writes
-
-SAMPLE --> MK_DATASET : reads
 MK_DATASET --> DATASET : writes
+MK_EVENTLIST --> EVENTLIST : writes
+MK_DIST --> DIST : writes
 
-MK_EVENTLIST ..> BUILD_EVENTLIST : runs
-DATASET --> BUILD_EVENTLIST : reads
-BUILD_EVENTLIST --> EVENTLIST : writes\nselected rows
-
-MK_EVENTLIST ..> BUILD_SYST : optional\ncache pass
-EVENTLIST --> BUILD_SYST : source rows
-BUILD_SYST --> DIST : writes bins\n+ syst cache
-DIST --> CHANNEL : assemble\nprocess view
-
-EVENTLIST --> SNAPSHOT : snapshot export
-EVENTLIST ..> EVAL_SYST : direct row-wise path
-DIST --> EVAL_SYST : persisted cache
-EVENTLIST --> PLOT_HIST : exploratory plots
-DIST --> PLOT_HIST : repeated plots
-EVENTLIST --> PLOT_DISPLAY : event view
-
-note bottom of INPUT
-  InputPartitionIO is the per-partition scan state
-  used during sample building before SampleIO is written.
-end note
-
-note bottom of BUILD_EVENTLIST
-  ana is the DatasetIO -> EventListIO translation layer.
-  mk_eventlist can then optionally drive systematic cache
-  construction into DistributionIO.
-end note
-
-note bottom of PLOT_HIST
-  plot reads EventListIO directly for row-wise views and
-  DistributionIO for cached bin-wise rendering.
-
-  ChannelIO remains the downstream process/channel surface
-  in the preferred EventListIO -> DistributionIO -> ChannelIO ladder.
-end note
+EVENTLIST --> ROW_READ : reads
+DIST --> BIN_READ : reads
+DIST --> FIT : reads
 
 @enduml

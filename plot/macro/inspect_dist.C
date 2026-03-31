@@ -46,11 +46,11 @@ namespace
         return keys.front();
     }
 
-    std::unique_ptr<TH1D> hist_from_bins(const DistributionIO::Entry &entry,
+    std::unique_ptr<TH1D> hist_from_bins(const DistributionIO::Spectrum &spectrum,
                                          const std::vector<double> &bins,
                                          const char *name)
     {
-        auto hist = plot_utils::make_histogram(entry, name);
+        auto hist = plot_utils::make_histogram(spectrum, name);
         for (int i = 1; i <= hist->GetNbinsX(); ++i)
         {
             const std::size_t j = static_cast<std::size_t>(i - 1);

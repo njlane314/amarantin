@@ -1,4 +1,4 @@
-#include "bits/SystematicsInternal.hh"
+#include "bits/Detail.hh"
 
 #include <algorithm>
 #include <cmath>
@@ -8,6 +8,14 @@
 
 namespace
 {
+    bool same_binning(const syst::detail::CacheEntry &entry,
+                      const syst::HistogramSpec &target_spec)
+    {
+        return entry.spec.nbins == target_spec.nbins &&
+               entry.spec.xmin == target_spec.xmin &&
+               entry.spec.xmax == target_spec.xmax;
+    }
+
     std::vector<std::vector<double>> unpack_universe_histograms(
         const syst::detail::FamilyCache &family,
         int source_nbins,
@@ -197,12 +205,25 @@ namespace syst::detail
         else
         {
             out.sigma.assign(static_cast<std::size_t>(target_spec.nbins), 0.0);
+            if (build_full_covariance)
+            {
+                out.covariance.assign(static_cast<std::size_t>(target_spec.nbins * target_spec.nbins), 0.0);
+            }
+
             for (const auto &universe_histogram : out.universe_histograms)
             {
                 for (std::size_t bin = 0; bin < universe_histogram.size() && bin < nominal.size(); ++bin)
                 {
                     const double delta = universe_histogram[bin] - nominal[bin];
                     out.sigma[bin] += delta * delta;
+                    if (build_full_covariance)
+                    {
+                        for (std::size_t other = 0; other < universe_histogram.size() && other < nominal.size(); ++other)
+                        {
+                            const double other_delta = universe_histogram[other] - nominal[other];
+                            out.covariance[bin * nominal.size() + other] += delta * other_delta;
+                        }
+                    }
                 }
             }
             if (!out.universe_histograms.empty())
@@ -210,14 +231,21 @@ namespace syst::detail
                 const double denom = static_cast<double>(out.universe_histograms.size());
                 for (double &sigma : out.sigma)
                     sigma = std::sqrt(std::max(0.0, sigma / denom));
+                if (build_full_covariance)
+                {
+                    for (double &value : out.covariance)
+                        value /= denom;
+                }
+            }
+            else if (same_binning(entry, target_spec))
+            {
+                out.sigma = family.sigma;
             }
             else
             {
-                out.sigma = rebin_vector(family.sigma,
-                                         entry.spec.nbins,
-                                         entry.spec.xmin,
-                                         entry.spec.xmax,
-                                         target_spec);
+                throw std::runtime_error(
+                    "SystematicsEngine: cached sigma-only family " + family.branch_name +
+                    " cannot be rebinned; rebuild the cache with covariance, eigenmodes, or retained universe histograms");
             }
         }
 

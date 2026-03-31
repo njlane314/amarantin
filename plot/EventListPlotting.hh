@@ -24,7 +24,7 @@ namespace plot_utils
                                          const char *hist_name = "h_eventlist",
                                          const char *sample_key = nullptr);
 
-    std::unique_ptr<TH1D> make_histogram(const DistributionIO::Entry &entry,
+    std::unique_ptr<TH1D> make_histogram(const DistributionIO::Spectrum &spectrum,
                                          const char *hist_name = "h_distribution");
 
     TCanvas *draw_distribution(const EventListIO &eventlist,

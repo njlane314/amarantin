@@ -45,7 +45,7 @@ namespace plot_utils
         return origin == DatasetIO::Sample::Origin::kExternal ||
                origin == DatasetIO::Sample::Origin::kOverlay ||
                origin == DatasetIO::Sample::Origin::kDirt ||
-               origin == DatasetIO::Sample::Origin::kEnriched;
+               origin == DatasetIO::Sample::Origin::kSignal;
     }
 
     TH1DModel make_spec(const std::string &expr,

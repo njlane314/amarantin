@@ -2,8 +2,8 @@
 #ifndef SAMPLE_IO_HH
 #define SAMPLE_IO_HH
 
-#include "InputPartitionIO.hh"
 #include "DatasetIO.hh"
+#include "ShardIO.hh"
 
 #include <algorithm>
 #include <cctype>
@@ -15,7 +15,7 @@
 class SampleIO
 {
 public:
-    enum class Origin    { kData, kExternal, kOverlay, kDirt, kEnriched, kUnknown };
+    enum class Origin    { kData, kExternal, kOverlay, kDirt, kSignal, kUnknown };
     enum class Beam      { kNuMI, kBNB, kUnknown };
     enum class Polarity  { kFHC, kRHC, kUnknown };
     enum class Variation { kNominal, kDetector, kUnknown };
@@ -29,19 +29,13 @@ public:
 
 public:
     SampleIO() = default;
-    void build(const std::string &input_paths_spec,
+    void build(const std::string &sample,
+               const std::vector<ShardInput> &shards,
                const std::string &origin,
                const std::string &variation,
                const std::string &beam,
                const std::string &polarity,
                const std::string &run_db_path = "");
-    void build_from_manifest(const std::string &sample,
-                             const std::string &manifest_path,
-                             const std::string &origin,
-                             const std::string &variation,
-                             const std::string &beam,
-                             const std::string &polarity,
-                             const std::string &run_db_path = "");
     void read(const std::string &path);
     void write(const std::string &output_path) const;
     DatasetIO::Sample to_dataset_sample() const;
@@ -63,7 +57,7 @@ public:
     double normalisation_ = 1.0;
     double normalised_pot_sum_ = 0.0;
 
-    std::vector<InputPartitionIO> partitions_;
+    std::vector<ShardIO> shards_;
     bool built_ = false;
 
 public:
@@ -75,7 +69,7 @@ public:
             case Origin::kExternal: return "external";
             case Origin::kOverlay:  return "overlay";
             case Origin::kDirt:     return "dirt";
-            case Origin::kEnriched: return "enriched";
+            case Origin::kSignal:   return "signal";
             default:                return "unknown";
         }
     }
@@ -87,7 +81,7 @@ public:
         if (s == "external" || s == "ext") return Origin::kExternal;
         if (s == "overlay") return Origin::kOverlay;
         if (s == "dirt") return Origin::kDirt;
-        if (s == "enriched") return Origin::kEnriched;
+        if (s == "signal" || s == "enriched") return Origin::kSignal;
         return Origin::kUnknown;
     }
 
@@ -148,10 +142,7 @@ public:
 private:
     void set_metadata(Origin origin, Variation variation, Beam beam, Polarity polarity);
     void validate_metadata() const;
-    static std::vector<std::string> parse_input_paths(const std::string &input_paths_spec);
-    static std::vector<ShardInput> parse_manifest(const std::string &manifest_path);
-    void build_from(const std::vector<std::string> &input_paths);
-    void build_from_shards(const std::vector<ShardInput> &shards);
+    void load_shards(const std::vector<ShardInput> &shards);
     void load_run_database_normalisation(const std::string &run_db_path);
     static double compute_normalisation(double subrun_pot_sum, double db_tortgt_pot_sum);
 

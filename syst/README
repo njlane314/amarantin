@@ -212,7 +212,7 @@ When a persistent cache is built, the stored entry is the fine-binned cache
 surface. A later read can rebin that cached payload back to the requested
 `HistogramSpec`.
 
-The cached `DistributionIO::Entry` holds:
+The cached `DistributionIO::Spectrum` holds:
 
 - nominal bins
 - `sumw2`
@@ -221,7 +221,32 @@ The cached `DistributionIO::Entry` holds:
 - family `sigma`
 - optional family covariance
 - optional family eigenvalues and eigenmodes
+- optional retained universe histograms
 - combined `total_down` / `total_up`
+
+Persistent cache safety
+-----------------------
+`DistributionIO` metadata is treated as part of the cache contract.
+
+A non-empty cache file must match:
+
+- the current `EventListIO` path
+- the current systematics cache schema version
+
+If it does not, syst/ now rejects that file instead of silently relabeling and
+reusing stale entries.
+
+Rebinning note
+--------------
+Exact later rebinning of a universe family requires at least one of these
+stored summaries:
+
+- covariance
+- eigenmodes
+- retained universe histograms
+
+If a cache contains only per-bin `sigma`, that payload is only exact at the
+cached binning itself.
 
 What lives where
 ----------------

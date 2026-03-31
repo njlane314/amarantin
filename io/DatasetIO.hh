@@ -8,6 +8,58 @@
 class TFile;
 class TDirectory;
 
+/**
+ * NAME
+ *   DatasetIO.hh - ROOT I/O for dataset containers.
+ *
+ * SYNOPSIS
+ *   DatasetIO::DatasetIO(path)              // open READ
+ *   DatasetIO::DatasetIO(path, context)     // open WRITE (RECREATE)
+ *   ds.samples()                            // enumerate samples
+ *   ds.samples(Variation)                   // enumerate variation subset
+ *
+ * DESCRIPTION
+ *   Implements persistence for a single-file dataset container storing sample
+ *   records and embedded root file provenances, with deterministic
+ *   enumeration.
+ *
+ * LAYOUT
+ *   meta/context               TNamed
+ *   sample/<key>/              TDirectory
+ *     sample                   TNamed
+ *     origin                   TNamed
+ *     variation                TNamed
+ *     beam                     TNamed
+ *     polarity                 TNamed
+ *     normalisation_mode       TNamed
+ *     subrun_pot_sum           TParameter<double>
+ *     db_tortgt_pot_sum        TParameter<double>
+ *     normalisation            TParameter<double>
+ *     nominal                  TNamed
+ *     tag                      TNamed
+ *     role                     TNamed
+ *     defname                  TNamed
+ *     campaign                 TNamed
+ *     provenance_count         TParameter<int>
+ *     run_subrun_normalisation TTree(run,subrun,generated_exposure,target_exposure,normalisation)
+ *     root_files               TTree(root_file)
+ *     prov/pNNNN/              TDirectory
+ *       scale                  TParameter<double>
+ *       shard                  TNamed
+ *       sample_list_path       TNamed
+ *       pot_sum                TParameter<double>
+ *       entries                TParameter<long long>
+ *       input_files            TObjArray(TObjString)
+ *       run_subrun             TTree(run,subrun,generated_exposure)
+ *
+ * DIAGNOSTICS
+ *   Throws std::runtime_error on missing keys, missing directories, invalid
+ *   types, or file open failures.
+ *
+ * NOTE
+ *   This header comment is the local layout contract for DatasetIO. If the
+ *   on-disk structure changes, update this comment in the same change.
+ */
 class DatasetIO
 {
 public:
@@ -44,7 +96,7 @@ public:
 
     struct Sample
     {
-        enum class Origin { kData, kExternal, kOverlay, kDirt, kEnriched, kUnknown };
+        enum class Origin { kData, kExternal, kOverlay, kDirt, kSignal, kUnknown };
 
         enum class Beam { kNuMI, kBNB, kUnknown };
         enum class Polarity { kFHC, kRHC, kUnknown };

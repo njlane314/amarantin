@@ -1,5 +1,221 @@
 # ExecPlan
 
+## ExecPlan Addendum: ShardIO And Signal Naming Pass
+
+### 1. Objective
+Turn the recorded `io/` naming decisions into code without widening into a new
+workflow redesign:
+
+- make `ShardIO` the real public type and installed header
+- rename sample origin `enriched` to `signal`
+- trim the small `DatasetIO.cc` redundancies already called out in review
+- keep current docs and install surfaces in sync with those names
+
+### 2. Constraints
+- Keep `io/` persistence-only.
+- Keep persisted ROOT payloads backward-readable where practical.
+- Do not widen into file-format redesign just to match in-memory names.
+- Leave unrelated dirty-worktree changes untouched.
+
+### 3. Scope
+- rename/update:
+  - `io/InputPartitionIO.hh` -> `io/ShardIO.hh`
+  - `io/ShardIO.cc`
+  - `io/SampleIO.hh`
+  - `io/SampleIO.cc`
+  - `io/DatasetIO.hh`
+  - `io/DatasetIO.cc`
+  - `ana/EventListBuild.cc`
+  - `plot/PlottingHelper.cc`
+  - `io/macro/print_sample.C`
+  - `io/CMakeLists.txt`
+  - `io/README`
+  - `io/VISION.md`
+  - `VISION.md`
+  - `INSTALL`
+  - `USAGE`
+  - `docs/repo-internals.puml`
+  - `io/bits/DERIVED`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 4. Status
+- status: done
+- outcome:
+  - `ShardIO` is now the public type/header instead of `InputPartitionIO`
+  - `signal` is now the emitted sample-origin name, while old `"enriched"`
+    payloads still read successfully
+  - the small `DatasetIO.cc` ceremony trims were applied without changing the
+    persisted layout contract
+
+## ExecPlan Addendum: Remove ChannelIO Compatibility Layer
+
+### 1. Objective
+Remove the remaining `ChannelIO` persistence layer and the local helper macros
+that still depended on it, without widening the pass into a new coarse-channel
+format redesign.
+
+### 2. Constraints
+- Keep `DistributionIO` as the persisted bin-wise surface.
+- Do not reintroduce a second IO layer on top of `DistributionIO`.
+- Update current module/docs surfaces that would otherwise point at deleted
+  files.
+- Leave historical log material intact.
+
+### 3. Scope
+- delete:
+  - `io/ChannelIO.hh`
+  - `io/ChannelIO.cc`
+  - `fit/macro/fit_channel.C`
+  - `fit/macro/scan_mu.C`
+  - `plot/macro/plot_channel.C`
+- update:
+  - `io/CMakeLists.txt`
+  - `io/README`
+  - `io/VISION.md`
+  - `INSTALL`
+  - `COMMANDS`
+  - `docs/repo-internals.puml`
+  - `docs/adaptive-binning-plan.md`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 4. Status
+- status: done
+- outcome:
+  - `ChannelIO` removed from the tree
+  - the last dependent local macros were deleted with it
+  - current docs now describe `DistributionIO`-first downstream flow instead
+    of a deleted channel bundle layer
+
+## ExecPlan Addendum: IO Correctness Guardrails
+
+### 1. Objective
+Fix four concrete `io/` correctness bugs without widening the pass into API
+renames or workflow redesign:
+
+- fail fast on mixed or missing shard `SubRun` trees
+- fail fast on partial run-database coverage
+- make repeated `DatasetIO::add_sample` writes read back the current
+  provenance only
+- preserve `ChannelIO` universe histograms on round-trip
+
+### 2. Constraints
+- Preserve current CLI surfaces and installed targets.
+- Preserve installed public headers by default.
+- Keep `io/` persistence-only and avoid moving policy into downstream modules.
+- Leave unrelated worktree changes untouched.
+- Treat the earlier `InputPartitionIO` file rename as out of scope here; this
+  pass is about correctness, not further naming churn.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- `io/` owns persistence only
+- keep module boundaries sharp
+- add abstractions only when they delete complexity
+
+This pass should tighten persisted contracts and failure modes rather than add
+new wrapper layers.
+
+### 4. System map
+- persistence and scan logic:
+  - `io/InputPartitionIO.hh`
+  - `io/ShardIO.cc`
+  - `io/SampleIO.hh`
+  - `io/SampleIO.cc`
+  - `io/DatasetIO.hh`
+  - `io/DatasetIO.cc`
+  - `io/ChannelIO.hh`
+  - `io/ChannelIO.cc`
+- downstream consumer touched by the bug report:
+  - `ana/EventListBuild.cc`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- verification:
+  - `git diff --check -- ...`
+  - `bash -n tools/run-macro`
+  - focused CMake configure/build if ROOT is available
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- make shard scanning validate one explicit tree layout instead of relying on
+  `TChain` to silently skip incompatible files
+- make run-database coverage explicit: fully covered or unit mode, never
+  partially zero-weighted
+
+#### stale scaffolding
+- persist the current provenance count so readback does not depend on stale
+  directories left behind by an overwrite
+- extend `ChannelIO` payload helpers to match the full `DistributionIO::Family`
+  surface
+
+### 6. Milestones
+
+#### Milestone A: Guard shard scan and run-db coverage
+- status: done
+- hypothesis: early validation at sample-build time is smaller and safer than
+  letting downstream event weighting detect corrupted state indirectly
+- files / symbols touched:
+  - `io/ShardIO.cc`
+  - `io/SampleIO.cc`
+- expected behavior risk: moderate
+- verification commands:
+  - `git diff --check -- io/ShardIO.cc io/SampleIO.cc`
+  - focused configure/build if ROOT is available
+- acceptance criteria:
+  - mixed or missing `SubRun` tree paths fail loudly
+  - partial run-database coverage fails loudly
+- verification results:
+  - `git diff --check -- io/ShardIO.cc io/SampleIO.cc` passed
+  - fresh host-side configure is blocked by missing ROOT on this machine
+
+#### Milestone B: Guard overwrite/readback correctness
+- status: done
+- hypothesis: one persisted provenance-count guard is smaller than directory
+  cleanup logic and preserves backward compatibility on read
+- files / symbols touched:
+  - `io/DatasetIO.cc`
+  - `io/ChannelIO.cc`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- io/DatasetIO.cc io/ChannelIO.cc`
+- acceptance criteria:
+  - overwriting one dataset sample key does not read stale provenance
+  - `ChannelIO` preserves `universe_histograms`
+- verification results:
+  - `git diff --check -- io/DatasetIO.cc io/ChannelIO.cc` passed
+  - backward-read compatibility was preserved by making the new fields optional
+
+### 7. Public-surface check
+- compatibility impact: none intended; file formats remain backward-readable
+  and the app/installed header surface is unchanged
+- migration note or explicit non-goal:
+  - non-goal: rename `InputPartitionIO` symbols in this pass
+  - non-goal: redesign `ChannelIO`
+- reviewer sign-off: not required for additive internal persistence guards
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- targets or dependencies removed: 0
+- approximate LOC delta: roughly +110 / -13 in the code touched for the fixes
+
+### 9. Decision log
+- prefer fail-fast validation over silent fallback when persisted weighting data
+  would otherwise be incomplete
+- prefer additive persisted read guards over destructive directory cleanup in
+  ROOT files
+
+### 10. Stop conditions
+- stop when the four reported bugs are fixed and verified as far as this host
+  allows
+- stop before widening into public-type renames or broader `ChannelIO`
+  retirement work
+
 ## ExecPlan Addendum: VISION Workflow Convergence
 
 ### 1. Objective
