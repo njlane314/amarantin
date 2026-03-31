@@ -2,10 +2,11 @@
 #define SYST_BITS_DETAIL_HH
 
 #include <cstddef>
+#include <cstdint>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <vector>
-
-#include <Eigen/Dense>
 
 #include "Systematics.hh"
 
@@ -13,12 +14,10 @@ class TTree;
 
 namespace syst::detail
 {
-    constexpr const char *kCentralWeightBranch = "__w__";
     constexpr int kSystematicsCacheVersion = 5;
 
     using CacheEntry = DistributionIO::Spectrum;
     using FamilyCache = DistributionIO::UniverseFamily;
-    using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
     struct DetectorSourceMatch
     {
@@ -61,36 +60,79 @@ namespace syst::detail
         std::optional<UniverseAccumulator> reint;
     };
 
-    HistogramSpec fine_spec_for(const HistogramSpec &spec,
-                                const SystematicsOptions &options);
+    inline HistogramSpec fine_spec_for(const HistogramSpec &spec,
+                                       const SystematicsOptions &options)
+    {
+        HistogramSpec out = spec;
+        if (options.cache_nbins > out.nbins)
+            out.nbins = options.cache_nbins;
+        return out;
+    }
 
-    std::string encode_options_for_cache(const HistogramSpec &spec,
-                                         const SystematicsOptions &options);
+    inline std::string encode_options_for_cache(const HistogramSpec &spec,
+                                                const SystematicsOptions &options)
+    {
+        const HistogramSpec fine_spec = fine_spec_for(spec, options);
 
-    std::string stable_hash_hex(const std::string &text);
+        std::ostringstream os;
+        os << "v=" << kSystematicsCacheVersion
+           << ";branch=" << fine_spec.branch_expr
+           << ";selection=" << fine_spec.selection_expr
+           << ";nbins=" << fine_spec.nbins
+           << ";xmin=" << std::setprecision(17) << fine_spec.xmin
+           << ";xmax=" << std::setprecision(17) << fine_spec.xmax
+           << ";det=" << options.enable_detector
+           << ";genie=" << options.enable_genie
+           << ";genieknobs=" << options.enable_genie_knobs
+           << ";flux=" << options.enable_flux
+           << ";reint=" << options.enable_reint
+           << ";cov=1"
+           << ";hist=" << options.retain_universe_histograms
+           << ";modes=" << options.enable_eigenmode_compression
+           << ";maxmodes=" << options.max_eigenmodes
+           << ";frac=" << std::setprecision(17) << options.eigenmode_fraction;
+        for (const auto &sample_key : options.detector_sample_keys)
+            os << ";detkey=" << sample_key;
+        return os.str();
+    }
 
-    std::string evaluation_cache_key(const EventListIO &eventlist,
-                                     const DistributionIO *distfile,
-                                     const std::string &sample_key,
-                                     const HistogramSpec &spec,
-                                     const SystematicsOptions &options);
+    inline std::string stable_hash_hex(const std::string &text)
+    {
+        std::uint64_t hash = 1469598103934665603ULL;
+        for (const unsigned char c : text)
+        {
+            hash ^= static_cast<std::uint64_t>(c);
+            hash *= 1099511628211ULL;
+        }
+
+        std::ostringstream os;
+        os << std::hex << std::setw(16) << std::setfill('0') << hash;
+        return os.str();
+    }
+
+    inline std::string evaluation_cache_key(const EventListIO &eventlist,
+                                            const DistributionIO *distfile,
+                                            const std::string &sample_key,
+                                            const HistogramSpec &spec,
+                                            const SystematicsOptions &options)
+    {
+        std::ostringstream os;
+        os << eventlist.path() << "|"
+           << (distfile ? distfile->path() : std::string()) << "|"
+           << sample_key << "|"
+           << syst::cache_key(spec, options) << "|"
+           << spec.nbins << "|"
+           << std::setprecision(17) << spec.xmin << "|"
+           << std::setprecision(17) << spec.xmax << "|"
+           << spec.selection_expr << "|"
+           << options.build_full_covariance << "|"
+           << options.retain_universe_histograms;
+        return os.str();
+    }
 
     ComputedSample compute_sample(TTree *tree,
                                   const HistogramSpec &spec,
                                   const SystematicsOptions &options);
-
-    MatrixRowMajor build_rebin_matrix(int source_nbins,
-                                      double source_xmin,
-                                      double source_xmax,
-                                      int target_nbins,
-                                      double target_xmin,
-                                      double target_xmax);
-
-    std::vector<double> rebin_vector(const std::vector<double> &source,
-                                     int source_nbins,
-                                     double source_xmin,
-                                     double source_xmax,
-                                     const HistogramSpec &target_spec);
 
     std::vector<std::string> resolve_detector_sample_keys(EventListIO &eventlist,
                                                           const CacheRequest &request);
@@ -99,25 +141,6 @@ namespace syst::detail
         EventListIO &eventlist,
         const std::string &sample_key,
         const std::vector<std::string> &detector_sample_keys);
-
-    std::vector<std::vector<double>> rebin_detector_templates(const CacheEntry &entry,
-                                                              const HistogramSpec &target_spec);
-
-    std::vector<double> rebin_detector_shift_vectors(const CacheEntry &entry,
-                                                     const HistogramSpec &target_spec);
-
-    std::vector<double> rebin_shift_vectors(const std::vector<double> &source_shift_vectors,
-                                            int source_count,
-                                            int source_nbins,
-                                            double source_xmin,
-                                            double source_xmax,
-                                            const HistogramSpec &target_spec);
-
-    std::vector<double> rebin_covariance(const std::vector<double> &source_covariance,
-                                         int source_nbins,
-                                         double source_xmin,
-                                         double source_xmax,
-                                         const HistogramSpec &target_spec);
 
     std::vector<double> detector_covariance_from_shift_vectors(const std::vector<double> &shift_vectors,
                                                                int source_count,

@@ -1,6 +1,7 @@
 #include "DistributionIO.hh"
 #include "bits/RootUtils.hh"
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -46,6 +47,267 @@ namespace
         utils::write_param<double>(meta_dir, "xmin", spectrum.spec.xmin);
         utils::write_param<double>(meta_dir, "xmax", spectrum.spec.xmax);
     }
+
+    struct RebinMatrix
+    {
+        int target_nbins = 0;
+        int source_nbins = 0;
+        std::vector<double> weights;
+
+        double operator()(int target_bin, int source_bin) const
+        {
+            return weights[static_cast<std::size_t>(target_bin * source_nbins + source_bin)];
+        }
+    };
+
+    RebinMatrix build_rebin_matrix(const DistributionIO::HistogramSpec &source_spec,
+                                   const DistributionIO::HistogramSpec &target_spec)
+    {
+        if (source_spec.nbins <= 0 || target_spec.nbins <= 0)
+            throw std::runtime_error("DistributionIO: invalid rebinning range");
+        if (!(source_spec.xmax > source_spec.xmin) || !(target_spec.xmax > target_spec.xmin))
+            throw std::runtime_error("DistributionIO: invalid rebinning range");
+
+        RebinMatrix matrix;
+        matrix.target_nbins = target_spec.nbins;
+        matrix.source_nbins = source_spec.nbins;
+        matrix.weights.assign(static_cast<std::size_t>(target_spec.nbins * source_spec.nbins), 0.0);
+
+        const double source_width =
+            (source_spec.xmax - source_spec.xmin) / static_cast<double>(source_spec.nbins);
+        const double target_width =
+            (target_spec.xmax - target_spec.xmin) / static_cast<double>(target_spec.nbins);
+        if (source_width <= 0.0 || target_width <= 0.0)
+            throw std::runtime_error("DistributionIO: invalid rebinning range");
+
+        for (int target_bin = 0; target_bin < target_spec.nbins; ++target_bin)
+        {
+            const double target_low =
+                target_spec.xmin + target_width * static_cast<double>(target_bin);
+            const double target_high = target_low + target_width;
+
+            for (int source_bin = 0; source_bin < source_spec.nbins; ++source_bin)
+            {
+                const double source_low =
+                    source_spec.xmin + source_width * static_cast<double>(source_bin);
+                const double source_high = source_low + source_width;
+                const double overlap =
+                    std::max(0.0,
+                             std::min(source_high, target_high) -
+                                 std::max(source_low, target_low));
+                if (overlap > 0.0)
+                    matrix.weights[static_cast<std::size_t>(target_bin * source_spec.nbins + source_bin)] =
+                        overlap / source_width;
+            }
+        }
+
+        return matrix;
+    }
+
+    std::vector<double> rebin_values_with_matrix(const std::vector<double> &source,
+                                                 int source_nbins,
+                                                 const RebinMatrix &matrix)
+    {
+        if (source.empty())
+            return {};
+        if (source.size() != static_cast<std::size_t>(source_nbins))
+            throw std::runtime_error("DistributionIO: value payload size does not match source bins");
+
+        std::vector<double> out(static_cast<std::size_t>(matrix.target_nbins), 0.0);
+        for (int target_bin = 0; target_bin < matrix.target_nbins; ++target_bin)
+        {
+            double sum = 0.0;
+            for (int source_bin = 0; source_bin < source_nbins; ++source_bin)
+                sum += matrix(target_bin, source_bin) * source[static_cast<std::size_t>(source_bin)];
+            out[static_cast<std::size_t>(target_bin)] = sum;
+        }
+        return out;
+    }
+
+    std::vector<double> rebin_source_major_payload_with_matrix(const std::vector<double> &source_payload,
+                                                               int row_count,
+                                                               int source_nbins,
+                                                               const RebinMatrix &matrix)
+    {
+        if (source_payload.empty())
+            return {};
+        if (row_count <= 0)
+            return {};
+        if (source_payload.size() != static_cast<std::size_t>(row_count * source_nbins))
+            throw std::runtime_error("DistributionIO: row-major payload is truncated");
+
+        std::vector<double> out(static_cast<std::size_t>(row_count * matrix.target_nbins), 0.0);
+        for (int row = 0; row < row_count; ++row)
+        {
+            for (int target_bin = 0; target_bin < matrix.target_nbins; ++target_bin)
+            {
+                double sum = 0.0;
+                for (int source_bin = 0; source_bin < source_nbins; ++source_bin)
+                {
+                    sum += matrix(target_bin, source_bin) *
+                           source_payload[static_cast<std::size_t>(row * source_nbins + source_bin)];
+                }
+                out[static_cast<std::size_t>(row * matrix.target_nbins + target_bin)] = sum;
+            }
+        }
+        return out;
+    }
+
+    std::vector<double> rebin_bin_major_payload_with_matrix(const std::vector<double> &source_payload,
+                                                            int source_nbins,
+                                                            int column_count,
+                                                            const RebinMatrix &matrix)
+    {
+        if (source_payload.empty())
+            return {};
+        if (column_count <= 0)
+            return {};
+        if (source_payload.size() != static_cast<std::size_t>(source_nbins * column_count))
+            throw std::runtime_error("DistributionIO: bin-major payload is truncated");
+
+        std::vector<double> out(static_cast<std::size_t>(matrix.target_nbins * column_count), 0.0);
+        for (int target_bin = 0; target_bin < matrix.target_nbins; ++target_bin)
+        {
+            for (int source_bin = 0; source_bin < source_nbins; ++source_bin)
+            {
+                const double weight = matrix(target_bin, source_bin);
+                if (weight == 0.0)
+                    continue;
+                for (int col = 0; col < column_count; ++col)
+                {
+                    out[static_cast<std::size_t>(target_bin * column_count + col)] +=
+                        weight *
+                        source_payload[static_cast<std::size_t>(source_bin * column_count + col)];
+                }
+            }
+        }
+        return out;
+    }
+
+    std::vector<double> rebin_covariance_with_matrix(const std::vector<double> &source_covariance,
+                                                     int source_nbins,
+                                                     const RebinMatrix &matrix)
+    {
+        if (source_covariance.empty())
+            return {};
+        if (source_covariance.size() !=
+            static_cast<std::size_t>(source_nbins * source_nbins))
+        {
+            throw std::runtime_error("DistributionIO: covariance payload is truncated");
+        }
+
+        std::vector<double> temp(static_cast<std::size_t>(matrix.target_nbins * source_nbins), 0.0);
+        for (int target_row = 0; target_row < matrix.target_nbins; ++target_row)
+        {
+            for (int source_col = 0; source_col < source_nbins; ++source_col)
+            {
+                double sum = 0.0;
+                for (int source_row = 0; source_row < source_nbins; ++source_row)
+                {
+                    sum += matrix(target_row, source_row) *
+                           source_covariance[static_cast<std::size_t>(source_row * source_nbins + source_col)];
+                }
+                temp[static_cast<std::size_t>(target_row * source_nbins + source_col)] = sum;
+            }
+        }
+
+        std::vector<double> out(static_cast<std::size_t>(matrix.target_nbins * matrix.target_nbins), 0.0);
+        for (int target_row = 0; target_row < matrix.target_nbins; ++target_row)
+        {
+            for (int target_col = 0; target_col < matrix.target_nbins; ++target_col)
+            {
+                double sum = 0.0;
+                for (int source_col = 0; source_col < source_nbins; ++source_col)
+                {
+                    sum += temp[static_cast<std::size_t>(target_row * source_nbins + source_col)] *
+                           matrix(target_col, source_col);
+                }
+                out[static_cast<std::size_t>(target_row * matrix.target_nbins + target_col)] = sum;
+            }
+        }
+        return out;
+    }
+}
+
+std::vector<double> DistributionIO::Spectrum::rebinned_values(const std::vector<double> &source,
+                                                              const HistogramSpec &target_spec) const
+{
+    if (source.empty())
+        return {};
+    if (same_binning(target_spec))
+    {
+        if (source.size() != static_cast<std::size_t>(spec.nbins))
+            throw std::runtime_error("DistributionIO: value payload size does not match source bins");
+        return source;
+    }
+
+    return rebin_values_with_matrix(source,
+                                    spec.nbins,
+                                    build_rebin_matrix(spec, target_spec));
+}
+
+std::vector<double> DistributionIO::Spectrum::rebinned_covariance(
+    const std::vector<double> &source_covariance,
+    const HistogramSpec &target_spec) const
+{
+    if (source_covariance.empty())
+        return {};
+    if (same_binning(target_spec))
+    {
+        if (source_covariance.size() != static_cast<std::size_t>(spec.nbins * spec.nbins))
+            throw std::runtime_error("DistributionIO: covariance payload is truncated");
+        return source_covariance;
+    }
+
+    return rebin_covariance_with_matrix(source_covariance,
+                                        spec.nbins,
+                                        build_rebin_matrix(spec, target_spec));
+}
+
+std::vector<double> DistributionIO::Spectrum::rebinned_source_major_payload(
+    const std::vector<double> &source_payload,
+    int row_count,
+    const HistogramSpec &target_spec) const
+{
+    if (source_payload.empty())
+        return {};
+    if (same_binning(target_spec))
+    {
+        if (row_count > 0 &&
+            source_payload.size() != static_cast<std::size_t>(row_count * spec.nbins))
+        {
+            throw std::runtime_error("DistributionIO: row-major payload is truncated");
+        }
+        return source_payload;
+    }
+
+    return rebin_source_major_payload_with_matrix(source_payload,
+                                                  row_count,
+                                                  spec.nbins,
+                                                  build_rebin_matrix(spec, target_spec));
+}
+
+std::vector<double> DistributionIO::Spectrum::rebinned_bin_major_payload(
+    const std::vector<double> &source_payload,
+    int column_count,
+    const HistogramSpec &target_spec) const
+{
+    if (source_payload.empty())
+        return {};
+    if (same_binning(target_spec))
+    {
+        if (column_count > 0 &&
+            source_payload.size() != static_cast<std::size_t>(spec.nbins * column_count))
+        {
+            throw std::runtime_error("DistributionIO: bin-major payload is truncated");
+        }
+        return source_payload;
+    }
+
+    return rebin_bin_major_payload_with_matrix(source_payload,
+                                               spec.nbins,
+                                               column_count,
+                                               build_rebin_matrix(spec, target_spec));
 }
 
 DistributionIO::DistributionIO(const std::string &path, Mode mode)

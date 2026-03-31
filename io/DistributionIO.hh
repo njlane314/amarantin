@@ -26,6 +26,13 @@ public:
         double xmin = 0.0;
         double xmax = 0.0;
         std::string cache_key;
+
+        bool same_binning(const HistogramSpec &other) const
+        {
+            return nbins == other.nbins &&
+                   xmin == other.xmin &&
+                   xmax == other.xmax;
+        }
     };
 
     struct UniverseFamily
@@ -74,6 +81,25 @@ public:
         UniverseFamily reint;
         std::vector<double> total_down;
         std::vector<double> total_up;
+
+        bool same_binning(const HistogramSpec &target_spec) const
+        {
+            return spec.same_binning(target_spec);
+        }
+
+        std::vector<double> rebinned_values(const std::vector<double> &source,
+                                            const HistogramSpec &target_spec) const;
+
+        std::vector<double> rebinned_covariance(const std::vector<double> &source_covariance,
+                                                const HistogramSpec &target_spec) const;
+
+        std::vector<double> rebinned_source_major_payload(const std::vector<double> &source_payload,
+                                                          int row_count,
+                                                          const HistogramSpec &target_spec) const;
+
+        std::vector<double> rebinned_bin_major_payload(const std::vector<double> &source_payload,
+                                                       int column_count,
+                                                       const HistogramSpec &target_spec) const;
     };
 
     explicit DistributionIO(const std::string &path, Mode mode = Mode::kRead);

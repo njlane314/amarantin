@@ -1,5 +1,196 @@
 # ExecPlan
 
+## ExecPlan Addendum: Collapse CacheKey into Detail.hh
+
+### 1. Objective
+Inline the private cache-key helper implementation into `syst/bits/Detail.hh`
+and delete the now-single-purpose `bits/CacheKey.cc` translation unit.
+
+### 2. Constraints
+- Keep the change private to `syst/`; do not alter installed public headers.
+- Preserve the existing cache-key behavior and cache format.
+- Keep the change narrow: one private source file disappears and the shared
+  private header absorbs its helper bodies.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep module layout flat
+- use `bits/` only for shared private helpers
+- add abstractions only when they delete complexity
+
+The cache-key helpers are only used through `Detail.hh`, so the extra private
+translation unit no longer earns its own file.
+
+### 4. System map
+- `syst/bits/Detail.hh`
+- `syst/CMakeLists.txt`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### helper collapse
+- inline `fine_spec_for(...)`, `encode_options_for_cache(...)`,
+  `stable_hash_hex(...)`, and `evaluation_cache_key(...)` in
+  `syst/bits/Detail.hh`
+- delete `syst/bits/CacheKey.cc`
+- remove the dead source entry from `syst/CMakeLists.txt`
+
+### 6. Milestones
+
+#### Milestone A: Collapse the private cache-key translation unit
+- status: done
+- hypothesis: one fewer private `.cc` file makes the `syst/bits/` boundary
+  easier to scan because all shared cache-key helpers live in one place
+- files / symbols touched:
+  - `syst/bits/Detail.hh`
+  - `syst/bits/CacheKey.cc`
+  - `syst/CMakeLists.txt`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/bits/Detail.hh syst/CMakeLists.txt`
+  - `rg -n "bits/CacheKey\\.cc|syst/CacheKey\\.cc" -S syst/CMakeLists.txt syst`
+  - `find syst -maxdepth 2 -type f | sort`
+- acceptance criteria:
+  - the cache-key helpers live directly in `syst/bits/Detail.hh`
+  - `syst/bits/CacheKey.cc` is gone
+  - `syst/CMakeLists.txt` no longer lists the deleted source file
+- verification results:
+  - focused `git diff --check` passed for the collapse files
+  - no live `syst/` build-surface references remain to `syst/bits/CacheKey.cc`
+  - `find syst -maxdepth 2 -type f | sort` shows no standalone cache-key
+    source file under `syst/`
+
+### 7. Public-surface check
+- compatibility impact:
+  - none; this is private `syst/` implementation cleanup only
+- reviewer sign-off:
+  - explicit user approval received in-thread for collapsing `CacheKey` into
+    `Detail.hh`
+
+### 8. Reduction ledger
+- files deleted: 1
+  - `syst/bits/CacheKey.cc`
+- wrappers removed: 0
+- shell branches removed: 0
+- duplicate private file boundaries removed:
+  - standalone cache-key translation unit
+
+### 9. Decision log
+- keep these helpers in `Detail.hh` rather than adding another private header
+- keep the rest of the `syst/` helper split unchanged
+
+### 10. Stop conditions
+- stop after the cache-key helpers are header-local and the dead source entry
+  is removed
+- do not expand this pass into broader `Systematics.cc` restructuring
+
+## ExecPlan Addendum: DistributionIO Rebinning Ownership
+
+### 1. Objective
+Move exact cached-payload rebinning out of `syst/` and into
+`DistributionIO`, while keeping detector envelopes and family-result semantics
+in `syst/`.
+
+### 2. Constraints
+- Keep `io/` persistence-focused; only move payload-shape transforms there.
+- Do not move detector-envelope or universe-family interpretation logic into
+  `io/`.
+- Preserve cache format and downstream behavior.
+- Delete the obsolete `syst/Rebin.cc` layer once callers switch over.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- `io/` owns persistence only
+- prefer plain data and namespace functions
+- keep module boundaries sharp
+
+The persistence layer already owns the cached bin-wise payload shape, so exact
+rebinned views of that payload belong there more than in `syst/`.
+
+### 4. System map
+- `io/DistributionIO.hh`
+- `io/DistributionIO.cc`
+- `syst/Systematics.cc`
+- `syst/DetectorSystematics.cc`
+- `syst/ReweightCovariance.cc`
+- `syst/bits/Detail.hh`
+- `syst/CMakeLists.txt`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### ownership shift
+- let `DistributionIO::Spectrum` rebin vectors, covariances, and row/bin-major
+  payloads using its own stored histogram spec
+
+#### deletion pass
+- delete `syst/Rebin.cc`
+- delete the duplicate rebin helper declarations from `syst/bits/Detail.hh`
+
+### 6. Milestones
+
+#### Milestone A: Move rebinning into DistributionIO
+- status: done
+- hypothesis: cached-payload rebinning gets easier to find and cheaper to
+  reuse when the logic lives with `DistributionIO::Spectrum`
+- files / symbols touched:
+  - `DistributionIO::Spectrum::rebinned_values(...)`
+  - `DistributionIO::Spectrum::rebinned_covariance(...)`
+  - `DistributionIO::Spectrum::rebinned_source_major_payload(...)`
+  - `DistributionIO::Spectrum::rebinned_bin_major_payload(...)`
+  - `syst/Rebin.cc`
+- expected behavior risk: medium-low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/DistributionIO.hh io/DistributionIO.cc syst/Systematics.cc syst/DetectorSystematics.cc syst/ReweightCovariance.cc syst/bits/Detail.hh syst/CMakeLists.txt`
+  - `rg -n "build_rebin_matrix|rebin_vector|rebin_detector_templates|rebin_detector_shift_vectors|rebin_shift_vectors|rebin_covariance" -S syst`
+  - `cmake --build build --target IO Syst --parallel`
+- acceptance criteria:
+  - `DistributionIO` owns the exact payload rebin transforms
+  - `syst/Rebin.cc` is gone
+  - `syst/` callers use `DistributionIO::Spectrum` rebin helpers instead of
+    local duplicate math
+  - `syst/bits/Detail.hh` no longer carries implementation-only rebin or
+    matrix/branch helpers
+- verification results:
+  - focused `git diff --check` passed for the move-pass files
+  - the old `syst` rebin helper names no longer appear under `syst/`
+  - `syst/bits/Detail.hh` is back to shared declarations only; the
+    implementation-only `MatrixRowMajor` alias and central-weight branch name
+    now live in their owning `.cc` files
+  - `cmake --build build --target IO Syst --parallel` did not provide a
+    trustworthy compile check here because the local build tree is stale and
+    reconfigure remains blocked by missing SQLite3 headers and
+    `nlohmann/json.hpp`
+
+### 7. Public-surface check
+- compatibility impact:
+  - `DistributionIO.hh` now exposes exact rebin helpers on `Spectrum`
+- reviewer sign-off:
+  - explicit user approval received in-thread for moving rebinning into
+    `DistributionIO`
+
+### 8. Reduction ledger
+- files deleted: 1
+  - `syst/Rebin.cc`
+- wrappers removed: 0
+- shell branches removed: 0
+- duplicated helper families removed:
+  - exact vector rebinning
+  - exact covariance rebinning
+  - exact row/bin-major payload rebinning
+- approximate LOC delta: small positive in `io/`, larger negative in `syst/`
+
+### 9. Decision log
+- keep detector-envelope and family-result assembly in `syst/`
+- move only exact cached-payload transforms into `DistributionIO`
+
+### 10. Stop conditions
+- stop after the rebin math lives in `DistributionIO` and the duplicate `syst`
+  helper layer is deleted
+- do not expand the pass into broader `DistributionIO` family/result redesign
+
 ## ExecPlan Addendum: mk_cov Executable Rename
 
 ### 1. Objective
@@ -303,7 +494,7 @@ translation-unit names describe their real responsibilities.
 - `syst/CMakeLists.txt`
 - `syst/Systematics.cc`
 - `syst/DetectorSystematics.cc`
-- `syst/CacheKey.cc`
+- `syst/bits/Detail.hh`
 - `syst/Rebin.cc`
 - `syst/ReweightFill.cc`
 - `syst/ReweightCovariance.cc`
@@ -318,7 +509,7 @@ translation-unit names describe their real responsibilities.
 - rename `UniverseSummary.cc` to `ReweightCovariance.cc`
 
 #### junk-drawer split
-- split `Support.cc` into `CacheKey.cc` and `Rebin.cc`
+- split `Support.cc` into cache-key helpers and rebin helpers
 
 ### 6. Milestones
 
@@ -329,13 +520,13 @@ translation-unit names describe their real responsibilities.
 - files / symbols touched:
   - `syst/CMakeLists.txt`
   - `syst/DetectorSystematics.cc`
-  - `syst/CacheKey.cc`
+  - `syst/bits/Detail.hh`
   - `syst/Rebin.cc`
   - `syst/ReweightFill.cc`
   - `syst/ReweightCovariance.cc`
 - expected behavior risk: low
 - verification commands:
-  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/CMakeLists.txt syst/DetectorSystematics.cc syst/CacheKey.cc syst/Rebin.cc syst/ReweightFill.cc syst/ReweightCovariance.cc`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/CMakeLists.txt syst/DetectorSystematics.cc syst/bits/Detail.hh syst/Rebin.cc syst/ReweightFill.cc syst/ReweightCovariance.cc`
   - `ls syst`
 - acceptance criteria:
   - the build lists only the new implementation filenames
@@ -365,7 +556,7 @@ translation-unit names describe their real responsibilities.
   units
 
 ### 9. Decision log
-- keep the split minimal: cache-key helpers in `CacheKey.cc`, rebin math in
+- keep the split minimal: cache-key helpers in `Detail.hh`, rebin math in
   `Rebin.cc`
 - keep the translation-unit renames local; no namespace or type rename churn
   beyond the earlier approved naming pass

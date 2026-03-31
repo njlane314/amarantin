@@ -1,8 +1,6 @@
 set(AMARANTIN_SYST_SOURCES
   Systematics.cc
   DetectorSystematics.cc
-  CacheKey.cc
-  Rebin.cc
   ReweightFill.cc
   ReweightCovariance.cc
 )

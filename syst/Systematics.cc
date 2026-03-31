@@ -166,6 +166,40 @@ namespace
         return out;
     }
 
+    DistributionIO::HistogramSpec target_distribution_spec(
+        const DistributionIO::HistogramSpec &source_spec,
+        const syst::HistogramSpec &target_spec)
+    {
+        DistributionIO::HistogramSpec out = source_spec;
+        out.nbins = target_spec.nbins;
+        out.xmin = target_spec.xmin;
+        out.xmax = target_spec.xmax;
+        return out;
+    }
+
+    std::vector<std::vector<double>> unpack_source_major_rows(const std::vector<double> &payload,
+                                                              int row_count,
+                                                              int nbins)
+    {
+        std::vector<std::vector<double>> out;
+        if (payload.empty() || row_count <= 0)
+            return out;
+        if (payload.size() != static_cast<std::size_t>(row_count * nbins))
+            throw std::runtime_error("syst: row-major payload is truncated");
+
+        out.assign(static_cast<std::size_t>(row_count),
+                   std::vector<double>(static_cast<std::size_t>(nbins), 0.0));
+        for (int row = 0; row < row_count; ++row)
+        {
+            for (int col = 0; col < nbins; ++col)
+            {
+                out[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)] =
+                    payload[static_cast<std::size_t>(row * nbins + col)];
+            }
+        }
+        return out;
+    }
+
     syst::detail::CacheEntry build_cache_entry(EventListIO &eventlist,
                                                const std::string &sample_key,
                                                const syst::HistogramSpec &fine_spec,
@@ -321,18 +355,18 @@ namespace
         result.cache_key = cache_key;
         result.cached_nbins = entry.spec.nbins;
         result.loaded_from_persistent_cache = loaded_from_persistent_cache;
-        result.nominal = syst::detail::rebin_vector(entry.nominal,
-                                                    entry.spec.nbins,
-                                                    entry.spec.xmin,
-                                                    entry.spec.xmax,
-                                                    target_spec);
+        const DistributionIO::HistogramSpec target_dist_spec =
+            target_distribution_spec(entry.spec, target_spec);
+        result.nominal = entry.rebinned_values(entry.nominal, target_dist_spec);
         result.genie_knob_source_labels = entry.genie_knob_source_labels;
         result.genie_knob_source_count = entry.genie_knob_source_count;
 
         if (entry.detector_source_count > 0 && !entry.detector_shift_vectors.empty())
         {
             const std::vector<double> rebinned_shift_vectors =
-                syst::detail::rebin_detector_shift_vectors(entry, target_spec);
+                entry.rebinned_source_major_payload(entry.detector_shift_vectors,
+                                                    entry.detector_source_count,
+                                                    target_dist_spec);
             const std::vector<double> rebinned_covariance =
                 syst::detail::detector_covariance_from_shift_vectors(rebinned_shift_vectors,
                                                                      entry.detector_source_count,
@@ -344,11 +378,7 @@ namespace
         else if (!entry.detector_covariance.empty())
         {
             const std::vector<double> rebinned_covariance =
-                syst::detail::rebin_covariance(entry.detector_covariance,
-                                               entry.spec.nbins,
-                                               entry.spec.xmin,
-                                               entry.spec.xmax,
-                                               target_spec);
+                entry.rebinned_covariance(entry.detector_covariance, target_dist_spec);
             result.detector =
                 syst::detail::detector_envelope_from_covariance(result.nominal,
                                                                 rebinned_covariance);
@@ -356,32 +386,26 @@ namespace
         else if (entry.detector_template_count > 0 && !entry.detector_templates.empty())
         {
             const std::vector<std::vector<double>> detector_histograms =
-                syst::detail::rebin_detector_templates(entry, target_spec);
+                unpack_source_major_rows(
+                    entry.rebinned_source_major_payload(entry.detector_templates,
+                                                        entry.detector_template_count,
+                                                        target_dist_spec),
+                    entry.detector_template_count,
+                    target_spec.nbins);
             result.detector = syst::detail::detector_envelope(result.nominal, detector_histograms);
         }
         else if (!entry.detector_down.empty() && !entry.detector_up.empty())
         {
-            result.detector.down = syst::detail::rebin_vector(entry.detector_down,
-                                                              entry.spec.nbins,
-                                                              entry.spec.xmin,
-                                                              entry.spec.xmax,
-                                                              target_spec);
-            result.detector.up = syst::detail::rebin_vector(entry.detector_up,
-                                                            entry.spec.nbins,
-                                                            entry.spec.xmin,
-                                                            entry.spec.xmax,
-                                                            target_spec);
+            result.detector.down = entry.rebinned_values(entry.detector_down, target_dist_spec);
+            result.detector.up = entry.rebinned_values(entry.detector_up, target_dist_spec);
         }
 
         if (entry.genie_knob_source_count > 0 && !entry.genie_knob_shift_vectors.empty())
         {
             const std::vector<double> rebinned_shift_vectors =
-                syst::detail::rebin_shift_vectors(entry.genie_knob_shift_vectors,
-                                                  entry.genie_knob_source_count,
-                                                  entry.spec.nbins,
-                                                  entry.spec.xmin,
-                                                  entry.spec.xmax,
-                                                  target_spec);
+                entry.rebinned_source_major_payload(entry.genie_knob_shift_vectors,
+                                                    entry.genie_knob_source_count,
+                                                    target_dist_spec);
             const std::vector<double> rebinned_covariance =
                 syst::detail::detector_covariance_from_shift_vectors(
                     rebinned_shift_vectors,
@@ -394,11 +418,7 @@ namespace
         else if (!entry.genie_knob_covariance.empty())
         {
             const std::vector<double> rebinned_covariance =
-                syst::detail::rebin_covariance(entry.genie_knob_covariance,
-                                               entry.spec.nbins,
-                                               entry.spec.xmin,
-                                               entry.spec.xmax,
-                                               target_spec);
+                entry.rebinned_covariance(entry.genie_knob_covariance, target_dist_spec);
             result.genie_knobs =
                 syst::detail::detector_envelope_from_covariance(result.nominal,
                                                                 rebinned_covariance);

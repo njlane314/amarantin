@@ -4,38 +4,44 @@
 #include <cmath>
 #include <stdexcept>
 
+#include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 
 namespace
 {
-    bool same_binning(const syst::detail::CacheEntry &entry,
-                      const syst::HistogramSpec &target_spec)
+    using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+
+    DistributionIO::HistogramSpec target_distribution_spec(
+        const DistributionIO::HistogramSpec &source_spec,
+        const syst::HistogramSpec &target_spec)
     {
-        return entry.spec.nbins == target_spec.nbins &&
-               entry.spec.xmin == target_spec.xmin &&
-               entry.spec.xmax == target_spec.xmax;
+        DistributionIO::HistogramSpec out = source_spec;
+        out.nbins = target_spec.nbins;
+        out.xmin = target_spec.xmin;
+        out.xmax = target_spec.xmax;
+        return out;
     }
 
     std::vector<std::vector<double>> unpack_universe_histograms(
-        const syst::detail::FamilyCache &family,
-        int source_nbins,
-        const syst::detail::MatrixRowMajor *rebin = nullptr)
+        const std::vector<double> &payload,
+        int target_nbins,
+        long long n_variations)
     {
-        if (family.universe_histograms.empty() || family.n_variations <= 0)
+        if (payload.empty() || n_variations <= 0)
             return {};
 
-        const auto n_universes = static_cast<Eigen::Index>(family.n_variations);
-        const syst::detail::MatrixRowMajor rebinned =
-            rebin
-                ? (*rebin) * Eigen::Map<const syst::detail::MatrixRowMajor>(
-                                family.universe_histograms.data(),
-                                source_nbins,
-                                n_universes)
-                : syst::detail::MatrixRowMajor(
-                      Eigen::Map<const syst::detail::MatrixRowMajor>(
-                          family.universe_histograms.data(),
-                          source_nbins,
-                          n_universes));
+        const auto n_universes = static_cast<Eigen::Index>(n_variations);
+        if (payload.size() != static_cast<std::size_t>(target_nbins) *
+                                  static_cast<std::size_t>(n_universes))
+        {
+            throw std::runtime_error("syst: retained universe histogram payload is truncated");
+        }
+
+        const MatrixRowMajor rebinned(
+            Eigen::Map<const MatrixRowMajor>(
+                payload.data(),
+                target_nbins,
+                n_universes));
 
         std::vector<std::vector<double>> out(
             static_cast<std::size_t>(n_universes),
@@ -271,27 +277,29 @@ namespace syst::detail
         if (family.empty())
             return out;
 
-        const std::vector<double> nominal = rebin_vector(entry.nominal,
-                                                         entry.spec.nbins,
-                                                         entry.spec.xmin,
-                                                         entry.spec.xmax,
-                                                         target_spec);
-        const MatrixRowMajor rebin = build_rebin_matrix(entry.spec.nbins,
-                                                        entry.spec.xmin,
-                                                        entry.spec.xmax,
-                                                        target_spec.nbins,
-                                                        target_spec.xmin,
-                                                        target_spec.xmax);
+        const DistributionIO::HistogramSpec target_dist_spec =
+            target_distribution_spec(entry.spec, target_spec);
+        const std::vector<double> nominal =
+            entry.rebinned_values(entry.nominal, target_dist_spec);
 
         if (retain_universe_histograms)
-            out.universe_histograms = unpack_universe_histograms(family, entry.spec.nbins, &rebin);
+        {
+            out.universe_histograms = unpack_universe_histograms(
+                entry.rebinned_bin_major_payload(family.universe_histograms,
+                                                 static_cast<int>(family.n_variations),
+                                                 target_dist_spec),
+                target_spec.nbins,
+                family.n_variations);
+        }
 
         if (!family.covariance.empty())
         {
-            const Eigen::Map<const MatrixRowMajor> covariance(family.covariance.data(),
-                                                              entry.spec.nbins,
-                                                              entry.spec.nbins);
-            const Eigen::MatrixXd rebinned = rebin * covariance * rebin.transpose();
+            const std::vector<double> rebinned_covariance =
+                entry.rebinned_covariance(family.covariance, target_dist_spec);
+            const Eigen::MatrixXd rebinned =
+                Eigen::Map<const MatrixRowMajor>(rebinned_covariance.data(),
+                                                 target_spec.nbins,
+                                                 target_spec.nbins);
             out.covariance = flatten_covariance(rebinned);
             out.sigma = sigma_from_covariance(rebinned);
             fill_rank_limited_modes_from_covariance(rebinned,
@@ -314,10 +322,13 @@ namespace syst::detail
         }
         else if (!family.eigenmodes.empty() && family.eigen_rank > 0)
         {
-            const Eigen::Map<const MatrixRowMajor> modes(family.eigenmodes.data(),
-                                                         entry.spec.nbins,
-                                                         family.eigen_rank);
-            const MatrixRowMajor rebinned_modes = rebin * modes;
+            const std::vector<double> rebinned_mode_payload =
+                entry.rebinned_bin_major_payload(family.eigenmodes,
+                                                 family.eigen_rank,
+                                                 target_dist_spec);
+            const Eigen::Map<const MatrixRowMajor> rebinned_modes(rebinned_mode_payload.data(),
+                                                                  target_spec.nbins,
+                                                                  family.eigen_rank);
             out.eigenmodes.resize(static_cast<std::size_t>(target_spec.nbins * family.eigen_rank), 0.0);
             out.sigma.assign(static_cast<std::size_t>(target_spec.nbins), 0.0);
             for (int row = 0; row < target_spec.nbins; ++row)
@@ -372,7 +383,7 @@ namespace syst::detail
                         value /= denom;
                 }
             }
-            else if (same_binning(entry, target_spec))
+            else if (entry.same_binning(target_dist_spec))
             {
                 out.sigma = family.sigma;
             }

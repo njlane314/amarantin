@@ -6,8 +6,12 @@
 #include <set>
 #include <stdexcept>
 
+#include <Eigen/Dense>
+
 namespace
 {
+    using MatrixRowMajor = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+
     std::string nominal_or_key(const std::string &key, const DatasetIO::Sample &sample)
     {
         return sample.nominal.empty() ? key : sample.nominal;
@@ -110,109 +114,6 @@ namespace syst::detail
         }
 
         return out;
-    }
-
-    std::vector<std::vector<double>> rebin_detector_templates(const CacheEntry &entry,
-                                                              const HistogramSpec &target_spec)
-    {
-        std::vector<std::vector<double>> out;
-        if (entry.detector_template_count <= 0 || entry.detector_templates.empty())
-            return out;
-        if (entry.detector_templates.size() !=
-            static_cast<std::size_t>(entry.detector_template_count * entry.spec.nbins))
-        {
-            throw std::runtime_error("syst: detector template payload is truncated");
-        }
-
-        out.assign(static_cast<std::size_t>(entry.detector_template_count),
-                   std::vector<double>(static_cast<std::size_t>(target_spec.nbins), 0.0));
-
-        const MatrixRowMajor rebin = build_rebin_matrix(entry.spec.nbins,
-                                                        entry.spec.xmin,
-                                                        entry.spec.xmax,
-                                                        target_spec.nbins,
-                                                        target_spec.xmin,
-                                                        target_spec.xmax);
-        const Eigen::Map<const MatrixRowMajor> templates(entry.detector_templates.data(),
-                                                         entry.detector_template_count,
-                                                         entry.spec.nbins);
-        const MatrixRowMajor rebinned = templates * rebin.transpose();
-        for (int row = 0; row < entry.detector_template_count; ++row)
-        {
-            for (int col = 0; col < target_spec.nbins; ++col)
-                out[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)] = rebinned(row, col);
-        }
-        return out;
-    }
-
-    std::vector<double> rebin_detector_shift_vectors(const CacheEntry &entry,
-                                                     const HistogramSpec &target_spec)
-    {
-        if (entry.detector_source_count <= 0 || entry.detector_shift_vectors.empty())
-            return {};
-        return rebin_shift_vectors(entry.detector_shift_vectors,
-                                   entry.detector_source_count,
-                                   entry.spec.nbins,
-                                   entry.spec.xmin,
-                                   entry.spec.xmax,
-                                   target_spec);
-    }
-
-    std::vector<double> rebin_shift_vectors(const std::vector<double> &source_shift_vectors,
-                                            int source_count,
-                                            int source_nbins,
-                                            double source_xmin,
-                                            double source_xmax,
-                                            const HistogramSpec &target_spec)
-    {
-        if (source_count <= 0 || source_shift_vectors.empty())
-            return {};
-        if (source_shift_vectors.size() !=
-            static_cast<std::size_t>(source_count * source_nbins))
-        {
-            throw std::runtime_error("syst: shift payload is truncated");
-        }
-
-        const MatrixRowMajor rebin = build_rebin_matrix(source_nbins,
-                                                        source_xmin,
-                                                        source_xmax,
-                                                        target_spec.nbins,
-                                                        target_spec.xmin,
-                                                        target_spec.xmax);
-        const Eigen::Map<const MatrixRowMajor> shifts(source_shift_vectors.data(),
-                                                      source_count,
-                                                      source_nbins);
-        const MatrixRowMajor rebinned = shifts * rebin.transpose();
-        return std::vector<double>(rebinned.data(),
-                                   rebinned.data() + rebinned.size());
-    }
-
-    std::vector<double> rebin_covariance(const std::vector<double> &source_covariance,
-                                         int source_nbins,
-                                         double source_xmin,
-                                         double source_xmax,
-                                         const HistogramSpec &target_spec)
-    {
-        if (source_covariance.empty())
-            return {};
-        if (source_covariance.size() !=
-            static_cast<std::size_t>(source_nbins * source_nbins))
-        {
-            throw std::runtime_error("syst: detector covariance payload is truncated");
-        }
-
-        const MatrixRowMajor rebin = build_rebin_matrix(source_nbins,
-                                                        source_xmin,
-                                                        source_xmax,
-                                                        target_spec.nbins,
-                                                        target_spec.xmin,
-                                                        target_spec.xmax);
-        const Eigen::Map<const MatrixRowMajor> covariance(source_covariance.data(),
-                                                          source_nbins,
-                                                          source_nbins);
-        const MatrixRowMajor rebinned = rebin * covariance * rebin.transpose();
-        return std::vector<double>(rebinned.data(),
-                                   rebinned.data() + rebinned.size());
     }
 
     std::vector<double> detector_covariance_from_shift_vectors(const std::vector<double> &shift_vectors,

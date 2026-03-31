@@ -10,6 +10,8 @@
 
 namespace
 {
+    constexpr const char *kCentralWeightBranch = "__w__";
+
     const std::vector<std::string> &genie_knob_source_labels()
     {
         static const std::vector<std::string> labels = {
