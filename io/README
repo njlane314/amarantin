@@ -24,9 +24,6 @@ The classes form a simple chain:
       |
       v
   DistributionIO
-      |
-      v
-  ChannelIO
 
 More concretely:
 
@@ -36,7 +33,6 @@ More concretely:
   DatasetIO        --holds--> many named samples and their metadata
   EventListIO      --writes-> selected event trees and subrun trees
   DistributionIO   --writes-> binned distributions and persisted systematics payloads
-  ChannelIO        --writes-> named channel/process bundles on common binning
 
 Class notes
 -----------
@@ -67,17 +63,14 @@ DistributionIO
   sumw2, and persisted systematic summaries derived from EventListIO.
   Use it for repeated plotting and other bin-wise downstream work.
 
-ChannelIO
-  Persistent assembled channel output. It stores one analysis region on common
-  binning with many named processes, observed data bins, and per-process
-  systematic payloads.
-  Use it for stacked plots, fit-style exports, and final downstream channel
-  views.
-
 Private material
 ----------------
 bits/
   Private helper code and schema notes used by io/ itself.
+
+Local-only legacy helpers such as `ChannelIO` may still exist in-tree for ad
+hoc macros or migration support, but they are not part of the installed public
+workflow surface.
 
 bits/NTUPLE
   Reference for the upstream input ntuple schema.

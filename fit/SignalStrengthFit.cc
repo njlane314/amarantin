@@ -45,7 +45,7 @@ namespace
         return std::max(lower, std::min(value, upper));
     }
 
-    const DistributionIO::Family &family_for(const ChannelIO::Process &process,
+    const DistributionIO::Family &family_for(const fit::Process &process,
                                              fit::SourceKind source)
     {
         switch (source)
@@ -101,13 +101,13 @@ namespace
         throw std::runtime_error("fit::family_mode_value: family has no usable fit payload");
     }
 
-    bool has_detector_templates(const ChannelIO::Process &process)
+    bool has_detector_templates(const fit::Process &process)
     {
         return process.detector_template_count > 0 &&
                !process.detector_templates.empty();
     }
 
-    double detector_template_value(const ChannelIO::Process &process,
+    double detector_template_value(const fit::Process &process,
                                    int template_index,
                                    int bin)
     {
@@ -123,13 +123,13 @@ namespace
         return process.detector_templates[index];
     }
 
-    bool has_detector_envelope(const ChannelIO::Process &process)
+    bool has_detector_envelope(const fit::Process &process)
     {
         return !process.detector_down.empty() &&
                !process.detector_up.empty();
     }
 
-    bool has_total_envelope(const ChannelIO::Process &process)
+    bool has_total_envelope(const fit::Process &process)
     {
         return !process.total_down.empty() &&
                !process.total_up.empty();
@@ -184,7 +184,7 @@ namespace
         return name;
     }
 
-    std::string detector_name(const ChannelIO::Process &process, int template_index)
+    std::string detector_name(const fit::Process &process, int template_index)
     {
         if (template_index >= 0 &&
             static_cast<std::size_t>(template_index) < process.detector_sample_keys.size() &&
@@ -196,7 +196,7 @@ namespace
         return "detector:" + process.name + ":template" + std::to_string(template_index);
     }
 
-    std::string detector_group_name(const ChannelIO::Process &process)
+    std::string detector_group_name(const fit::Process &process)
     {
         std::string name = "detector";
         bool first = true;
@@ -256,7 +256,7 @@ namespace
 
         for (const auto &process : problem.channel->processes)
         {
-            if (process.kind == ChannelIO::ProcessKind::kData)
+            if (process.kind == fit::ProcessKind::kData)
                 continue;
 
             const std::size_t nbins = static_cast<std::size_t>(problem.channel->spec.nbins);
@@ -298,7 +298,7 @@ namespace
 
             for (const auto &term : nuisance.terms)
             {
-                const ChannelIO::Process *process = problem.channel->find_process(term.process_name);
+                const fit::Process *process = problem.channel->find_process(term.process_name);
                 if (!process)
                     throw std::runtime_error("fit::validate_problem: nuisance term references unknown process");
 
@@ -342,7 +342,7 @@ namespace
         }
     }
 
-    double term_shift(const ChannelIO::Process &process,
+    double term_shift(const fit::Process &process,
                       const fit::ShiftTerm &term,
                       int bin,
                       double theta)
@@ -390,7 +390,7 @@ namespace
     }
 
     double process_bin_yield(const fit::Problem &problem,
-                             const ChannelIO::Process &process,
+                             const fit::Process &process,
                              int bin,
                              double mu,
                              const double *nuisance_values)
@@ -433,7 +433,7 @@ namespace
         {
             for (const auto &process : problem.channel->processes)
             {
-                if (process.kind == ChannelIO::ProcessKind::kData)
+                if (process.kind == fit::ProcessKind::kData)
                     continue;
 
                 const double value = process_bin_yield(problem, process, bin, mu, nuisance_values);
@@ -758,14 +758,14 @@ namespace
         return index;
     }
 
-    bool process_has_family_payload(const ChannelIO::Process &process)
+    bool process_has_family_payload(const fit::Process &process)
     {
         return family_mode_count(process.genie) > 0 ||
                family_mode_count(process.flux) > 0 ||
                family_mode_count(process.reint) > 0;
     }
 
-    bool process_has_detector_payload(const ChannelIO::Process &process)
+    bool process_has_detector_payload(const fit::Process &process)
     {
         return has_detector_templates(process) || has_detector_envelope(process);
     }
@@ -796,7 +796,27 @@ namespace fit
         return "unknown";
     }
 
-    Problem make_independent_problem(const ChannelIO::Channel &channel,
+    const fit::Process *Channel::find_process(const std::string &name) const
+    {
+        for (const auto &process : processes)
+        {
+            if (process.name == name)
+                return &process;
+        }
+        return nullptr;
+    }
+
+    Process *Channel::find_process(const std::string &name)
+    {
+        for (auto &process : processes)
+        {
+            if (process.name == name)
+                return &process;
+        }
+        return nullptr;
+    }
+
+    Problem make_independent_problem(const Channel &channel,
                                      const std::string &signal_process,
                                      double mu_start,
                                      double mu_upper)
@@ -811,7 +831,7 @@ namespace fit
 
         for (const auto &process : channel.processes)
         {
-            if (process.kind == ChannelIO::ProcessKind::kData)
+            if (process.kind == ProcessKind::kData)
                 continue;
 
             const std::pair<SourceKind, const DistributionIO::Family *> families[] = {

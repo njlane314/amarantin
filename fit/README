@@ -4,49 +4,44 @@ amarantin
 Native fit library
 ------------------
 The preferred persisted downstream analysis surface is `DistributionIO`.
-The current native fit path still uses a smaller `ChannelIO` bundle assembled
-from cached `DistributionIO` entries, so `mk_channel` is the compatibility
-bridge and `mk_xsec_fit` is the consumer on top of that bridge.
-
-`amarantin` includes an additive native `Fit` library for those
-`ChannelIO`-based signal-strength fits.
+`mk_xsec_fit` now reads cached `DistributionIO` entries directly and assembles
+one in-memory `fit::Channel` for the fit. No persistent channel bundle is
+required by the native workflow.
 
 The small public surface is:
+  - `fit::ProcessKind`
+  - `fit::Spec`
+  - `fit::Process`
+  - `fit::Channel`
   - `fit::Problem`
   - `fit::FitOptions`
   - `fit::Result`
   - `fit::make_independent_problem(...)`
   - `fit::profile_signal_strength(...)`
 
-Minimal example:
-
-  #include "ChannelIO.hh"
-  #include "SignalStrengthFit.hh"
-
-  ChannelIO chio("final.channels.root");
-  ChannelIO::Channel ch = chio.read("numu_signal_region");
-
-  fit::Problem problem = fit::make_independent_problem(ch, "lambda_signal");
-  fit::Result result = fit::profile_signal_strength(problem);
-
-  // Fitted cross section = result.mu_hat * nominal_input_cross_section
-
 Typical workflow:
 
-  build/bin/mk_channel \
-    --manifest numu_signal_region.channel.manifest \
-    build/channels/final.channels.root \
+  build/bin/mk_xsec_fit \
+    --manifest numu_signal_region.fit.manifest \
+    --output build/fits/numu_signal_region.fit.txt \
     build/dists/final.dists.root \
     numu_signal_region
 
-  build/bin/mk_xsec_fit \
-    --output build/fits/numu_signal_region.fit.txt \
-    build/channels/final.channels.root \
-    numu_signal_region
+Manifest rows are:
+
+  process-name kind sample-key [cache-key]
+
+Rows with kind `data` fill the observed bins automatically. Without manifest
+data rows, pass `--data-bins` or use `--allow-zero-data` when an empty
+observation is intentional.
+
+For programmatic use, `app/mk_xsec_fit.cc` is the reference path for turning
+cached `DistributionIO::Entry` payloads into one `fit::Channel`.
 
 The default problem builder now shares family nuisances across processes,
-includes detector/statistical payloads from `ChannelIO`, and only falls back to
-`total_down` / `total_up` when a process lacks the more detailed component
+includes detector/statistical payloads from cached `DistributionIO` entries,
+and only falls back to `total_down` / `total_up` when a process lacks the more
+detailed component
 payloads.
 When only `detector_down` / `detector_up` survive, the default builder groups
 processes by `detector_sample_keys` and morphs through down / nominal / up

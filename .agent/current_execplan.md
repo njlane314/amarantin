@@ -1777,3 +1777,111 @@ files over growing ad hoc special cases in `samples-dag.mk`.
   and generated dataset assembly is first class
 - stop before inventing run 2 / run 3 shard metadata not present in local
   source material
+
+## ExecPlan Addendum: Compatibility Surface Retirement
+
+### 1. Objective
+With explicit approval to remove the remaining compatibility layers, retire the
+stale `mk_eventlist --cache-*` and `mk_channel` workflow seams, move the
+native fit CLI onto direct `DistributionIO` inputs, and demote `ChannelIO.hh`
+from the installed public header surface.
+
+### 2. Constraints
+- Keep `io/` persistence-only.
+- Keep the deletion pass focused on workflow truth surfaces, not unrelated
+  plotting or `syst/` refactors.
+- Leave unrelated dirty worktree changes untouched.
+
+### 3. Milestone
+- status: done
+- hypothesis: once `mk_dist` and direct `DistributionIO` fitting already
+  exist, deleting the remaining cache/channel bridges will make the workflow
+  smaller and more honest without leaving the fit path orphaned
+- files / symbols touched:
+  - `app/CMakeLists.txt`
+  - `app/mk_eventlist.cc`
+  - `app/mk_xsec_fit.cc`
+  - `app/mk_channel.cc`
+  - `fit/SignalStrengthFit.hh`
+  - `fit/SignalStrengthFit.cc`
+  - `io/CMakeLists.txt`
+  - `COMMANDS`
+  - `USAGE`
+  - `INSTALL`
+  - `fit/README`
+  - `io/README`
+  - `io/bits/DERIVED`
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: moderate
+- verification commands:
+  - `git diff --check -- app/CMakeLists.txt app/mk_eventlist.cc app/mk_xsec_fit.cc fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc io/CMakeLists.txt COMMANDS USAGE INSTALL fit/README io/README io/bits/DERIVED .agent/current_execplan.md docs/minimality-log.md`
+  - `docker build -t amarantin-dev .`
+  - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/compat-retire-docker -DCMAKE_BUILD_TYPE=Release && cmake --build .build/compat-retire-docker --target IO Ana Syst Fit mk_eventlist mk_dist mk_xsec_fit --parallel && (.build/compat-retire-docker/bin/mk_eventlist --help || true) && (.build/compat-retire-docker/bin/mk_xsec_fit --help || true)'`
+- acceptance criteria:
+  - `mk_eventlist` no longer accepts or documents `--cache-*`
+  - `mk_xsec_fit` consumes cached `DistributionIO` inputs directly
+  - `mk_channel` is no longer built or installed
+  - `ChannelIO.hh` is no longer installed as a public header
+  - top-level docs teach `mk_eventlist -> mk_dist -> mk_xsec_fit`
+- verification results:
+  - local checks passed:
+    - `git diff --check -- app/CMakeLists.txt app/mk_eventlist.cc app/mk_xsec_fit.cc fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc io/CMakeLists.txt COMMANDS USAGE INSTALL fit/README io/README io/bits/DERIVED`
+    - public-doc sweeps confirm:
+      - `COMMANDS`, `USAGE`, `INSTALL`, `fit/README`, `io/README`, and
+        `io/bits/DERIVED` no longer teach `mk_channel` or
+        `mk_eventlist --cache-*` as part of the native workflow
+  - Docker verification passed in a fresh Linux build tree:
+    - `docker build -t amarantin-dev .`
+    - `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/compat-retire-docker -DCMAKE_BUILD_TYPE=Release && cmake --build .build/compat-retire-docker --target IO Ana Syst Fit mk_eventlist mk_dist mk_xsec_fit --parallel && (.build/compat-retire-docker/bin/mk_eventlist --help || true) > /tmp/mk_eventlist.help 2>&1 && ! grep -q -- "--cache-systematics" /tmp/mk_eventlist.help && (.build/compat-retire-docker/bin/mk_xsec_fit --help || true) > /tmp/mk_xsec_fit.help 2>&1 && grep -q -- "--manifest <fit.manifest>" /tmp/mk_xsec_fit.help'`
+    - focused synthetic direct-fit smoke passed:
+      - wrote a temporary `DistributionIO` file with `signal`, `background`,
+        and `data` cache entries
+      - ran `mk_xsec_fit --manifest /tmp/direct-fit.manifest --output /tmp/direct-fit.fit.txt /tmp/direct-fit.dists.root muon_region`
+      - verified the report includes:
+        - `distribution_path: /tmp/direct-fit.dists.root`
+        - `eventlist_path: /tmp/direct-fit.eventlist.root`
+        - `observed_source_keys: data`
+        - `signal_process: signal`
+
+### 4. Public-surface check
+- compatibility impact:
+  - non-additive removal of `mk_eventlist --cache-*`
+  - non-additive removal of the `mk_channel` executable
+  - `ChannelIO.hh` removed from installed public headers
+- migration note:
+  - the native workflow is now `mk_sample -> mk_dataset -> mk_eventlist ->
+    mk_dist -> mk_xsec_fit`
+  - local legacy macros may still use `ChannelIO`, but that layer is no longer
+    the installed or documented workflow surface
+
+### 5. Reduction ledger
+- files deleted:
+  - `app/mk_channel.cc`
+- wrappers removed:
+  - remove the cache-building branch from `mk_eventlist`
+  - remove the separate persistent-channel bridge from the native fit workflow
+- shell branches removed:
+  - none in this pass
+- stale docs removed:
+  - `mk_channel`-first and `mk_eventlist --cache-*` workflow teaching from the
+    top-level docs
+- targets or dependencies removed:
+  - `mk_channel` target and install surface
+  - `ChannelIO.hh` from installed public headers
+  - `Syst` link from `mk_eventlist`
+- approximate LOC delta: net reduction from deleting the `mk_channel` app and
+  the legacy cache branch while keeping the direct fit assembly local to
+  `mk_xsec_fit`
+
+### 6. Decision log
+- keep `ChannelIO` available only as an in-tree local legacy helper for now
+  instead of widening this pass into a full macro rewrite
+- move the direct fit assembly into `mk_xsec_fit` and `fit::Channel` rather
+  than introducing another persistence format
+
+### 7. Stop conditions
+- stop once the documented installed workflow no longer routes through
+  `mk_eventlist --cache-*` or `mk_channel`
+- stop before rewriting local channel-oriented ROOT macros that are no longer
+  part of the documented native path

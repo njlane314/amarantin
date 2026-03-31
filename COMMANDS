@@ -28,7 +28,6 @@ Primary executables
   * build/bin/mk_dataset
   * build/bin/mk_eventlist
   * build/bin/mk_dist
-  * build/bin/mk_channel
   * build/bin/mk_xsec_fit
 
 Canonical build path
@@ -74,7 +73,6 @@ Build selected targets
   cmake --build build --target mk_dataset
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
-  cmake --build build --target mk_channel
   cmake --build build --target mk_xsec_fit
 
 Sample workflow
@@ -184,18 +182,6 @@ Build one canonical two-lane systematics cache:
     topological_score \
     50 0 1
 
-Legacy compatibility bridge:
-  build/bin/mk_eventlist \
-    --cache-systematics beam-s0 topological_score 50 0 1 \
-    --cache-output build/dists/run1-numi-fhc.root \
-    --cache-selection "__pass_muon__" \
-    --cache-detvars beam-s0-sce,beam-s0-wiremodx \
-    --cache-fine-nbins 400 \
-    --cache-genie \
-    --cache-flux \
-    --cache-reint \
-    output.eventlist.root input.dataset.root
-
 Notes:
   `mk_eventlist` resolves `__w_norm__` from the embedded DatasetIO run/subrun
   normalization surface, `__w_cv__` from the central-value event-weight
@@ -206,71 +192,55 @@ Notes:
   lane from branches on the nominal sample.
   `--no-overwrite` keeps existing matching cache entries instead of
   rebuilding them.
-  `mk_eventlist --cache-*` remains available only as a legacy compatibility bridge.
 
-Channel compatibility workflow
-------------------------------
-Build one persistent ChannelIO compatibility bundle directly from cached
-DistributionIO inputs
-  build/bin/mk_channel \
-    --data-bins "12,10,9,7,6,5,4,3,2,1" \
-    output.channels.root output.dists.root beam-s0 beam-bkg muon_region
-
-Build one ChannelIO compatibility bundle with explicit selection text and
-observed bins
-  build/bin/mk_channel \
-    --selection "__pass_muon__" \
-    --data-bins "12,10,9,7,6,5,4,3,2,1" \
-    output.channels.root output.dists.root beam-s0 beam-bkg muon_region
-
-Build one multi-process ChannelIO compatibility bundle from a plain-text
-manifest with automatic observed data
-  cat > muon_region.channel.manifest <<'EOF'
+Fit workflow
+------------
+Run one native xsec fit directly from cached DistributionIO inputs and print
+the fit report
+  cat > muon_region.fit.manifest <<'EOF'
   signal signal beam-s0
   beam_bkg background beam-bkg
   ext background ext
   dirt background dirt
   obs data beam-data
   EOF
-  build/bin/mk_channel \
-    --manifest muon_region.channel.manifest \
-    output.channels.root output.dists.root muon_region
+  build/bin/mk_xsec_fit \
+    --manifest muon_region.fit.manifest \
+    output.dists.root \
+    muon_region
 
-Manifest row format:
-  process-name kind sample-key [cache-key]
+Run one quick two-process fit with explicit observed bins
+  build/bin/mk_xsec_fit \
+    --signal-process signal \
+    --data-bins "12,10,9,7,6,5,4,3,2,1" \
+    output.dists.root \
+    beam-s0 \
+    beam-bkg \
+    muon_region
 
-Kinds:
-  signal
-  background
-  data
-
-Notes:
-  `DistributionIO` is the preferred persisted downstream surface after
-  `mk_dist`.
-  `mk_channel` is the current compatibility bridge that bundles selected
-  cached distributions into one `ChannelIO` region for the native fit.
-  `data` rows fill `ChannelIO::Channel::data` automatically.
-  The current manifest mode expects unique non-data process names.
-
-Fit workflow
-------------
-Run one native xsec fit from the ChannelIO compatibility bundle and print the
-fit report
-  build/bin/mk_xsec_fit output.channels.root muon_region
-
-If the channel intentionally carries an all-zero observed spectrum
-  build/bin/mk_xsec_fit --allow-zero-data output.channels.root muon_region
+If the fit intentionally carries an all-zero observed spectrum
+  build/bin/mk_xsec_fit \
+    --allow-zero-data \
+    output.dists.root \
+    beam-s0 \
+    beam-bkg \
+    muon_region
 
 Run one native xsec fit with explicit signal process and write a text report
   build/bin/mk_xsec_fit \
     --signal-process signal \
     --output muon_region.fit.txt \
-    output.channels.root muon_region
+    --manifest muon_region.fit.manifest \
+    output.dists.root \
+    muon_region
 
 Notes:
-  `mk_xsec_fit` currently consumes `ChannelIO`, not raw `DistributionIO`.
-  The normal persisted cache surface before that fit bridge is
-  `DistributionIO`.
+  `mk_xsec_fit` now consumes cached `DistributionIO` entries directly.
+  Manifest rows use the format:
+    `process-name kind sample-key [cache-key]`
+  `data` rows fill the observed bins automatically.
+  Without manifest data rows, pass `--data-bins` or opt into an intentional
+  empty observation with `--allow-zero-data`.
 
 Macro runner
 ------------
@@ -278,13 +248,6 @@ Run one ROOT macro through the common wrapper
   bash tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector
   bash tools/run-macro plot_efficiency build/eventlists/run1.root topological_score "selected != 0" "__pass_muon__" 50 0 1 beam-s0
   bash tools/run-macro inspect_dist output.dists.root beam-s0
-  bash tools/run-macro plot_channel output.channels.root muon_region
-  bash tools/run-macro fit_channel output.channels.root muon_region signal
-  bash tools/run-macro scan_mu output.channels.root muon_region signal
-
-Run a macro directly through ROOT
-  root -l -q 'fit/macro/fit_channel.C("output.channels.root","muon_region","signal")'
-  root -l -q 'fit/macro/scan_mu.C("output.channels.root","muon_region","signal")'
 
 Notes
 -----
@@ -324,11 +287,11 @@ Notes
   duplicate sample rows. The older repeated-key merge behavior remains
   available only through the legacy context-string path.
 
-`mk_dist`, `mk_channel`, `mk_xsec_fit`
-  Are the preferred scripted cache / compatibility-channel / fit entrypoints.
-  Older helper macros such as `cache_systematics.C` and `write_channel.C`
-  remain available for ad hoc ROOT sessions, but they are no longer the
-  documented workflow.
+`mk_dist`, `mk_xsec_fit`
+  Are the preferred scripted cache / fit entrypoints.
+  Older helper macros such as `cache_systematics.C`, `write_channel.C`,
+  `fit_channel.C`, and `scan_mu.C` may remain useful for ad hoc ROOT
+  sessions, but they are no longer the documented workflow.
 
 Generated `samples/generated/datasets.mk`
   Also carries `dataset_defs.<dataset>`, `dataset_manifest.<dataset>`,

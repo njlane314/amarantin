@@ -15,8 +15,7 @@ small framework-owned set of helper columns. The snapshot helpers in `ana`
 can then produce flat training trees from those selected event lists.
 
 The main bin-wise persistent object is DistributionIO.
-
-The main assembled channel object is ChannelIO.
+The native fit path does not require a persisted channel object.
 
 In the current code layout:
 
@@ -35,9 +34,9 @@ In the current code layout:
   syst::build_systematics_cache
     computes and persists rebinnable systematics caches into DistributionIO
 
-  ChannelIO
-    persists channel-level process bundles built from DistributionIO or other
-    bin-wise sources
+  fit::make_independent_problem
+    consumes one in-memory `fit::Channel` assembled from cached
+    `DistributionIO` entries
 
 Framework-owned column naming rule
 ----------------------------------

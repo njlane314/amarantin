@@ -35,7 +35,6 @@ Executables
   * mk_dataset
   * mk_eventlist
   * mk_dist
-  * mk_channel
   * mk_xsec_fit
 
 Prerequisites
@@ -79,7 +78,6 @@ Build only selected targets
   cmake --build build --target mk_dataset
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
-  cmake --build build --target mk_channel
   cmake --build build --target mk_xsec_fit
 
 Install
@@ -149,17 +147,24 @@ Typical installed outputs are:
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dataset
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_eventlist
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dist
-  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_channel
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_xsec_fit
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libIO.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libAna.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libSyst.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libPlot.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libFit.<shared-library>
-  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/*.hh
+  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/InputPartitionIO.hh
+  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/DistributionIO.hh
+  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/EventListIO.hh
+  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/DatasetIO.hh
+  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/SampleIO.hh
+  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/SignalStrengthFit.hh
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfig.cmake
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfigVersion.cmake
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinTargets.cmake
+
+`ChannelIO.hh` remains an in-tree helper header for local legacy tooling, but
+it is no longer part of the installed public header surface.
 
 Downstream CMake use
 --------------------
@@ -183,7 +188,6 @@ After a successful build, the build tree should contain:
   build/bin/mk_dataset
   build/bin/mk_eventlist
   build/bin/mk_dist
-  build/bin/mk_channel
   build/bin/mk_xsec_fit
   build/lib/
 

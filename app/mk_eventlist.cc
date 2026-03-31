@@ -1,15 +1,11 @@
-#include <cctype>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 #include "DatasetIO.hh"
-#include "DistributionIO.hh"
 #include "EventListBuild.hh"
 #include "EventListIO.hh"
-#include "Systematics.hh"
 
 namespace
 {
@@ -22,65 +18,13 @@ namespace
         std::string selection_expr = "selected != 0";
         std::string selection_name = "raw";
         bool explicit_selection = false;
-
-        bool cache_systematics = false;
-        std::string cache_output_path;
-        std::string cache_sample_key;
-        std::string cache_branch_expr;
-        int cache_nbins = 0;
-        double cache_xmin = 0.0;
-        double cache_xmax = 0.0;
-        std::string cache_selection_expr;
-        std::vector<std::string> cache_detector_sample_keys;
-        int cache_fine_nbins = 0;
-        bool cache_enable_genie = false;
-        bool cache_enable_flux = false;
-        bool cache_enable_reint = false;
-        bool cache_overwrite = true;
     };
-
-    std::vector<std::string> split_csv(const std::string &csv)
-    {
-        std::vector<std::string> out;
-        std::string current;
-        for (char c : csv)
-        {
-            if (c == ',')
-            {
-                if (!current.empty())
-                {
-                    out.push_back(current);
-                    current.clear();
-                }
-                continue;
-            }
-            if (!std::isspace(static_cast<unsigned char>(c)))
-                current.push_back(c);
-        }
-        if (!current.empty())
-            out.push_back(current);
-        return out;
-    }
-
-    std::string resolved_cache_output_path(const CliOptions &options)
-    {
-        return options.cache_output_path.empty()
-                   ? default_distribution_path(options.output_path)
-                   : options.cache_output_path;
-    }
 
     void print_usage(std::ostream &os)
     {
         os << "usage: mk_eventlist [--preset <name> | --selection <expr>] "
               "[--event-tree <name>] [--subrun-tree <name>] "
               "<output.root> <dataset.root>\n";
-        os << "legacy compatibility: mk_eventlist [event-list flags] "
-              "[--cache-systematics <sample-key> <branch-expr> <nbins> <xmin> <xmax>] "
-              "[--cache-output <path>] "
-              "[--cache-selection <expr>] [--cache-detvars <csv>] [--cache-fine-nbins <n>] "
-              "[--cache-genie] [--cache-flux] [--cache-reint] [--cache-no-overwrite] "
-              "<output.root> <dataset.root>\n";
-        os << "preferred cache workflow: mk_eventlist -> mk_dist\n";
     }
 
     [[noreturn]] void print_usage_and_throw()
@@ -127,61 +71,6 @@ namespace
                 options.subrun_tree_name = argv[i] ? argv[i] : "";
                 continue;
             }
-            if (arg == "--cache-systematics")
-            {
-                if (i + 5 >= argc) print_usage_and_throw();
-                options.cache_systematics = true;
-                options.cache_sample_key = argv[++i] ? argv[i] : "";
-                options.cache_branch_expr = argv[++i] ? argv[i] : "";
-                options.cache_nbins = std::stoi(argv[++i] ? argv[i] : "");
-                options.cache_xmin = std::stod(argv[++i] ? argv[i] : "");
-                options.cache_xmax = std::stod(argv[++i] ? argv[i] : "");
-                continue;
-            }
-            if (arg == "--cache-output")
-            {
-                if (++i >= argc) print_usage_and_throw();
-                options.cache_output_path = argv[i] ? argv[i] : "";
-                continue;
-            }
-            if (arg == "--cache-selection")
-            {
-                if (++i >= argc) print_usage_and_throw();
-                options.cache_selection_expr = argv[i] ? argv[i] : "";
-                continue;
-            }
-            if (arg == "--cache-detvars")
-            {
-                if (++i >= argc) print_usage_and_throw();
-                options.cache_detector_sample_keys = split_csv(argv[i] ? argv[i] : "");
-                continue;
-            }
-            if (arg == "--cache-fine-nbins")
-            {
-                if (++i >= argc) print_usage_and_throw();
-                options.cache_fine_nbins = std::stoi(argv[i] ? argv[i] : "");
-                continue;
-            }
-            if (arg == "--cache-genie")
-            {
-                options.cache_enable_genie = true;
-                continue;
-            }
-            if (arg == "--cache-flux")
-            {
-                options.cache_enable_flux = true;
-                continue;
-            }
-            if (arg == "--cache-reint")
-            {
-                options.cache_enable_reint = true;
-                continue;
-            }
-            if (arg == "--cache-no-overwrite")
-            {
-                options.cache_overwrite = false;
-                continue;
-            }
             break;
         }
 
@@ -217,40 +106,8 @@ int main(int argc, char **argv)
             ana::build_event_list(dataset, event_list, build_config);
         }
 
-        if (options.cache_systematics)
-        {
-            std::cerr << "mk_eventlist: legacy compatibility mode: use mk_dist for new DistributionIO cache builds\n";
-            EventListIO event_list(options.output_path, EventListIO::Mode::kRead);
-            const std::string cache_output_path = resolved_cache_output_path(options);
-            DistributionIO distfile(cache_output_path, DistributionIO::Mode::kUpdate);
-
-            syst::CacheBuildOptions cache_options;
-            cache_options.overwrite_existing = options.cache_overwrite;
-            cache_options.cache_nbins = options.cache_fine_nbins;
-            cache_options.enable_genie = options.cache_enable_genie;
-            cache_options.enable_flux = options.cache_enable_flux;
-            cache_options.enable_reint = options.cache_enable_reint;
-
-            syst::CacheRequest request;
-            request.sample_key = options.cache_sample_key;
-            request.branch_expr = options.cache_branch_expr;
-            request.nbins = options.cache_nbins;
-            request.xmin = options.cache_xmin;
-            request.xmax = options.cache_xmax;
-            request.selection_expr = options.cache_selection_expr;
-            request.detector_sample_keys = options.cache_detector_sample_keys;
-            cache_options.requests.push_back(request);
-
-            syst::build_systematics_cache(event_list, distfile, cache_options);
-        }
-
         std::cout << "mk_eventlist: wrote " << options.output_path
-                  << " from dataset " << options.dataset_path;
-        if (options.cache_systematics)
-        {
-            std::cout << " and legacy cache " << resolved_cache_output_path(options);
-        }
-        std::cout << "\n";
+                  << " from dataset " << options.dataset_path << "\n";
         return 0;
     }
     catch (const std::exception &e)

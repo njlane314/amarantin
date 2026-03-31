@@ -1359,3 +1359,81 @@
 ## Remaining hotspots
 - decide later whether old root-level build trees should be deleted in a
   separate explicit cleanup pass
+
+---
+
+## Current milestone
+- status: done
+- subsystem: `app/` + `fit/` + installed workflow surface
+- design rule from `DESIGN.md`: keep workflows direct, delete stale wrapper
+  paths once the native path is proven, and avoid leaving compatibility layers
+  as the documented default
+
+## What changed
+- removed the legacy cache-building branch from `mk_eventlist`
+- deleted the `mk_channel` app target and source file
+- moved `mk_xsec_fit` onto direct cached `DistributionIO` inputs with:
+  - a quick two-process mode
+  - a manifest-driven multi-process mode
+  - observed-data assembly from `data` rows
+- moved `ChannelIO.hh` off the installed public header surface
+- rewrote top-level docs and module docs so the native flow is now:
+  - `mk_eventlist`
+  - `mk_dist`
+  - `mk_xsec_fit`
+- reframed `ChannelIO` as a local legacy helper rather than an installed
+  workflow surface
+
+## Why this is simpler
+- the fit workflow no longer requires a second persisted artifact just to pass
+  cached distributions into the fitter
+- `mk_eventlist` is back to owning only the row-wise build step
+- the installed/public story now matches the documented workflow story
+- the final downstream path is flatter and easier to grep:
+  `DistributionIO -> mk_xsec_fit`
+
+## Verification
+- local checks:
+  - `git diff --check -- app/CMakeLists.txt app/mk_eventlist.cc app/mk_xsec_fit.cc fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc io/CMakeLists.txt COMMANDS USAGE INSTALL fit/README io/README io/bits/DERIVED .agent/current_execplan.md docs/minimality-log.md`
+- Docker checks:
+  - `docker build -t amarantin-dev .`
+  - focused Linux rebuild of `IO`, `Ana`, `Syst`, `Fit`, `mk_eventlist`,
+    `mk_dist`, and `mk_xsec_fit`
+  - `mk_eventlist --help` usage smoke with a negative grep confirming that
+    `--cache-systematics` is gone
+  - `mk_xsec_fit --help` usage smoke confirming the direct
+    `--manifest <fit.manifest>` form
+  - synthetic direct-fit smoke:
+    - write a temporary `DistributionIO` file with `signal`, `background`,
+      and `data` cache entries
+    - run `mk_xsec_fit --manifest /tmp/direct-fit.manifest`
+    - verify the report includes `distribution_path`, `eventlist_path`,
+      `observed_source_keys`, and `signal_process`
+- results:
+  - focused Docker rebuild passed
+  - direct `DistributionIO -> mk_xsec_fit` smoke passed
+  - `mk_eventlist` no longer advertises cache flags
+
+## Reduction ledger
+- files deleted: 1
+- wrappers removed:
+  - remove the cache-building bridge from `mk_eventlist`
+  - remove the separate persistent-channel bridge from the native fit path
+- shell branches removed: 0
+- docs/build artifacts removed:
+  - `mk_channel` from build/install/docs
+  - `mk_eventlist --cache-*` from the documented workflow
+  - `ChannelIO.hh` from the installed public-header surface
+- approximate LOC delta: net reduction from deleting one app and one legacy
+  branch while keeping the direct fit assembly in one CLI
+
+## Decisions
+- keep `ChannelIO` in-tree for local legacy macros for now instead of turning
+  this pass into a broad macro rewrite
+- prefer one in-memory `fit::Channel` assembly path in `mk_xsec_fit` over a
+  second persisted downstream format
+
+## Remaining hotspots
+- local ROOT macros such as `plot_channel.C`, `fit_channel.C`, `scan_mu.C`,
+  and `write_channel.C` still depend on `ChannelIO`, but they are no longer on
+  the installed or documented workflow path

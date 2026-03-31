@@ -5,10 +5,63 @@
 #include <string>
 #include <vector>
 
-#include "ChannelIO.hh"
+#include "DistributionIO.hh"
 
 namespace fit
 {
+    enum class ProcessKind
+    {
+        kData,
+        kSignal,
+        kBackground
+    };
+
+    using Family = DistributionIO::Family;
+
+    struct Spec
+    {
+        std::string channel_key;
+        std::string branch_expr;
+        std::string selection_expr;
+        int nbins = 0;
+        double xmin = 0.0;
+        double xmax = 0.0;
+    };
+
+    struct Process
+    {
+        std::string name;
+        ProcessKind kind = ProcessKind::kBackground;
+        std::vector<std::string> source_keys;
+        std::vector<std::string> detector_sample_keys;
+
+        std::vector<double> nominal;
+        std::vector<double> sumw2;
+
+        std::vector<double> detector_down;
+        std::vector<double> detector_up;
+        std::vector<double> detector_templates;
+        int detector_template_count = 0;
+
+        Family genie;
+        Family flux;
+        Family reint;
+
+        std::vector<double> total_down;
+        std::vector<double> total_up;
+    };
+
+    struct Channel
+    {
+        Spec spec;
+        std::vector<double> data;
+        std::vector<std::string> data_source_keys;
+        std::vector<Process> processes;
+
+        const Process *find_process(const std::string &name) const;
+        Process *find_process(const std::string &name);
+    };
+
     enum class SourceKind
     {
         kGenieMode,
@@ -44,7 +97,7 @@ namespace fit
 
     struct Problem
     {
-        const ChannelIO::Channel *channel = nullptr;
+        const Channel *channel = nullptr;
         std::string signal_process;
         double mu_start = 1.0;
         double mu_lower = 0.0;
@@ -90,9 +143,9 @@ namespace fit
     };
 
     // Build the default signal-strength problem from the persisted mode,
-    // detector, and statistical payloads on one ChannelIO compatibility
-    // bundle assembled from cached DistributionIO entries.
-    Problem make_independent_problem(const ChannelIO::Channel &channel,
+    // detector, and statistical payloads on one in-memory fit channel
+    // assembled directly from cached DistributionIO entries.
+    Problem make_independent_problem(const Channel &channel,
                                      const std::string &signal_process,
                                      double mu_start = 1.0,
                                      double mu_upper = 5.0);
