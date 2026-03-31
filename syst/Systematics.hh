@@ -64,6 +64,7 @@ namespace syst
         std::vector<std::string> detector_sample_keys;
 
         bool enable_genie = false;
+        bool enable_genie_knobs = false;
         bool enable_flux = false;
         bool enable_reint = false;
 
@@ -82,6 +83,9 @@ namespace syst
         bool loaded_from_persistent_cache = false;
         std::vector<double> nominal;
         Envelope detector;
+        std::vector<std::string> genie_knob_source_labels;
+        int genie_knob_source_count = 0;
+        Envelope genie_knobs;
 
         std::optional<UniverseFamilyResult> genie;
         std::optional<UniverseFamilyResult> flux;
@@ -108,6 +112,7 @@ namespace syst
         int cache_nbins = 0;
 
         bool enable_genie = false;
+        bool enable_genie_knobs = false;
         bool enable_flux = false;
         bool enable_reint = false;
 

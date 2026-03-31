@@ -110,6 +110,7 @@ namespace
 
     std::vector<double> combine_total_up(const std::vector<double> &nominal,
                                          const syst::Envelope &detector,
+                                         const syst::Envelope &genie_knobs,
                                          const std::vector<double> &genie_sigma,
                                          const std::vector<double> &flux_sigma,
                                          const std::vector<double> &reint_sigma)
@@ -123,6 +124,11 @@ namespace
                 const double shift = std::max(0.0, detector.up[bin] - nominal[bin]);
                 variance += shift * shift;
             }
+            if (!genie_knobs.empty())
+            {
+                const double shift = std::max(0.0, genie_knobs.up[bin] - nominal[bin]);
+                variance += shift * shift;
+            }
             if (bin < genie_sigma.size()) variance += genie_sigma[bin] * genie_sigma[bin];
             if (bin < flux_sigma.size()) variance += flux_sigma[bin] * flux_sigma[bin];
             if (bin < reint_sigma.size()) variance += reint_sigma[bin] * reint_sigma[bin];
@@ -133,6 +139,7 @@ namespace
 
     std::vector<double> combine_total_down(const std::vector<double> &nominal,
                                            const syst::Envelope &detector,
+                                           const syst::Envelope &genie_knobs,
                                            const std::vector<double> &genie_sigma,
                                            const std::vector<double> &flux_sigma,
                                            const std::vector<double> &reint_sigma)
@@ -144,6 +151,11 @@ namespace
             if (!detector.empty())
             {
                 const double shift = std::max(0.0, nominal[bin] - detector.down[bin]);
+                variance += shift * shift;
+            }
+            if (!genie_knobs.empty())
+            {
+                const double shift = std::max(0.0, nominal[bin] - genie_knobs.down[bin]);
                 variance += shift * shift;
             }
             if (bin < genie_sigma.size()) variance += genie_sigma[bin] * genie_sigma[bin];
@@ -174,6 +186,8 @@ namespace
         entry.spec.xmax = fine_spec.xmax;
         entry.nominal = nominal_sample.nominal;
         entry.sumw2 = nominal_sample.sumw2;
+
+        syst::Envelope genie_knob_envelope;
 
         std::vector<std::vector<double>> detector_histograms;
         if (!options.detector_sample_keys.empty())
@@ -266,14 +280,31 @@ namespace
             entry.flux = syst::detail::build_family_cache(*nominal_sample.flux, entry.nominal, fine_spec.nbins, options);
         if (nominal_sample.reint)
             entry.reint = syst::detail::build_family_cache(*nominal_sample.reint, entry.nominal, fine_spec.nbins, options);
+        if (nominal_sample.genie_knobs && !nominal_sample.genie_knobs->shift_vectors.empty())
+        {
+            entry.genie_knob_source_labels = nominal_sample.genie_knobs->source_labels;
+            entry.genie_knob_shift_vectors = nominal_sample.genie_knobs->shift_vectors;
+            entry.genie_knob_source_count =
+                static_cast<int>(nominal_sample.genie_knobs->source_labels.size());
+            entry.genie_knob_covariance =
+                syst::detail::detector_covariance_from_shift_vectors(
+                    entry.genie_knob_shift_vectors,
+                    entry.genie_knob_source_count,
+                    fine_spec.nbins);
+            genie_knob_envelope =
+                syst::detail::detector_envelope_from_covariance(entry.nominal,
+                                                                entry.genie_knob_covariance);
+        }
 
         entry.total_up = combine_total_up(entry.nominal,
                                           syst::Envelope{entry.detector_down, entry.detector_up},
+                                          genie_knob_envelope,
                                           entry.genie.sigma,
                                           entry.flux.sigma,
                                           entry.reint.sigma);
         entry.total_down = combine_total_down(entry.nominal,
                                               syst::Envelope{entry.detector_down, entry.detector_up},
+                                              genie_knob_envelope,
                                               entry.genie.sigma,
                                               entry.flux.sigma,
                                               entry.reint.sigma);
@@ -295,6 +326,8 @@ namespace
                                                     entry.spec.xmin,
                                                     entry.spec.xmax,
                                                     target_spec);
+        result.genie_knob_source_labels = entry.genie_knob_source_labels;
+        result.genie_knob_source_count = entry.genie_knob_source_count;
 
         if (entry.detector_source_count > 0 && !entry.detector_shift_vectors.empty())
         {
@@ -340,6 +373,37 @@ namespace
                                                             target_spec);
         }
 
+        if (entry.genie_knob_source_count > 0 && !entry.genie_knob_shift_vectors.empty())
+        {
+            const std::vector<double> rebinned_shift_vectors =
+                syst::detail::rebin_shift_vectors(entry.genie_knob_shift_vectors,
+                                                  entry.genie_knob_source_count,
+                                                  entry.spec.nbins,
+                                                  entry.spec.xmin,
+                                                  entry.spec.xmax,
+                                                  target_spec);
+            const std::vector<double> rebinned_covariance =
+                syst::detail::detector_covariance_from_shift_vectors(
+                    rebinned_shift_vectors,
+                    entry.genie_knob_source_count,
+                    target_spec.nbins);
+            result.genie_knobs =
+                syst::detail::detector_envelope_from_covariance(result.nominal,
+                                                                rebinned_covariance);
+        }
+        else if (!entry.genie_knob_covariance.empty())
+        {
+            const std::vector<double> rebinned_covariance =
+                syst::detail::rebin_covariance(entry.genie_knob_covariance,
+                                               entry.spec.nbins,
+                                               entry.spec.xmin,
+                                               entry.spec.xmax,
+                                               target_spec);
+            result.genie_knobs =
+                syst::detail::detector_envelope_from_covariance(result.nominal,
+                                                                rebinned_covariance);
+        }
+
         if (!entry.genie.empty())
         {
             result.genie = syst::detail::family_result_from_cache(entry.genie,
@@ -368,11 +432,13 @@ namespace
         const std::vector<double> empty;
         result.total_up = combine_total_up(result.nominal,
                                            result.detector,
+                                           result.genie_knobs,
                                            result.genie ? result.genie->sigma : empty,
                                            result.flux ? result.flux->sigma : empty,
                                            result.reint ? result.reint->sigma : empty);
         result.total_down = combine_total_down(result.nominal,
                                                result.detector,
+                                               result.genie_knobs,
                                                result.genie ? result.genie->sigma : empty,
                                                result.flux ? result.flux->sigma : empty,
                                                result.reint ? result.reint->sigma : empty);
@@ -583,6 +649,7 @@ namespace syst
             sysopt.enable_detector = !detector_sample_keys.empty();
             sysopt.detector_sample_keys = detector_sample_keys;
             sysopt.enable_genie = options.enable_genie;
+            sysopt.enable_genie_knobs = options.enable_genie_knobs;
             sysopt.enable_flux = options.enable_flux;
             sysopt.enable_reint = options.enable_reint;
             sysopt.build_full_covariance = options.build_full_covariance;

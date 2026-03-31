@@ -2973,3 +2973,214 @@ This pass is a surface simplification, not a behavior change.
 - stop once the current fit CLI surface consistently says `mk_fit`
 - stop before widening the pass into history rewriting or broader fit-library
   cleanup
+
+## ExecPlan Addendum: Integrate SearchingForStrangeness EventWeights
+
+### 1. Objective
+Implement the reviewed EventWeight branch contract from
+`/Users/user/programs/searchingforstrangeness` in the live `amarantin`
+framework so the selected-event, systematics-cache, fit, and export paths all
+agree on how those upstream branches map to systematics.
+
+### 2. Constraints
+- Keep `io/` persistence-only.
+- Keep `ana/` responsible only for building the selected-event surface and
+  nominal event weights.
+- Keep covariance construction in `syst/`.
+- Reuse existing covariance-first detector and family patterns instead of
+  adding a new orchestration layer.
+- Leave unrelated dirty-worktree changes untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- prefer plain data and namespace functions
+- keep workflows in `app/`
+- keep module boundaries sharp
+
+This pass should extend the current direct data flow, not introduce a second
+systematics framework.
+
+### 4. System map
+- upstream branch contract:
+  - `syst/VISION.md`
+  - `/Users/user/programs/searchingforstrangeness/AnalysisTools/EventWeightAnalysis_tool.cc`
+- selected-event builder and persistence surface:
+  - `ana/EventListBuild.cc`
+  - `io/EventListIO.hh`
+  - `io/EventListIO.cc`
+- systematics builder and cache persistence:
+  - `syst/Systematics.hh`
+  - `syst/Systematics.cc`
+  - `syst/UniverseFill.cc`
+  - `syst/UniverseSummary.cc`
+  - `syst/bits/Detail.hh`
+  - `io/DistributionIO.hh`
+  - `io/DistributionIO.cc`
+- downstream consumers:
+  - `fit/SignalStrengthFit.hh`
+  - `fit/SignalStrengthFit.cc`
+  - `app/mk_dist.cc`
+  - `app/mk_sbnfit_cov.cc`
+- verification:
+  - `tools/systematics-reweight-smoke.sh`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- keep the selected tree as the one persisted boundary for upstream weight
+  branches instead of reconstructing art products downstream
+- keep the logical flux-family resolution and GENIE knob-pair semantics in
+  `syst/`
+
+#### wrapper collapse
+- reuse the existing detector source-shift pattern for explicit paired knob
+  sources instead of inventing a parallel special-case fit path
+
+#### doc / build cleanup
+- tighten docs and smoke coverage around the actual upstream branch names so
+  future work does not rediscover the contract by inspection
+
+### 6. Milestones
+
+#### Milestone A: Confirm the selected-event branch surface and document the implementation plan
+- status: done
+- hypothesis: the selected tree already preserves the relevant upstream weight
+  branches, so the implementation work should stay concentrated in `syst/`,
+  `fit/`, and edge CLIs
+- files / symbols touched:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md`
+- acceptance criteria:
+  - the repo-local exec plan names the concrete implementation milestones
+  - the current minimality log points at this integration pass
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md` passed
+
+#### Milestone B: Make logical flux-family resolution branch-aware
+- status: done
+- hypothesis: `weightsPPFX` and `weightsFlux` are one logical family and the
+  branch selection belongs in `syst::detail::compute_sample(...)`
+- files / symbols touched:
+  - `syst/UniverseFill.cc`
+  - `syst/README`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/UniverseFill.cc syst/README`
+- acceptance criteria:
+  - flux-family readout prefers `weightsPPFX`
+  - flux-family readout falls back to `weightsFlux`
+  - the persisted family branch name records the actual source branch used
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/UniverseFill.cc syst/README` passed
+
+#### Milestone C: Add an explicit GENIE knob-pair source lane to the covariance cache
+- status: done
+- hypothesis: paired `weightsGenieUp` / `weightsGenieDn` should survive as
+  labeled shift sources plus absolute covariance, not be folded into the
+  GENIE multisim family
+- files / symbols touched:
+  - `syst/Systematics.hh`
+  - `syst/Systematics.cc`
+  - `syst/UniverseFill.cc`
+  - `syst/bits/Detail.hh`
+  - `io/DistributionIO.hh`
+  - `io/DistributionIO.cc`
+  - `syst/README`
+  - `syst/VISION.md`
+  - `docs/minimality-log.md`
+- expected behavior risk: moderate
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/bits/Detail.hh io/DistributionIO.hh io/DistributionIO.cc syst/README syst/VISION.md`
+- acceptance criteria:
+  - the knob-pair lane has explicit stable source labels
+  - paired shifts survive cache write/read
+  - covariance and derived envelopes can be reconstructed from the persisted
+    knob-pair payload
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/bits/Detail.hh io/DistributionIO.hh io/DistributionIO.cc syst/README syst/VISION.md` passed
+  - the paired-knob lane now persists reviewed labels, shift vectors, and
+    covariance additively in `DistributionIO`
+
+#### Milestone D: Teach fit and export surfaces to consume the knob-pair lane
+- status: done
+- hypothesis: the fit and SBNFit export paths can reuse the existing
+  covariance/source-shift consumption patterns with one additive lane
+- files / symbols touched:
+  - `fit/SignalStrengthFit.hh`
+  - `fit/SignalStrengthFit.cc`
+  - `app/mk_xsec_fit.cc`
+  - `app/mk_sbnfit_cov.cc`
+  - `fit/README`
+  - `COMMANDS`
+  - `USAGE`
+  - `INSTALL`
+  - `docs/minimality-log.md`
+- expected behavior risk: moderate
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_xsec_fit.cc app/mk_sbnfit_cov.cc fit/README COMMANDS USAGE INSTALL`
+- acceptance criteria:
+  - fit-side default nuisance assembly includes the knob-pair lane when present
+  - SBNFit export includes the knob-pair covariance component when present
+  - docs mention the new branch-aware flux and optional knob-pair behavior
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_xsec_fit.cc app/mk_sbnfit_cov.cc fit/README COMMANDS USAGE INSTALL` passed
+  - `cmake --build build --target Syst Fit mk_dist mk_fit mk_sbnfit_cov --parallel` failed because the existing `build/` tree still points at `/usr/bin/cmake`
+  - fresh configure in `.build/eventweight-integration` failed in this environment because `ROOT` is not available and `root-config` is not on `PATH`
+
+#### Milestone E: Add focused smoke coverage
+- status: done
+- hypothesis: one focused synthetic smoke can lock the branch-aware flux rule
+  and the knob-pair covariance math without needing a full production tuple
+- files / symbols touched:
+  - `tools/systematics-reweight-smoke.sh`
+  - `docs/minimality-log.md`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md tools/systematics-reweight-smoke.sh`
+  - `bash -n tools/systematics-reweight-smoke.sh`
+  - runtime smoke if a trustworthy ROOT build is available
+- acceptance criteria:
+  - the smoke covers `weightsPPFX` / `weightsFlux` selection
+  - the smoke covers paired knob shifts and covariance persistence
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md tools/systematics-reweight-smoke.sh` passed
+  - `bash -n tools/systematics-reweight-smoke.sh` passed
+  - runtime smoke remains deferred because no trustworthy configured ROOT build is available here
+
+### 7. Public-surface check
+- compatibility impact:
+  - additive `DistributionIO` schema growth if the knob-pair lane is
+    persisted
+  - additive fit/export behavior when the new lane is present
+- migration note or explicit non-goal:
+  - migration note: old caches remain readable through existing additive
+    readback paths
+  - non-goal: reconstruct art `MCEventWeight` products downstream
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - the need to infer upstream flux-family branch choice outside `syst/`
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta: moderate additive systematics-surface extension
+
+### 9. Decision log
+- resolve the logical flux family in `syst/` by branch presence
+- keep paired GENIE knobs separate from the GENIE multisim family
+- persist the knob-pair lane as explicit source shifts plus covariance
+- prefer reuse of the existing detector source-shift pattern over a new family
+  abstraction
+
+### 10. Stop conditions
+- stop once branch-aware flux resolution and the optional GENIE knob-pair lane
+  are integrated through cache, fit, export, and focused smoke coverage
+- stop before widening this pass into unrelated upstream ntuple cleanup or a
+  broader CLI redesign

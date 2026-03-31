@@ -19,6 +19,7 @@ void cache_systematics(const char *read_path = nullptr,
                        int cache_nbins = 0,
                        const char *detector_samples_csv = "",
                        bool enable_genie = true,
+                       bool enable_genie_knobs = false,
                        bool enable_flux = false,
                        bool enable_reint = false,
                        const char *dist_path = nullptr)
@@ -67,6 +68,7 @@ void cache_systematics(const char *read_path = nullptr,
         cache_options.overwrite_existing = true;
         cache_options.cache_nbins = std::max(nbins, cache_nbins);
         cache_options.enable_genie = enable_genie;
+        cache_options.enable_genie_knobs = enable_genie_knobs;
         cache_options.enable_flux = enable_flux;
         cache_options.enable_reint = enable_reint;
 
@@ -98,6 +100,7 @@ void cache_systematics(const char *read_path = nullptr,
         readback_options.enable_detector = !request.detector_sample_keys.empty();
         readback_options.detector_sample_keys = request.detector_sample_keys;
         readback_options.enable_genie = cache_options.enable_genie;
+        readback_options.enable_genie_knobs = cache_options.enable_genie_knobs;
         readback_options.enable_flux = cache_options.enable_flux;
         readback_options.enable_reint = cache_options.enable_reint;
 

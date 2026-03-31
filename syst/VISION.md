@@ -219,6 +219,10 @@ V^{knob}_{(p,b),(q,c)} = sum_k s^k_{p,b} * s^k_{q,c}
 
   - this paired lane should remain optional until the upstream knob ordering is
     copied into a reviewed local contract
+  - when enabled, persist:
+    - reviewed source labels
+    - source shift vectors
+    - absolute covariance
 - scalar `knob*up/dn` branches:
   - do not use them as the primary source when `weightsGenieUp/Dn` exist
   - they are acceptable only as a narrow fallback or validation surface for a
@@ -227,16 +231,17 @@ V^{knob}_{(p,b),(q,c)} = sum_k s^k_{p,b} * s^k_{q,c}
 Immediate implications for `amarantin`
 --------------------------------------
 
-This upstream branch surface sharpens three concrete follow-up items:
+This upstream branch surface sharpens three concrete implementation points:
 
-- flux-family resolution in `syst/` should become branch-set aware:
+- flux-family resolution in `syst/` should be branch-set aware:
   - prefer `weightsPPFX`
   - otherwise fall back to `weightsFlux`
-- the current hardcoded flux mapping to `weightsPPFX` alone is too narrow for
-  the full `searchingforstrangeness` ntuple surface
-- if knob-pair propagation is added later, `syst/` should import the
+- if knob-pair propagation is enabled, `syst/` should import the
   `weightsGenieUp/Dn` vector lane with explicit source labels, not scrape the
   scalar `knob*` branches one by one
+- downstream fit/export code should consume that knob-pair lane as explicit
+  source shifts or derived covariance, not collapse it back into a generic
+  envelope at the boundary
 
 Design Anchors
 --------------

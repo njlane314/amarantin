@@ -262,10 +262,13 @@ namespace
         process.source_keys = {spectrum.spec.sample_key};
         process.detector_source_labels = spectrum.detector_source_labels;
         process.detector_sample_keys = spectrum.detector_sample_keys;
+        process.genie_knob_source_labels = spectrum.genie_knob_source_labels;
         process.nominal = spectrum.nominal;
         process.sumw2 = spectrum.sumw2;
         process.detector_shift_vectors = spectrum.detector_shift_vectors;
         process.detector_source_count = spectrum.detector_source_count;
+        process.genie_knob_shift_vectors = spectrum.genie_knob_shift_vectors;
+        process.genie_knob_source_count = spectrum.genie_knob_source_count;
         process.detector_down = spectrum.detector_down;
         process.detector_up = spectrum.detector_up;
         process.detector_templates = spectrum.detector_templates;

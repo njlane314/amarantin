@@ -31,6 +31,7 @@ namespace syst::detail
            << ";xmax=" << std::setprecision(17) << fine_spec.xmax
            << ";det=" << options.enable_detector
            << ";genie=" << options.enable_genie
+           << ";genieknobs=" << options.enable_genie_knobs
            << ";flux=" << options.enable_flux
            << ";reint=" << options.enable_reint
            << ";cov=1"

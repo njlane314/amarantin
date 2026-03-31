@@ -59,22 +59,46 @@ namespace
         return tree;
     }
 
-    TTree *make_selected_tree(double second_weight_scale)
+    constexpr std::size_t kGenieKnobCount = 53;
+
+    TTree *make_selected_tree(double second_weight_scale,
+                              bool include_ppfx)
     {
         auto *tree = new TTree("selected", "selected");
         double x = 0.0;
         double weight = 1.0;
         std::vector<unsigned short> weights_genie;
+        std::vector<unsigned short> weights_flux;
+        std::vector<unsigned short> weights_ppfx;
+        std::vector<unsigned short> weights_genie_up;
+        std::vector<unsigned short> weights_genie_dn;
         tree->Branch("x", &x);
         tree->Branch("__w__", &weight);
         tree->Branch("weightsGenie", &weights_genie);
+        tree->Branch("weightsFlux", &weights_flux);
+        if (include_ppfx)
+            tree->Branch("weightsPPFX", &weights_ppfx);
+        tree->Branch("weightsGenieUp", &weights_genie_up);
+        tree->Branch("weightsGenieDn", &weights_genie_dn);
 
         x = 0.25;
         weights_genie = {2000, 1000};
+        weights_flux = {2000, 1000};
+        weights_ppfx = {1500, 1000};
+        weights_genie_up.assign(kGenieKnobCount, 1000);
+        weights_genie_dn.assign(kGenieKnobCount, 1000);
+        weights_genie_up[0] = 1200;
+        weights_genie_dn[0] = 800;
         tree->Fill();
 
         x = 1.25;
         weights_genie = {1000, static_cast<unsigned short>(1000.0 * second_weight_scale)};
+        weights_flux = {1000, 3000};
+        weights_ppfx = {1000, 500};
+        weights_genie_up.assign(kGenieKnobCount, 1000);
+        weights_genie_dn.assign(kGenieKnobCount, 1000);
+        weights_genie_up[1] = 1500;
+        weights_genie_dn[1] = 500;
         tree->Fill();
 
         return tree;
@@ -94,14 +118,20 @@ namespace
         eventlist.write_metadata(metadata);
 
         DatasetIO::Sample sample;
-        sample.origin = DatasetIO::Sample::Origin::kData;
+        sample.origin = DatasetIO::Sample::Origin::kOverlay;
         sample.variation = DatasetIO::Sample::Variation::kNominal;
         sample.beam = DatasetIO::Sample::Beam::kNuMI;
         sample.polarity = DatasetIO::Sample::Polarity::kFHC;
 
-        TTree *selected_tree = make_selected_tree(second_weight_scale);
+        TTree *selected_tree = make_selected_tree(second_weight_scale, true);
         TTree *subrun_tree = make_subrun_tree();
-        eventlist.write_sample("beam", sample, selected_tree, subrun_tree, "SubRun");
+        eventlist.write_sample("beam_ppfx", sample, selected_tree, subrun_tree, "SubRun");
+        delete selected_tree;
+        delete subrun_tree;
+
+        selected_tree = make_selected_tree(second_weight_scale, false);
+        subrun_tree = make_subrun_tree();
+        eventlist.write_sample("beam_flux", sample, selected_tree, subrun_tree, "SubRun");
         delete selected_tree;
         delete subrun_tree;
 
@@ -128,6 +158,8 @@ int main(int argc, char **argv)
     options.persistent_cache = syst::CachePolicy::kComputeIfMissing;
     options.cache_nbins = 4;
     options.enable_genie = true;
+    options.enable_genie_knobs = true;
+    options.enable_flux = true;
     options.build_full_covariance = true;
     options.retain_universe_histograms = true;
     options.enable_eigenmode_compression = false;
@@ -136,19 +168,57 @@ int main(int argc, char **argv)
     {
         EventListIO eventlist(argv[1], EventListIO::Mode::kRead);
         DistributionIO distfile(argv[2], DistributionIO::Mode::kUpdate);
-        const syst::SystematicsResult result = syst::evaluate(eventlist, distfile, "beam", spec, options);
-        const DistributionIO::Spectrum cached = distfile.read("beam", syst::cache_key(spec, options));
+        const syst::SystematicsResult result =
+            syst::evaluate(eventlist, distfile, "beam_ppfx", spec, options);
+        const DistributionIO::Spectrum cached =
+            distfile.read("beam_ppfx", syst::cache_key(spec, options));
+        const syst::SystematicsResult flux_only =
+            syst::evaluate(eventlist, distfile, "beam_flux", spec, options);
 
         if (result.loaded_from_persistent_cache)
             throw std::runtime_error("reweight_smoke: first evaluation unexpectedly loaded from cache");
         if (!result.genie)
             throw std::runtime_error("reweight_smoke: missing GENIE result");
+        if (!result.flux)
+            throw std::runtime_error("reweight_smoke: missing flux result");
         if (cached.genie.covariance.size() != 16)
             throw std::runtime_error("reweight_smoke: canonical family covariance was not persisted");
+        if (cached.genie_knob_source_count != static_cast<int>(kGenieKnobCount))
+            throw std::runtime_error("reweight_smoke: GENIE knob-pair source count was not persisted");
+        if (cached.genie_knob_covariance.size() != 16)
+            throw std::runtime_error("reweight_smoke: GENIE knob-pair covariance was not persisted");
+        if (cached.genie_knob_source_labels.empty() ||
+            cached.genie_knob_source_labels.front() != "AGKYpT1pi_UBGenie")
+        {
+            throw std::runtime_error("reweight_smoke: GENIE knob-pair labels were not persisted");
+        }
         if (result.genie->universe_histograms.size() != 2)
             throw std::runtime_error("reweight_smoke: retained universe histograms missing");
         if (result.genie->covariance.size() != 4)
             throw std::runtime_error("reweight_smoke: expected rebinned covariance from canonical cache");
+        if (result.genie_knob_source_count != static_cast<int>(kGenieKnobCount))
+            throw std::runtime_error("reweight_smoke: missing GENIE knob-pair source count");
+        if (!approx(result.genie_knobs.up[0], 1.2) ||
+            !approx(result.genie_knobs.down[0], 0.8) ||
+            !approx(result.genie_knobs.up[1], 1.5) ||
+            !approx(result.genie_knobs.down[1], 0.5))
+        {
+            throw std::runtime_error("reweight_smoke: unexpected GENIE knob-pair envelope");
+        }
+        if (result.flux->branch_name != "weightsPPFX")
+            throw std::runtime_error("reweight_smoke: PPFX branch was not preferred for the logical flux family");
+        if (!flux_only.flux || flux_only.flux->branch_name != "weightsFlux")
+            throw std::runtime_error("reweight_smoke: weightsFlux fallback was not used");
+        if (!approx(result.flux->sigma[0], std::sqrt(0.125)) ||
+            !approx(result.flux->sigma[1], std::sqrt(0.125)))
+        {
+            throw std::runtime_error("reweight_smoke: unexpected PPFX sigma values");
+        }
+        if (!approx(flux_only.flux->sigma[0], std::sqrt(0.5)) ||
+            !approx(flux_only.flux->sigma[1], std::sqrt(2.0)))
+        {
+            throw std::runtime_error("reweight_smoke: unexpected weightsFlux sigma values");
+        }
         if (!approx(result.genie->sigma[0], std::sqrt(0.5)) ||
             !approx(result.genie->sigma[1], std::sqrt(2.0)))
             throw std::runtime_error("reweight_smoke: unexpected sigma values");
@@ -164,12 +234,15 @@ int main(int argc, char **argv)
     {
         EventListIO eventlist(argv[1], EventListIO::Mode::kRead);
         DistributionIO distfile(argv[2], DistributionIO::Mode::kRead);
-        const syst::SystematicsResult result = syst::evaluate(eventlist, distfile, "beam", spec, options);
+        const syst::SystematicsResult result =
+            syst::evaluate(eventlist, distfile, "beam_flux", spec, options);
 
         if (!result.loaded_from_persistent_cache)
             throw std::runtime_error("reweight_smoke: cached evaluation did not load from persistent cache");
         if (!result.genie || result.genie->universe_histograms.size() != 2)
             throw std::runtime_error("reweight_smoke: cached universe family payload missing");
+        if (result.genie_knob_source_count != static_cast<int>(kGenieKnobCount))
+            throw std::runtime_error("reweight_smoke: cached GENIE knob-pair payload missing");
     }
 
     {
@@ -177,7 +250,7 @@ int main(int argc, char **argv)
         DistributionIO distfile(argv[2], DistributionIO::Mode::kRead);
         try
         {
-            (void)syst::evaluate(other_eventlist, distfile, "beam", spec, options);
+            (void)syst::evaluate(other_eventlist, distfile, "beam_flux", spec, options);
             throw std::runtime_error("reweight_smoke: metadata mismatch was not rejected");
         }
         catch (const std::runtime_error &error)

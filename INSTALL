@@ -141,6 +141,13 @@ Applications
 
     cmake -S . -B build -DAMARANTIN_BUILD_APP=OFF
 
+Runtime note for systematics cache builds
+-----------------------------------------
+`mk_dist` accepts `--genie-knobs` to persist the optional paired
+`weightsGenieUp` / `weightsGenieDn` source-shift lane when those branches are
+present on the selected-event tree. The logical flux family prefers
+`weightsPPFX` and falls back to `weightsFlux`.
+
 Installed files
 ---------------
 Typical installed outputs are:

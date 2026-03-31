@@ -61,6 +61,10 @@ public:
         std::vector<double> detector_shift_vectors;
         int detector_source_count = 0;
         std::vector<double> detector_covariance;
+        std::vector<std::string> genie_knob_source_labels;
+        std::vector<double> genie_knob_shift_vectors;
+        int genie_knob_source_count = 0;
+        std::vector<double> genie_knob_covariance;
         std::vector<double> detector_down;
         std::vector<double> detector_up;
         std::vector<double> detector_templates;

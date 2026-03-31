@@ -207,8 +207,9 @@ Example:
 
 The mk_sbnfit_cov program reads one cached `DistributionIO::Spectrum`,
 reconstructs the available systematic absolute covariance components
-(`detector`, `genie`, `flux`, `reint`), derives fractional covariance from the
-cached nominal prediction, and writes a ROOT file containing:
+(`detector`, optional `genie_knobs`, `genie`, `flux`, `reint`), derives
+fractional covariance from the cached nominal prediction, and writes a ROOT
+file containing:
 
   * a fractional covariance matrix named `frac_covariance` by default
   * an absolute covariance matrix named `abs_covariance`
@@ -356,6 +357,7 @@ Canonical form:
       [--detvars <csv>] \
       [--fine-nbins <n>] \
       [--genie] \
+      [--genie-knobs] \
       [--flux] \
       [--reint] \
       [--no-overwrite] \
@@ -372,6 +374,7 @@ Representative detector-plus-reweighting example:
       --detvars beam-s0-sce,beam-s0-wiremodx \
       --fine-nbins 400 \
       --genie \
+      --genie-knobs \
       --flux \
       --reint \
       build/dists/run1-numi-fhc.root \
@@ -387,6 +390,8 @@ Reading the cache inputs from left to right:
   * `--fine-nbins` chooses the finer on-disk cache binning
   * `--genie`, `--flux`, and `--reint` enable the
     reweighting families on the nominal sample
+  * `--genie-knobs` enables the optional paired-source lane from
+    `weightsGenieUp` / `weightsGenieDn`
   * `output.dists.root` is the `DistributionIO` file to update
   * `input.eventlist.root` is the persisted selected-row input
   * `<sample-key> <branch-expr> <nbins> <xmin> <xmax>` names the nominal
@@ -399,6 +404,10 @@ Conceptually this builds two systematic lanes and merges them in one
   * detector lane: alternate `EventListIO` samples listed in `--detvars`
   * reweighting lane: alternate weight branches on the nominal sample selected
     by `--genie`, `--flux`, and `--reint`
+  * the logical flux family prefers `weightsPPFX` and falls back to
+    `weightsFlux`
+  * the optional GENIE knob lane keeps paired `weightsGenieUp` /
+    `weightsGenieDn` shifts separate from the GENIE multisim family
 
 Running a native xsec fit by hand
 ---------------------------------

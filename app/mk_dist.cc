@@ -24,6 +24,7 @@ namespace
         std::vector<std::string> detector_sample_keys;
         int fine_nbins = 0;
         bool enable_genie = false;
+        bool enable_genie_knobs = false;
         bool enable_flux = false;
         bool enable_reint = false;
         bool overwrite = true;
@@ -55,7 +56,7 @@ namespace
     void print_usage(std::ostream &os)
     {
         os << "usage: mk_dist [--selection <expr>] [--detvars <csv>] [--fine-nbins <n>] "
-              "[--genie] [--flux] [--reint] [--no-overwrite] "
+              "[--genie] [--genie-knobs] [--flux] [--reint] [--no-overwrite] "
               "<output.root> <eventlist.root> <sample-key> <branch-expr> <nbins> <xmin> <xmax>\n";
     }
 
@@ -97,6 +98,11 @@ namespace
             if (arg == "--genie")
             {
                 options.enable_genie = true;
+                continue;
+            }
+            if (arg == "--genie-knobs")
+            {
+                options.enable_genie_knobs = true;
                 continue;
             }
             if (arg == "--flux")
@@ -144,6 +150,7 @@ int main(int argc, char **argv)
         cache_options.overwrite_existing = options.overwrite;
         cache_options.cache_nbins = options.fine_nbins;
         cache_options.enable_genie = options.enable_genie;
+        cache_options.enable_genie_knobs = options.enable_genie_knobs;
         cache_options.enable_flux = options.enable_flux;
         cache_options.enable_reint = options.enable_reint;
 

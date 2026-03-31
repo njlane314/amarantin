@@ -2,50 +2,80 @@
 
 ## Current milestone
 - status: done
-- subsystem: `syst/` EventWeight branch-to-systematics contract
-- design rule from `DESIGN.md`: keep the systematic semantics explicit in
-  `syst/`, keep persistence ownership in `io/`, and prefer one grep-friendly
-  reviewed contract over branch-name folklore
+- subsystem: EventWeight integration from selected-event branches through
+  systematics cache, fit, export, and focused smoke coverage
+- design rule from `DESIGN.md`: keep the selected-event surface direct, keep
+  systematics semantics explicit in `syst/`, and extend the existing
+  covariance-first data flow instead of adding a new wrapper layer
 
 ## What changed
-- updated `syst/VISION.md` with the concrete upstream EventWeight surface from
-  `/Users/user/programs/searchingforstrangeness`
-- classified `weightSpline`, `weightTune`, `weightSplineTimesTune`, `ppfx_cv`,
-  and `RootinoFix` as nominal-weight inputs rather than covariance families
-- classified `weightsGenie`, `weightsReint`, `weightsPPFX`, and `weightsFlux`
-  as the canonical multisim family surfaces to consume in `amarantin`
-- classified `weightsGenieUp` / `weightsGenieDn` as an optional separate
-  paired-knob lane rather than extra entries inside the GENIE multisim family
-- recorded the concrete implication that `amarantin`'s logical flux family
-  should prefer `weightsPPFX` and fall back to `weightsFlux`
+- added a new exec-plan addendum for the EventWeight integration pass
+- fixed the implementation sequence around the existing code boundaries:
+  branch-aware logical flux resolution first, then the optional GENIE knob-pair
+  lane through cache, fit, export, and smoke coverage
+- made the logical flux family branch-aware in `syst/`:
+  - prefer `weightsPPFX`
+  - otherwise fall back to `weightsFlux`
+- updated `syst/README` so the live family mapping matches that code path
+- added an optional paired GENIE knob lane driven by `weightsGenieUp` /
+  `weightsGenieDn`
+- persisted that lane additively as reviewed source labels, shift vectors, and
+  covariance on `DistributionIO::Spectrum`
+- taught the native fit builder to share those knob nuisances across processes
+  by source label when the payload survives
+- taught `mk_sbnfit_cov` to export the optional `genie_knobs` covariance
+  component
+- added focused smoke coverage for PPFX-vs-Flux resolution, paired GENIE knob
+  shifts, knob covariance persistence, and cache metadata mismatch rejection
+- updated current workflow docs for `mk_dist --genie-knobs` and the new export
+  component surface
 
 ## Why this is simpler
-- the vision doc now points at the actual upstream branch names that exist on
-  disk instead of talking only in abstract family terms
-- central-value weights are separated clearly from systematic-variation inputs
-- the future `weightsFlux` / `weightsPPFX` handling and optional GENIE knob
-  lane can be implemented against one reviewed contract
+- the integration work is now broken into small milestones that match the
+  existing data flow
+- future edits can stay inside the current module boundaries instead of
+  growing another systematics wrapper layer
+- the logical flux-family rule now lives in one grep target in `syst/`
+  instead of being split between docs and branch-name assumptions
+- the paired GENIE knob lane now reuses the existing source-shift /
+  covariance-first pattern instead of adding a second fit-specific mechanism
+- fit and export consumers no longer need to guess whether the knob lane should
+  be treated like multisim weights or like detector envelopes
 
 ## Verification
 - configure/build commands:
 - target-only commands:
 - shell checks:
--  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/VISION.md`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/UniverseFill.cc syst/README`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/Systematics.hh syst/Systematics.cc syst/UniverseFill.cc syst/Support.cc syst/bits/Detail.hh syst/Detector.cc io/DistributionIO.hh io/DistributionIO.cc fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_dist.cc app/mk_xsec_fit.cc app/mk_sbnfit_cov.cc plot/macro/cache_systematics.C syst/README syst/VISION.md fit/README COMMANDS USAGE INSTALL tools/systematics-reweight-smoke.sh`
+-  `bash -n tools/systematics-reweight-smoke.sh`
 - smoke checks:
 - results:
   - tracked-file `git diff --check` passed
-  - this was a docs-only pass, so no build or runtime verification was needed
+  - the plan update passed `git diff --check`
+  - the branch-aware flux-family milestone passed `git diff --check`
+  - the full tracked-file patch passed `git diff --check`
+  - `bash -n tools/systematics-reweight-smoke.sh` passed
+  - `cmake --build build --target Syst Fit mk_dist mk_fit mk_sbnfit_cov --parallel` failed because the existing `build/` tree points at `/usr/bin/cmake`
+  - fresh configure in `.build/eventweight-integration` failed because `ROOT` is not available and `root-config` is not on `PATH`
+  - runtime smoke remains deferred because no trustworthy configured ROOT build is available
 
 ## Reduction ledger
 - files deleted: 0
 - wrappers removed:
-  - the need to rediscover upstream EventWeight branch semantics from a
-    separate repository during future `syst/` work
+  - the need to decide the EventWeight integration sequence ad hoc during code
+    edits
+  - the hardcoded assumption that the flux family can only come from
+    `weightsPPFX`
+  - the need to collapse paired GENIE knobs into generic envelopes before
+    cache, fit, or export
 - shell branches removed: 0
 - docs/build artifacts removed: 0
 - approximate LOC delta:
-  - one focused vision-doc extension
-  - no code-path changes
+  - one focused exec-plan addendum
+  - one small branch-resolution cleanup in `syst/`
+  - one additive source-shift lane through cache, fit, export, and smoke
 
 ## Decisions
 - make covariance the canonical imported semantic from `hive`
@@ -61,8 +91,8 @@
 - if you want a true stacked multi-process SBNFit export, the next step needs
   an explicit contract for cross-process family correlations rather than
   guessing them from per-process caches
-- the concrete `weightsFlux` fallback and optional GENIE knob-pair propagation
-  still need implementation work in `syst/`
+- trustworthy compile/runtime verification still requires a working local ROOT
+  build tree
 
 ## Current milestone
 - status: done

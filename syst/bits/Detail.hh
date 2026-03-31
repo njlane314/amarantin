@@ -14,7 +14,7 @@ class TTree;
 namespace syst::detail
 {
     constexpr const char *kCentralWeightBranch = "__w__";
-    constexpr int kSystematicsCacheVersion = 4;
+    constexpr int kSystematicsCacheVersion = 5;
 
     using CacheEntry = DistributionIO::Spectrum;
     using FamilyCache = DistributionIO::Family;
@@ -38,10 +38,24 @@ namespace syst::detail
         void accumulate(int bin, int nbins, double base_weight);
     };
 
+    struct PairedShiftAccumulator
+    {
+        std::string up_branch_name;
+        std::string down_branch_name;
+        std::vector<std::string> source_labels;
+        std::vector<unsigned short> *raw_up = nullptr;
+        std::vector<unsigned short> *raw_down = nullptr;
+        std::vector<double> shift_vectors; // row-major: source-major, bin-minor
+
+        void ensure_size(int nbins);
+        void accumulate(int bin, int nbins, double base_weight);
+    };
+
     struct SampleComputation
     {
         std::vector<double> nominal;
         std::vector<double> sumw2;
+        std::optional<PairedShiftAccumulator> genie_knobs;
         std::optional<UniverseAccumulator> genie;
         std::optional<UniverseAccumulator> flux;
         std::optional<UniverseAccumulator> reint;
@@ -91,6 +105,13 @@ namespace syst::detail
 
     std::vector<double> rebin_detector_shift_vectors(const CacheEntry &entry,
                                                      const HistogramSpec &target_spec);
+
+    std::vector<double> rebin_shift_vectors(const std::vector<double> &source_shift_vectors,
+                                            int source_count,
+                                            int source_nbins,
+                                            double source_xmin,
+                                            double source_xmax,
+                                            const HistogramSpec &target_spec);
 
     std::vector<double> rebin_covariance(const std::vector<double> &source_covariance,
                                          int source_nbins,

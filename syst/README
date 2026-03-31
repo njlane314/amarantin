@@ -217,7 +217,8 @@ nominal selected tree itself.
 The current branch mapping is:
 
 - GENIE: `weightsGenie`
-- flux: `weightsPPFX`
+- GENIE paired knobs: optional `weightsGenieUp` / `weightsGenieDn`
+- flux: prefer `weightsPPFX`, otherwise fall back to `weightsFlux`
 - reinteraction: `weightsReint`
 
 For each enabled family, syst/:
@@ -238,6 +239,28 @@ survives cache write/read and exact later rebinning.
 
 So detector systematics come from separate event-list samples, while the
 reweightable families come from alternate weights on the nominal sample.
+
+### 3. Optional paired GENIE knob lane
+
+If the selected tree carries `weightsGenieUp` and `weightsGenieDn`, and the
+request enables the lane, syst/ keeps those paired knob shifts separate from
+the GENIE multisim family.
+
+For knob source `k`:
+
+- read the packed `up` and `down` weights on the nominal selected tree
+- fill the shift directly from the central weight `__w__`:
+  - `s^(k) = 0.5 * (y^(up,k) - y^(down,k))`
+- sum those explicit source shifts into covariance:
+  - `V^knob = sum_k s^(k) (s^(k))^T`
+- persist:
+  - reviewed knob source labels
+  - knob shift vectors
+  - knob covariance
+- derive only a diagonal-based envelope when a simple band is needed
+
+This lane is covariance-first and source-resolved, just like detector shifts.
+It is not folded into the GENIE multisim family.
 
 Lane-by-lane breakdown
 ----------------------
@@ -281,6 +304,8 @@ If `genie`, `flux`, or `reint` are enabled:
 
 - stay on the nominal tree
 - read the corresponding multi-universe weight branch
+  - for the logical flux family, prefer `weightsPPFX` and otherwise use
+    `weightsFlux`
 - refill the same binned observable once per universe
 - form one universe shift vector per universe:
   - `Delta^(u) = y^(u) - y`
@@ -295,6 +320,27 @@ This lane answers:
 
   "How much do the binned yields move if I keep the same selected events but
   vary the event weights?"
+
+### D. Optional paired GENIE knob lane
+
+If `genie_knobs` is enabled and `weightsGenieUp` / `weightsGenieDn` exist:
+
+- stay on the nominal tree
+- read the paired `up` / `down` knob vectors in the reviewed local source order
+- build one paired source shift vector per knob:
+  - `s^(k) = 0.5 * (y^(up,k) - y^(down,k))`
+- convert those explicit knob shifts into covariance:
+  - `V^knob = sum_k s^(k) (s^(k))^T`
+- persist:
+  - knob source labels
+  - knob shift vectors
+  - knob covariance
+- derive a simple diagonal envelope only when a band is needed for summaries
+
+This lane answers:
+
+  "How much do the binned yields move if I apply one paired GENIE knob shift
+  at a time on the nominal selected events?"
 
 How totals are formed
 ---------------------
@@ -349,6 +395,9 @@ The cached `DistributionIO::Spectrum` holds:
 - detector variation sample keys
 - detector shift vectors
 - detector covariance
+- optional GENIE knob source labels
+- optional GENIE knob shift vectors
+- optional GENIE knob covariance
 - detector templates and detector envelope
 - family `sigma`
 - family covariance

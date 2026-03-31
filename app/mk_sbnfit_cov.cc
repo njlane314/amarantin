@@ -172,33 +172,53 @@ namespace
         return out;
     }
 
-    MatrixComponent component_from_detector(const DistributionIO::Spectrum &spectrum)
+    MatrixComponent component_from_shift_sources(const std::string &label,
+                                                const std::vector<double> &shift_vectors,
+                                                int source_count,
+                                                const std::vector<double> &covariance,
+                                                int nbins)
     {
         MatrixComponent component;
-        component.label = "detector";
+        component.label = label;
 
-        const int nbins = spectrum.spec.nbins;
         const std::size_t expected = static_cast<std::size_t>(nbins * nbins);
-        if (!spectrum.detector_covariance.empty() &&
-            spectrum.detector_covariance.size() != expected)
+        if (!covariance.empty() && covariance.size() != expected)
         {
-            throw std::runtime_error("mk_sbnfit_cov: detector covariance payload is truncated");
+            throw std::runtime_error("mk_sbnfit_cov: " + label + " covariance payload is truncated");
         }
-        if (spectrum.detector_covariance.size() == expected)
+        if (covariance.size() == expected)
         {
-            component.absolute = spectrum.detector_covariance;
+            component.absolute = covariance;
             return component;
         }
 
-        if (spectrum.detector_source_count > 0 && !spectrum.detector_shift_vectors.empty())
+        if (source_count > 0 && !shift_vectors.empty())
         {
             component.absolute = detector_covariance_from_shift_vectors(
-                spectrum.detector_shift_vectors,
-                spectrum.detector_source_count,
+                shift_vectors,
+                source_count,
                 nbins);
         }
 
         return component;
+    }
+
+    MatrixComponent component_from_detector(const DistributionIO::Spectrum &spectrum)
+    {
+        return component_from_shift_sources("detector",
+                                            spectrum.detector_shift_vectors,
+                                            spectrum.detector_source_count,
+                                            spectrum.detector_covariance,
+                                            spectrum.spec.nbins);
+    }
+
+    MatrixComponent component_from_genie_knobs(const DistributionIO::Spectrum &spectrum)
+    {
+        return component_from_shift_sources("genie_knobs",
+                                            spectrum.genie_knob_shift_vectors,
+                                            spectrum.genie_knob_source_count,
+                                            spectrum.genie_knob_covariance,
+                                            spectrum.spec.nbins);
     }
 
     MatrixComponent component_from_family(const DistributionIO::Family &family,
@@ -301,6 +321,7 @@ int main(int argc, char **argv)
 
         std::vector<MatrixComponent> components;
         components.push_back(component_from_detector(spectrum));
+        components.push_back(component_from_genie_knobs(spectrum));
         components.push_back(component_from_family(spectrum.genie, nbins, "genie"));
         components.push_back(component_from_family(spectrum.flux, nbins, "flux"));
         components.push_back(component_from_family(spectrum.reint, nbins, "reint"));

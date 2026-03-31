@@ -150,21 +150,38 @@ namespace syst::detail
     {
         if (entry.detector_source_count <= 0 || entry.detector_shift_vectors.empty())
             return {};
-        if (entry.detector_shift_vectors.size() !=
-            static_cast<std::size_t>(entry.detector_source_count * entry.spec.nbins))
+        return rebin_shift_vectors(entry.detector_shift_vectors,
+                                   entry.detector_source_count,
+                                   entry.spec.nbins,
+                                   entry.spec.xmin,
+                                   entry.spec.xmax,
+                                   target_spec);
+    }
+
+    std::vector<double> rebin_shift_vectors(const std::vector<double> &source_shift_vectors,
+                                            int source_count,
+                                            int source_nbins,
+                                            double source_xmin,
+                                            double source_xmax,
+                                            const HistogramSpec &target_spec)
+    {
+        if (source_count <= 0 || source_shift_vectors.empty())
+            return {};
+        if (source_shift_vectors.size() !=
+            static_cast<std::size_t>(source_count * source_nbins))
         {
-            throw std::runtime_error("SystematicsEngine: detector shift payload is truncated");
+            throw std::runtime_error("SystematicsEngine: shift payload is truncated");
         }
 
-        const MatrixRowMajor rebin = build_rebin_matrix(entry.spec.nbins,
-                                                        entry.spec.xmin,
-                                                        entry.spec.xmax,
+        const MatrixRowMajor rebin = build_rebin_matrix(source_nbins,
+                                                        source_xmin,
+                                                        source_xmax,
                                                         target_spec.nbins,
                                                         target_spec.xmin,
                                                         target_spec.xmax);
-        const Eigen::Map<const MatrixRowMajor> shifts(entry.detector_shift_vectors.data(),
-                                                      entry.detector_source_count,
-                                                      entry.spec.nbins);
+        const Eigen::Map<const MatrixRowMajor> shifts(source_shift_vectors.data(),
+                                                      source_count,
+                                                      source_nbins);
         const MatrixRowMajor rebinned = shifts * rebin.transpose();
         return std::vector<double>(rebinned.data(),
                                    rebinned.data() + rebinned.size());

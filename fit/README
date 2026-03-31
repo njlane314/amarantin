@@ -40,13 +40,15 @@ the `mk_fit` CLI for turning cached `DistributionIO::Spectrum` payloads into
 one `fit::Channel`.
 
 The default problem builder now shares family nuisances across processes,
-prefers explicit detector source shifts from cached `DistributionIO` entries,
-and only falls back to detector templates, detector envelopes, or finally
-`total_down` / `total_up` when the richer payloads are unavailable.
+prefers explicit detector source shifts and explicit GENIE knob-pair source
+shifts from cached `DistributionIO` entries, and only falls back to detector
+templates, detector envelopes, or finally `total_down` / `total_up` when the
+richer payloads are unavailable.
 When detector source labels survive, the default builder shares those detector
-nuisances across processes by source label; when only `detector_down` /
-`detector_up` survive, it falls back to grouping by `detector_sample_keys` and
-morphing through down / nominal / up.
+nuisances across processes by source label. When GENIE knob-pair source labels
+survive, it likewise shares those knob nuisances across processes by source
+label. When only `detector_down` / `detector_up` survive, it falls back to
+grouping by `detector_sample_keys` and morphing through down / nominal / up.
 
 A native fitter would minimize q(mu) = -2 ln L(mu, theta_hat_mu). Here is a
 toy three-bin scan:

@@ -113,6 +113,12 @@ namespace
                !process.detector_shift_vectors.empty();
     }
 
+    bool has_genie_knob_shift_sources(const fit::Process &process)
+    {
+        return process.genie_knob_source_count > 0 &&
+               !process.genie_knob_shift_vectors.empty();
+    }
+
     double detector_template_value(const fit::Process &process,
                                    int template_index,
                                    int bin)
@@ -143,6 +149,22 @@ namespace
         if (index >= process.detector_shift_vectors.size())
             throw std::runtime_error("fit::detector_shift_value: detector shift payload is truncated");
         return process.detector_shift_vectors[index];
+    }
+
+    double genie_knob_shift_value(const fit::Process &process,
+                                  int source_index,
+                                  int bin)
+    {
+        if (!has_genie_knob_shift_sources(process))
+            throw std::runtime_error("fit::genie_knob_shift_value: process has no GENIE knob shift sources");
+        if (source_index < 0 || source_index >= process.genie_knob_source_count)
+            throw std::runtime_error("fit::genie_knob_shift_value: source_index out of range");
+
+        const std::size_t index =
+            static_cast<std::size_t>(source_index * process.nominal.size() + static_cast<std::size_t>(bin));
+        if (index >= process.genie_knob_shift_vectors.size())
+            throw std::runtime_error("fit::genie_knob_shift_value: GENIE knob shift payload is truncated");
+        return process.genie_knob_shift_vectors[index];
     }
 
     bool has_detector_envelope(const fit::Process &process)
@@ -228,6 +250,18 @@ namespace
     std::string detector_template_name(const fit::Process &process, int template_index)
     {
         return detector_source_name(process, template_index);
+    }
+
+    std::string genie_knob_source_name(const fit::Process &process, int source_index)
+    {
+        if (source_index >= 0 &&
+            static_cast<std::size_t>(source_index) < process.genie_knob_source_labels.size() &&
+            !process.genie_knob_source_labels[static_cast<std::size_t>(source_index)].empty())
+        {
+            return "genie_knob:" + process.genie_knob_source_labels[static_cast<std::size_t>(source_index)];
+        }
+
+        return "genie_knob:" + process.name + ":source" + std::to_string(source_index);
     }
 
     std::string detector_group_name(const fit::Process &process)
@@ -322,6 +356,13 @@ namespace
                 if (process.detector_shift_vectors.size() != expected)
                     throw std::runtime_error("fit::validate_problem: detector shift payload is truncated");
             }
+            if (has_genie_knob_shift_sources(process))
+            {
+                const std::size_t expected =
+                    static_cast<std::size_t>(process.genie_knob_source_count) * nbins;
+                if (process.genie_knob_shift_vectors.size() != expected)
+                    throw std::runtime_error("fit::validate_problem: GENIE knob shift payload is truncated");
+            }
             if (has_detector_templates(process) &&
                 !process.detector_sample_keys.empty() &&
                 static_cast<int>(process.detector_sample_keys.size()) != process.detector_template_count)
@@ -333,6 +374,12 @@ namespace
                 static_cast<int>(process.detector_source_labels.size()) != process.detector_source_count)
             {
                 throw std::runtime_error("fit::validate_problem: detector_source_labels size does not match detector_source_count");
+            }
+            if (has_genie_knob_shift_sources(process) &&
+                !process.genie_knob_source_labels.empty() &&
+                static_cast<int>(process.genie_knob_source_labels.size()) != process.genie_knob_source_count)
+            {
+                throw std::runtime_error("fit::validate_problem: genie_knob_source_labels size does not match genie_knob_source_count");
             }
         }
 
@@ -351,6 +398,14 @@ namespace
 
                 switch (term.source)
                 {
+                    case fit::SourceKind::kGenieKnobShift:
+                        if (!has_genie_knob_shift_sources(*process) ||
+                            term.index < 0 ||
+                            term.index >= process->genie_knob_source_count)
+                        {
+                            throw std::runtime_error("fit::validate_problem: GENIE knob shift nuisance term out of range");
+                        }
+                        break;
                     case fit::SourceKind::kGenieMode:
                     case fit::SourceKind::kFluxMode:
                     case fit::SourceKind::kReintMode:
@@ -413,6 +468,10 @@ namespace
                        family_mode_value(family, term.index, bin) *
                        theta;
             }
+            case fit::SourceKind::kGenieKnobShift:
+                return term.coefficient *
+                       genie_knob_shift_value(process, term.index, bin) *
+                       theta;
             case fit::SourceKind::kDetectorShift:
                 return term.coefficient *
                        detector_shift_value(process, term.index, bin) *
@@ -830,6 +889,11 @@ namespace
                has_detector_templates(process) ||
                has_detector_envelope(process);
     }
+
+    bool process_has_genie_knob_payload(const fit::Process &process)
+    {
+        return has_genie_knob_shift_sources(process);
+    }
 }
 
 namespace fit
@@ -840,6 +904,8 @@ namespace fit
         {
             case SourceKind::kGenieMode:
                 return "genie";
+            case SourceKind::kGenieKnobShift:
+                return "genie_knob";
             case SourceKind::kFluxMode:
                 return "flux";
             case SourceKind::kReintMode:
@@ -918,6 +984,18 @@ namespace fit
                 }
             }
 
+            if (has_genie_knob_shift_sources(process))
+            {
+                for (int row = 0; row < process.genie_knob_source_count; ++row)
+                {
+                    const std::string name = genie_knob_source_name(process, row);
+                    const std::size_t nuisance_index =
+                        ensure_nuisance(problem, nuisance_indices, name);
+                    problem.nuisances[nuisance_index].terms.push_back(
+                        ShiftTerm{process.name, SourceKind::kGenieKnobShift, row, 1.0});
+                }
+            }
+
             if (has_detector_shift_sources(process))
             {
                 for (int row = 0; row < process.detector_source_count; ++row)
@@ -962,6 +1040,7 @@ namespace fit
             }
 
             if (!process_has_family_payload(process) &&
+                !process_has_genie_knob_payload(process) &&
                 !process_has_detector_payload(process) &&
                 has_total_envelope(process))
             {
