@@ -385,6 +385,7 @@ namespace syst::detail
             }
             else if (entry.same_binning(target_dist_spec))
             {
+                // Legacy caches may carry only per-bin sigma without covariance.
                 out.sigma = family.sigma;
             }
             else

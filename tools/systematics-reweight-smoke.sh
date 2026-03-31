@@ -163,7 +163,6 @@ int main(int argc, char **argv)
     options.build_full_covariance = true;
     options.retain_universe_histograms = true;
     options.enable_eigenmode_compression = false;
-    options.persist_covariance = false;
 
     {
         EventListIO eventlist(argv[1], EventListIO::Mode::kRead);

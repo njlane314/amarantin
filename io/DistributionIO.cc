@@ -431,7 +431,6 @@ DistributionIO::Spectrum DistributionIO::read(const std::string &sample_key,
     std::vector<double> *nominal = nullptr;
     std::vector<double> *sumw2 = nullptr;
     std::vector<std::string> *detector_source_labels = nullptr;
-    std::vector<std::string> *detector_cv_sample_keys = nullptr;
     std::vector<std::string> *detector_sample_keys = nullptr;
     std::vector<double> *detector_shift_vectors = nullptr;
     int detector_source_count = 0;
@@ -478,8 +477,6 @@ DistributionIO::Spectrum DistributionIO::read(const std::string &sample_key,
     payload->SetBranchAddress("sumw2", &sumw2);
     if (payload->GetBranch("detector_source_labels"))
         payload->SetBranchAddress("detector_source_labels", &detector_source_labels);
-    if (payload->GetBranch("detector_cv_sample_keys"))
-        payload->SetBranchAddress("detector_cv_sample_keys", &detector_cv_sample_keys);
     if (payload->GetBranch("detector_sample_keys"))
         payload->SetBranchAddress("detector_sample_keys", &detector_sample_keys);
     if (payload->GetBranch("detector_shift_vectors"))
@@ -545,7 +542,6 @@ DistributionIO::Spectrum DistributionIO::read(const std::string &sample_key,
     spectrum.nominal = nominal ? *nominal : std::vector<double>{};
     spectrum.sumw2 = sumw2 ? *sumw2 : std::vector<double>{};
     spectrum.detector_source_labels = detector_source_labels ? *detector_source_labels : std::vector<std::string>{};
-    spectrum.detector_cv_sample_keys = detector_cv_sample_keys ? *detector_cv_sample_keys : std::vector<std::string>{};
     spectrum.detector_sample_keys = detector_sample_keys ? *detector_sample_keys : std::vector<std::string>{};
     spectrum.detector_shift_vectors = detector_shift_vectors ? *detector_shift_vectors : std::vector<double>{};
     spectrum.detector_source_count = detector_source_count;
@@ -610,7 +606,6 @@ void DistributionIO::write(const std::string &sample_key,
     std::vector<double> nominal = spectrum.nominal;
     std::vector<double> sumw2 = spectrum.sumw2;
     std::vector<std::string> detector_source_labels = spectrum.detector_source_labels;
-    std::vector<std::string> detector_cv_sample_keys = spectrum.detector_cv_sample_keys;
     std::vector<std::string> detector_sample_keys = spectrum.detector_sample_keys;
     std::vector<double> detector_shift_vectors = spectrum.detector_shift_vectors;
     int detector_source_count = spectrum.detector_source_count;
@@ -658,7 +653,6 @@ void DistributionIO::write(const std::string &sample_key,
     payload.Branch("nominal", &nominal);
     payload.Branch("sumw2", &sumw2);
     payload.Branch("detector_source_labels", &detector_source_labels);
-    payload.Branch("detector_cv_sample_keys", &detector_cv_sample_keys);
     payload.Branch("detector_sample_keys", &detector_sample_keys);
     payload.Branch("detector_shift_vectors", &detector_shift_vectors);
     payload.Branch("detector_source_count", &detector_source_count);

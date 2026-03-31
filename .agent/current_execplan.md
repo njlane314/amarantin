@@ -1,5 +1,106 @@
 # ExecPlan
 
+## ExecPlan Addendum: Dead Systematics Surface Cleanup
+
+### 1. Objective
+Delete the reviewed dead systematics surface: the no-op
+`persist_covariance` option and the unused persisted
+`detector_cv_sample_keys` payload.
+
+### 2. Constraints
+- Keep current cache behavior unchanged for live callers.
+- Preserve legacy sigma-only family loading for old cache entries.
+- Limit the pass to dead option/data removal plus a small clarity note for the
+  remaining legacy sigma-only branch.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- delete obsolete classes and wrappers
+- keep module boundaries sharp
+- make grep-based navigation easier
+
+If a public knob no longer changes behavior, or a persisted field has no live
+reader, it should not stay on the active surface.
+
+### 4. System map
+- `syst/Systematics.hh`
+- `syst/Systematics.cc`
+- `syst/ReweightCovariance.cc`
+- `io/DistributionIO.hh`
+- `io/DistributionIO.cc`
+- `tools/systematics-reweight-smoke.sh`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### dead option removal
+- delete `persist_covariance` from `SystematicsOptions`
+- delete `persist_covariance` from `CacheBuildOptions`
+- remove the stale smoke-test assignment
+
+#### dead payload removal
+- delete `detector_cv_sample_keys` from `DistributionIO::Spectrum`
+- stop reading and writing that ROOT payload branch
+- stop populating it in `syst::build_cache_entry(...)`
+
+#### compatibility clarification
+- keep the sigma-only family branch only as explicit legacy-cache handling
+
+### 6. Milestones
+
+#### Milestone A: Remove dead systematics option and payload surface
+- status: done
+- hypothesis: the `syst/` and `DistributionIO` surfaces get smaller and less
+  misleading when dead knobs and unread payload fields are deleted
+- files / symbols touched:
+  - `persist_covariance`
+  - `detector_cv_sample_keys`
+  - legacy sigma-only branch comment in `syst/ReweightCovariance.cc`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/Systematics.hh syst/Systematics.cc syst/ReweightCovariance.cc io/DistributionIO.hh io/DistributionIO.cc tools/systematics-reweight-smoke.sh`
+  - `rg -n "persist_covariance|detector_cv_sample_keys" -S syst io tools`
+  - `rg -n "legacy caches may carry only per-bin sigma" -S syst/ReweightCovariance.cc`
+- acceptance criteria:
+  - no live code references remain to `persist_covariance`
+  - no live code references remain to `detector_cv_sample_keys`
+  - the remaining sigma-only branch is clearly marked as legacy-cache support
+- verification results:
+  - focused `git diff --check` passed for the dead-surface cleanup files
+  - `rg -n "persist_covariance|detector_cv_sample_keys" -S syst io tools`
+    returned no matches
+  - the sigma-only branch now carries an explicit legacy-cache comment in
+    `syst/ReweightCovariance.cc`
+  - `cmake --build build --target IO Syst --parallel` still did not provide a
+    trustworthy compile check here because the local `build/` tree points at
+    missing `/usr/bin/cmake`
+
+### 7. Public-surface check
+- compatibility impact:
+  - removes one dead public option from `syst/Systematics.hh`
+  - removes one unread public payload field from `io/DistributionIO.hh`
+- reviewer sign-off:
+  - explicit user approval received in-thread to fix the stale/dead code found
+    in review
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- dead public knobs removed:
+  - `persist_covariance`
+- dead persisted fields removed:
+  - `detector_cv_sample_keys`
+
+### 9. Decision log
+- keep sigma-only family handling as explicit legacy-cache support
+- remove only the definitely dead option/data paths in this pass
+
+### 10. Stop conditions
+- stop after the dead option and unread payload field are removed
+- do not expand this pass into broader family-payload redesign
+
 ## ExecPlan Addendum: Collapse CacheKey into Detail.hh
 
 ### 1. Objective
@@ -893,7 +994,7 @@ framework.
 - compatibility impact:
   - `DistributionIO` cache schema version is now `4`
   - persisted reweight family covariance is now canonical; old caches should be rebuilt
-  - public headers remain in place; `persist_covariance` survives only as a compatibility knob and no longer changes the canonical persisted family payload
+  - public headers remain in place; canonical family payloads always persist covariance
 - migration note or explicit non-goal:
   - non-goal: import `hive` XML templates or large CLI mode switchboards
   - non-goal: move persistence ownership out of `io/`

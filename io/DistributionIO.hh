@@ -63,7 +63,6 @@ public:
         std::vector<double> nominal;
         std::vector<double> sumw2;
         std::vector<std::string> detector_source_labels;
-        std::vector<std::string> detector_cv_sample_keys;
         std::vector<std::string> detector_sample_keys;
         std::vector<double> detector_shift_vectors;
         int detector_source_count = 0;

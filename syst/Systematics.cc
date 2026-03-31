@@ -233,7 +233,6 @@ namespace
 
             detector_histograms.reserve(detector_sources.size());
             entry.detector_source_labels.reserve(detector_sources.size());
-            entry.detector_cv_sample_keys.reserve(detector_sources.size());
             entry.detector_sample_keys.reserve(detector_sources.size());
             entry.detector_shift_vectors.assign(static_cast<std::size_t>(detector_sources.size() * fine_spec.nbins), 0.0);
 
@@ -260,7 +259,6 @@ namespace
                     syst::detail::compute_sample(varied_tree, fine_spec, syst::SystematicsOptions{});
 
                 entry.detector_source_labels.push_back(source.source_label);
-                entry.detector_cv_sample_keys.push_back(source.cv_sample_key);
                 entry.detector_sample_keys.push_back(source.varied_sample_key);
                 detector_histograms.push_back(variation_sample.nominal);
 
@@ -675,7 +673,6 @@ namespace syst
             sysopt.build_full_covariance = options.build_full_covariance;
             sysopt.retain_universe_histograms = options.retain_universe_histograms;
             sysopt.enable_eigenmode_compression = options.enable_eigenmode_compression;
-            sysopt.persist_covariance = true;
             sysopt.max_eigenmodes = options.max_eigenmodes;
             sysopt.eigenmode_fraction = options.eigenmode_fraction;
 

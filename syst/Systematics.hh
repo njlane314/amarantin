@@ -71,7 +71,6 @@ namespace syst
         bool build_full_covariance = false;
         bool retain_universe_histograms = false;
         bool enable_eigenmode_compression = true;
-        bool persist_covariance = true;
         int max_eigenmodes = 8;
         double eigenmode_fraction = 0.99;
     };
@@ -119,7 +118,6 @@ namespace syst
         bool build_full_covariance = false;
         bool retain_universe_histograms = false;
         bool enable_eigenmode_compression = true;
-        bool persist_covariance = true;
         int max_eigenmodes = 8;
         double eigenmode_fraction = 0.99;
 

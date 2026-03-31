@@ -2,6 +2,60 @@
 
 ## Current milestone
 - status: done
+- subsystem: dead systematics surface cleanup
+- design rule from `DESIGN.md`: delete obsolete options and unread payload
+  fields once they stop paying for their complexity
+
+## What changed
+- deleted the dead `persist_covariance` option from the public `syst` option
+  structs
+- deleted the unread `detector_cv_sample_keys` field from
+  `DistributionIO::Spectrum` and its ROOT payload read/write path
+- kept the sigma-only family branch only as explicit legacy-cache support
+
+## Why this is simpler
+- the public `syst` options no longer advertise a knob that cannot change
+  runtime behavior
+- the persisted spectrum payload no longer carries detector CV-key data that no
+  in-repo reader consumes
+- the remaining sigma-only path is easier to interpret because it is clearly
+  marked as legacy
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/Systematics.hh syst/Systematics.cc syst/ReweightCovariance.cc io/DistributionIO.hh io/DistributionIO.cc tools/systematics-reweight-smoke.sh`
+-  `rg -n "persist_covariance|detector_cv_sample_keys" -S syst io tools`
+-  `rg -n "legacy caches may carry only per-bin sigma" -S syst/ReweightCovariance.cc`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed for the cleanup files
+  - `rg -n "persist_covariance|detector_cv_sample_keys" -S syst io tools`
+    returned no matches
+  - the sigma-only family branch is now explicitly marked as legacy-cache
+    support
+  - `cmake --build build --target IO Syst --parallel` still does not provide a
+    trustworthy compile check here because the local `build/` tree points at
+    missing `/usr/bin/cmake`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - small negative; dead option/data surface only
+
+## Decisions
+- keep the sigma-only family path as explicit legacy-cache handling
+- remove only the definitely dead option/data paths in this pass
+
+## Remaining hotspots
+- trustworthy compile verification still requires a working local build tree
+
+## Current milestone
+- status: done
 - subsystem: `syst/` private cache-key helper collapse
 - design rule from `DESIGN.md`: keep `bits/` for shared private helpers and
   avoid extra implementation files that do not simplify the boundary
