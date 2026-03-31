@@ -150,12 +150,6 @@ The naming guidance here should match `SampleIO.hh`: prefer short, direct
 record-style names, with `Sample::Origin::kSignal` as the current workflow
 name.
 
-The duplicated sample-like record is a design smell, but `DatasetIO` still
-needs its own plain persisted sample record. The better end state is not to use
-`SampleIO` itself as the dataset record type. It is to converge on one shared
-plain sample-data struct used by both layers, while leaving `SampleIO` as the
-builder / file wrapper around that data.
-
 The authoritative short-form file-layout note for `DatasetIO` should live in
 this header, not only in the `.cc` file. If the on-disk structure changes, the
 header comment should change in the same pass.
