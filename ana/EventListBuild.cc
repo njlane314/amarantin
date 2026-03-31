@@ -294,6 +294,125 @@ namespace
         return values->front();
     }
 
+    template <class T>
+    T at_or_default(const std::vector<T> *values, std::size_t index, T fallback)
+    {
+        if (!values || index >= values->size())
+            return fallback;
+        return values->at(index);
+    }
+
+    bool any_nonzero(const std::vector<int> *values)
+    {
+        if (!values)
+            return false;
+        for (const int value : *values)
+        {
+            if (value != 0)
+                return true;
+        }
+        return false;
+    }
+
+    channels::LambdaTruthCandidate legacy_lambda_candidate(
+        const std::vector<int> *g4_lambda_pdg,
+        const std::vector<float> *g4_lambda_p_mag,
+        const std::vector<float> *g4_lambda_p_p,
+        const std::vector<float> *g4_lambda_pi_p,
+        const std::vector<float> *g4_lambda_decay_sep,
+        const std::vector<float> *g4_lambda_endx,
+        const std::vector<float> *g4_lambda_endy,
+        const std::vector<float> *g4_lambda_endz)
+    {
+        channels::LambdaTruthCandidate cand;
+        cand.valid = g4_lambda_pdg && !g4_lambda_pdg->empty();
+        cand.has_ppi_decay = cand.valid;
+        cand.lambda_pdg = first_or_default(g4_lambda_pdg, 0);
+        cand.lambda_p = first_or_default(g4_lambda_p_mag, std::numeric_limits<float>::quiet_NaN());
+        cand.proton_p = first_or_default(g4_lambda_p_p, std::numeric_limits<float>::quiet_NaN());
+        cand.pion_p = first_or_default(g4_lambda_pi_p, std::numeric_limits<float>::quiet_NaN());
+        cand.decay_sep = first_or_default(g4_lambda_decay_sep, std::numeric_limits<float>::quiet_NaN());
+        cand.decay_x = first_or_default(g4_lambda_endx, std::numeric_limits<float>::quiet_NaN());
+        cand.decay_y = first_or_default(g4_lambda_endy, std::numeric_limits<float>::quiet_NaN());
+        cand.decay_z = first_or_default(g4_lambda_endz, std::numeric_limits<float>::quiet_NaN());
+        return cand;
+    }
+
+    channels::LambdaTruthCandidate first_passing_lambda_candidate(
+        bool is_nu_mu_cc,
+        int ccnc,
+        bool truth_in_fiducial,
+        float mu_p,
+        float contained_fraction,
+        const channels::SignalDefinition &signal_definition,
+        const std::vector<int> *g4_all_lambda_pdg,
+        const std::vector<int> *g4_all_lambda_has_ppi_decay,
+        const std::vector<int> *g4_all_lambda_has_sigma0_ancestor,
+        const std::vector<float> *g4_all_lambda_p_mag,
+        const std::vector<float> *g4_all_lambda_p_p,
+        const std::vector<float> *g4_all_lambda_pi_p,
+        const std::vector<float> *g4_all_lambda_decay_sep,
+        const std::vector<float> *g4_all_lambda_endx,
+        const std::vector<float> *g4_all_lambda_endy,
+        const std::vector<float> *g4_all_lambda_endz,
+        const std::vector<float> *g4_all_lambda_p_endx,
+        const std::vector<float> *g4_all_lambda_p_endy,
+        const std::vector<float> *g4_all_lambda_p_endz,
+        const std::vector<float> *g4_all_lambda_pi_endx,
+        const std::vector<float> *g4_all_lambda_pi_endy,
+        const std::vector<float> *g4_all_lambda_pi_endz)
+    {
+        channels::LambdaTruthCandidate best;
+        if (!g4_all_lambda_pdg)
+            return best;
+
+        for (std::size_t i = 0; i < g4_all_lambda_pdg->size(); ++i)
+        {
+            channels::LambdaTruthCandidate cand;
+            cand.valid = true;
+            cand.lambda_pdg = at_or_default(g4_all_lambda_pdg, i, 0);
+            cand.has_ppi_decay = at_or_default(g4_all_lambda_has_ppi_decay, i, 0) != 0;
+            cand.has_sigma0_ancestor =
+                at_or_default(g4_all_lambda_has_sigma0_ancestor, i, 0) != 0;
+            cand.lambda_p =
+                at_or_default(g4_all_lambda_p_mag, i, std::numeric_limits<float>::quiet_NaN());
+            cand.proton_p =
+                at_or_default(g4_all_lambda_p_p, i, std::numeric_limits<float>::quiet_NaN());
+            cand.pion_p =
+                at_or_default(g4_all_lambda_pi_p, i, std::numeric_limits<float>::quiet_NaN());
+            cand.decay_sep = at_or_default(g4_all_lambda_decay_sep, i,
+                                           std::numeric_limits<float>::quiet_NaN());
+            cand.decay_x =
+                at_or_default(g4_all_lambda_endx, i, std::numeric_limits<float>::quiet_NaN());
+            cand.decay_y =
+                at_or_default(g4_all_lambda_endy, i, std::numeric_limits<float>::quiet_NaN());
+            cand.decay_z =
+                at_or_default(g4_all_lambda_endz, i, std::numeric_limits<float>::quiet_NaN());
+            cand.proton_end_x = at_or_default(g4_all_lambda_p_endx, i,
+                                              std::numeric_limits<float>::quiet_NaN());
+            cand.proton_end_y = at_or_default(g4_all_lambda_p_endy, i,
+                                              std::numeric_limits<float>::quiet_NaN());
+            cand.proton_end_z = at_or_default(g4_all_lambda_p_endz, i,
+                                              std::numeric_limits<float>::quiet_NaN());
+            cand.pion_end_x = at_or_default(g4_all_lambda_pi_endx, i,
+                                            std::numeric_limits<float>::quiet_NaN());
+            cand.pion_end_y = at_or_default(g4_all_lambda_pi_endy, i,
+                                            std::numeric_limits<float>::quiet_NaN());
+            cand.pion_end_z = at_or_default(g4_all_lambda_pi_endz, i,
+                                            std::numeric_limits<float>::quiet_NaN());
+
+            if (channels::passes_signal_definition(is_nu_mu_cc, ccnc,
+                                                   truth_in_fiducial, mu_p,
+                                                   contained_fraction, cand,
+                                                   signal_definition))
+            {
+                return cand;
+            }
+        }
+
+        return best;
+    }
+
     std::unique_ptr<TTree> copy_selected_tree(const std::string &sample_key,
                                               const DatasetIO::Sample &sample,
                                               const std::string &event_tree_name,

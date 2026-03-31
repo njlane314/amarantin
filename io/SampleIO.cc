@@ -5,11 +5,8 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <fstream>
 #include <map>
 #include <memory>
-#include <set>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -32,46 +29,6 @@ namespace
 
         const auto last = input.find_last_not_of(" \t\r\n");
         return input.substr(first, last - first + 1);
-    }
-
-    std::vector<std::string> load_paths_from_file(const std::string &path)
-    {
-        std::ifstream file(path);
-        if (!file)
-            throw std::runtime_error("SampleIO::parse_input_paths: failed to open input path file: " + path);
-
-        std::vector<std::string> paths;
-        std::string line;
-        while (std::getline(file, line))
-        {
-            const std::string trimmed = trim_copy(line);
-            if (trimmed.empty() || trimmed[0] == '#')
-                continue;
-            paths.push_back(trimmed);
-        }
-
-        if (paths.empty())
-            throw std::runtime_error("SampleIO::parse_input_paths: no input paths found in file: " + path);
-
-        return paths;
-    }
-
-    std::string strip_comment(const std::string &line)
-    {
-        const std::string::size_type pos = line.find('#');
-        if (pos == std::string::npos)
-            return line;
-        return line.substr(0, pos);
-    }
-
-    std::vector<std::string> split_fields(const std::string &line)
-    {
-        std::istringstream input(line);
-        std::vector<std::string> out;
-        std::string field;
-        while (input >> field)
-            out.push_back(field);
-        return out;
     }
 
     using RunSubrunKey = std::pair<int, int>;
@@ -157,81 +114,7 @@ void SampleIO::validate_metadata() const
         throw std::runtime_error("SampleIO: BNB samples must not set a polarity");
 }
 
-std::vector<std::string> SampleIO::parse_input_paths(const std::string &input_paths_spec)
-{
-    const std::string trimmed_spec = trim_copy(input_paths_spec);
-    if (trimmed_spec.empty())
-        throw std::runtime_error("SampleIO::parse_input_paths: input_paths_spec is empty");
-
-    const std::string file_path =
-        (trimmed_spec.front() == '@') ? trim_copy(trimmed_spec.substr(1)) : trimmed_spec;
-    if (file_path.empty())
-        throw std::runtime_error("SampleIO::parse_input_paths: input path file is empty");
-
-    return load_paths_from_file(file_path);
-}
-
-std::vector<SampleIO::ShardInput> SampleIO::parse_manifest(const std::string &manifest_path)
-{
-    const std::string path = trim_copy(manifest_path);
-    if (path.empty())
-        throw std::runtime_error("SampleIO::parse_manifest: manifest path is empty");
-
-    std::ifstream input(path);
-    if (!input)
-        throw std::runtime_error("SampleIO::parse_manifest: failed to open manifest: " + path);
-
-    std::vector<ShardInput> out;
-    std::set<std::string> shard_names;
-    std::string line;
-    int line_number = 0;
-    while (std::getline(input, line))
-    {
-        ++line_number;
-        const std::string trimmed = trim_copy(strip_comment(line));
-        if (trimmed.empty())
-            continue;
-
-        const std::vector<std::string> fields = split_fields(trimmed);
-        if (fields.size() != 2)
-        {
-            throw std::runtime_error("SampleIO::parse_manifest: expected 2 fields at line " +
-                                     std::to_string(line_number) + " in " + path);
-        }
-
-        ShardInput shard;
-        shard.shard = fields[0];
-        shard.sample_list_path = fields[1];
-        if (shard.shard.empty())
-        {
-            throw std::runtime_error("SampleIO::parse_manifest: empty shard name at line " +
-                                     std::to_string(line_number) + " in " + path);
-        }
-        if (!shard_names.insert(shard.shard).second)
-        {
-            throw std::runtime_error("SampleIO::parse_manifest: duplicate shard name '" +
-                                     shard.shard + "' in " + path);
-        }
-
-        out.push_back(std::move(shard));
-    }
-
-    if (out.empty())
-        throw std::runtime_error("SampleIO::parse_manifest: manifest is empty: " + path);
-
-    return out;
-}
-
-void SampleIO::build_from(const std::vector<std::string> &input_paths)
-{
-    std::vector<ShardInput> shards;
-    shards.reserve(input_paths.size());
-    for (const auto &path : input_paths)
-        shards.push_back(ShardInput{"", path});
-    build_from_shards(shards);
-}
-
-void SampleIO::build_from_shards(const std::vector<ShardInput> &shards)
+void SampleIO::load_shards(const std::vector<ShardInput> &shards)
 {
     input_paths_.clear();
     input_paths_.reserve(shards.size());
@@ -488,55 +371,21 @@ DatasetIO::Sample SampleIO::to_dataset_sample() const
     return out;
 }
 
-void SampleIO::build(const std::string &input_paths_spec,
+void SampleIO::build(const std::string &sample,
+                     const std::vector<ShardInput> &shards,
                      const std::string &origin,
                      const std::string &variation,
                      const std::string &beam,
                      const std::string &polarity,
                      const std::string &run_db_path)
 {
-    sample_.clear();
-    set_metadata(origin_from(origin),
-                 variation_from(variation),
-                 beam_from(beam),
-                 polarity_from(polarity));
-    validate_metadata();
-    const std::string trimmed_spec = trim_copy(input_paths_spec);
-    if (trimmed_spec.empty())
-        throw std::runtime_error("SampleIO::build: input path is empty");
-
-    if (!trimmed_spec.empty() && trimmed_spec.front() == '@')
-    {
-        build_from(parse_input_paths(trimmed_spec));
-    }
-    else
-    {
-        build_from_shards({ShardInput{"", trimmed_spec}});
-    }
-    load_run_database_normalisation(run_db_path);
-    normalisation_ = compute_normalisation(subrun_pot_sum_, db_tortgt_pot_sum_);
-    normalised_pot_sum_ = subrun_pot_sum_ * normalisation_;
-    built_ = true;
-}
-
-void SampleIO::build_from_manifest(const std::string &sample,
-                                   const std::string &manifest_path,
-                                   const std::string &origin,
-                                   const std::string &variation,
-                                   const std::string &beam,
-                                   const std::string &polarity,
-                                   const std::string &run_db_path)
-{
     sample_ = trim_copy(sample);
-    if (sample_.empty())
-        throw std::runtime_error("SampleIO::build_from_manifest: sample name is empty");
-
     set_metadata(origin_from(origin),
                  variation_from(variation),
                  beam_from(beam),
                  polarity_from(polarity));
     validate_metadata();
-    build_from_shards(parse_manifest(manifest_path));
+    load_shards(shards);
     load_run_database_normalisation(run_db_path);
     normalisation_ = compute_normalisation(subrun_pot_sum_, db_tortgt_pot_sum_);
     normalised_pot_sum_ = subrun_pot_sum_ * normalisation_;
