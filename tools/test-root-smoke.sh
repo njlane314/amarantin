@@ -162,6 +162,102 @@ run_macro_capture() {
   AMARANTIN_BUILD_DIR="${BUILD_DIR}" bash "${ROOT_DIR}/tools/run-macro" "$@" >"${log_path}" 2>&1
 }
 
+check_truth_has_strange_split() {
+  local fixture_path=$1
+  local overlay_eventlist_path=$2
+  local signal_eventlist_path=$3
+  local macro_path="${TMP_DIR}/check_truth_has_strange_split.C"
+
+  cat > "${macro_path}" <<'EOF'
+#include <stdexcept>
+#include <string>
+
+#include <TFile.h>
+#include <TTree.h>
+
+namespace
+{
+  TTree *require_tree(TFile &file, const char *primary, const char *fallback)
+  {
+    auto *tree = dynamic_cast<TTree *>(file.Get(primary));
+    if (!tree && fallback)
+      tree = dynamic_cast<TTree *>(file.Get(fallback));
+    if (!tree)
+      throw std::runtime_error(std::string("missing tree ") + primary);
+    return tree;
+  }
+
+  void require_exact_split(const char *label,
+                           TTree *tree,
+                           Long64_t expected_entries,
+                           const char *unexpected_expr)
+  {
+    if (!tree->GetBranch("truth_has_strange_fs"))
+      throw std::runtime_error(std::string(label) + " selected tree is missing truth_has_strange_fs");
+
+    const Long64_t entries = tree->GetEntries();
+    if (entries != expected_entries)
+    {
+      throw std::runtime_error(std::string(label) + " selected tree entry mismatch: got " +
+                               std::to_string(entries) + ", expected " +
+                               std::to_string(expected_entries));
+    }
+
+    const Long64_t unexpected_entries = tree->GetEntries(unexpected_expr);
+    if (unexpected_entries != 0)
+    {
+      throw std::runtime_error(std::string(label) + " selected tree contains " +
+                               std::to_string(unexpected_entries) +
+                               " events from the wrong strange-truth side");
+    }
+  }
+}
+
+void check_truth_has_strange_split(const char *fixture_path,
+                                   const char *overlay_eventlist_path,
+                                   const char *signal_eventlist_path)
+{
+  TFile fixture(fixture_path, "READ");
+  if (fixture.IsZombie())
+    throw std::runtime_error("failed to open fixture ROOT file");
+
+  TTree *source = require_tree(fixture,
+                               "nuselection/EventSelectionFilter",
+                               "EventSelectionFilter");
+  if (!source->GetBranch("truth_has_strange_fs"))
+    throw std::runtime_error("fixture event tree is missing truth_has_strange_fs");
+
+  const Long64_t fixture_entries = source->GetEntries();
+  const Long64_t expected_overlay = source->GetEntries("truth_has_strange_fs == 0");
+  const Long64_t expected_signal = source->GetEntries("truth_has_strange_fs != 0");
+  if (expected_overlay + expected_signal != fixture_entries)
+    throw std::runtime_error("fixture strange split does not partition the event tree");
+  if (expected_overlay <= 0 || expected_signal <= 0)
+    throw std::runtime_error("fixture strange split is not informative");
+
+  TFile overlay_file(overlay_eventlist_path, "READ");
+  if (overlay_file.IsZombie())
+    throw std::runtime_error("failed to open overlay eventlist");
+
+  TFile signal_file(signal_eventlist_path, "READ");
+  if (signal_file.IsZombie())
+    throw std::runtime_error("failed to open signal eventlist");
+
+  TTree *overlay = require_tree(overlay_file,
+                                "samples/beam/events/selected",
+                                "samples/beam/selected");
+  TTree *signal = require_tree(signal_file,
+                               "samples/beam/events/selected",
+                               "samples/beam/selected");
+
+  require_exact_split("overlay", overlay, expected_overlay, "truth_has_strange_fs != 0");
+  require_exact_split("signal", signal, expected_signal, "truth_has_strange_fs == 0");
+}
+EOF
+
+  root -n -l -b -q "${macro_path}(\"${fixture_path}\",\"${overlay_eventlist_path}\",\"${signal_eventlist_path}\")"
+}
+
 check_snapshot_output() {
   local snapshot_path=$1
   local macro_path="${TMP_DIR}/check_snapshot.C"
@@ -211,6 +307,14 @@ SAMPLE_PATH="${TMP_DIR}/fixture.sample.root"
 DATASET_PATH="${TMP_DIR}/fixture.dataset.root"
 EVENTLIST_PATH="${TMP_DIR}/fixture.eventlist.root"
 PRESET_EVENTLIST_PATH="${TMP_DIR}/fixture.eventlist.muon.root"
+OVERLAY_SAMPLE_PATH="${TMP_DIR}/fixture.overlay.sample.root"
+OVERLAY_DATASET_MANIFEST="${TMP_DIR}/fixture.overlay.dataset.manifest"
+OVERLAY_DATASET_PATH="${TMP_DIR}/fixture.overlay.dataset.root"
+OVERLAY_EVENTLIST_PATH="${TMP_DIR}/fixture.overlay.eventlist.root"
+SIGNAL_SAMPLE_PATH="${TMP_DIR}/fixture.signal.sample.root"
+SIGNAL_DATASET_MANIFEST="${TMP_DIR}/fixture.signal.dataset.manifest"
+SIGNAL_DATASET_PATH="${TMP_DIR}/fixture.signal.dataset.root"
+SIGNAL_EVENTLIST_PATH="${TMP_DIR}/fixture.signal.eventlist.root"
 DIST_PATH="${TMP_DIR}/fixture.dists.root"
 FIT_PATH="${TMP_DIR}/fixture.fit.txt"
 COV_PATH="${TMP_DIR}/fixture.cov.root"
@@ -267,6 +371,55 @@ write_fixture_run_db "${FIXTURE_PATH}" "${RUN_DB_PATH}"
   --preset muon \
   "${PRESET_EVENTLIST_PATH}" \
   "${DATASET_PATH}"
+
+printf 'beam %s\n' "${OVERLAY_SAMPLE_PATH}" > "${OVERLAY_DATASET_MANIFEST}"
+"${BUILD_DIR}/bin/mk_sample" \
+  --run-db "${RUN_DB_PATH}" \
+  --sample beam \
+  --manifest "${SAMPLE_MANIFEST}" \
+  "${OVERLAY_SAMPLE_PATH}" \
+  overlay nominal numi fhc
+
+"${BUILD_DIR}/bin/mk_dataset" \
+  --run run1 \
+  --beam numi \
+  --polarity fhc \
+  --manifest "${OVERLAY_DATASET_MANIFEST}" \
+  "${OVERLAY_DATASET_PATH}"
+
+"${BUILD_DIR}/bin/mk_eventlist" \
+  --event-tree nuselection/EventSelectionFilter \
+  --subrun-tree nuselection/SubRun \
+  --selection 1 \
+  "${OVERLAY_EVENTLIST_PATH}" \
+  "${OVERLAY_DATASET_PATH}"
+
+printf 'beam %s\n' "${SIGNAL_SAMPLE_PATH}" > "${SIGNAL_DATASET_MANIFEST}"
+"${BUILD_DIR}/bin/mk_sample" \
+  --run-db "${RUN_DB_PATH}" \
+  --sample beam \
+  --manifest "${SAMPLE_MANIFEST}" \
+  "${SIGNAL_SAMPLE_PATH}" \
+  signal nominal numi fhc
+
+"${BUILD_DIR}/bin/mk_dataset" \
+  --run run1 \
+  --beam numi \
+  --polarity fhc \
+  --manifest "${SIGNAL_DATASET_MANIFEST}" \
+  "${SIGNAL_DATASET_PATH}"
+
+"${BUILD_DIR}/bin/mk_eventlist" \
+  --event-tree nuselection/EventSelectionFilter \
+  --subrun-tree nuselection/SubRun \
+  --selection 1 \
+  "${SIGNAL_EVENTLIST_PATH}" \
+  "${SIGNAL_DATASET_PATH}"
+
+check_truth_has_strange_split \
+  "${FIXTURE_PATH}" \
+  "${OVERLAY_EVENTLIST_PATH}" \
+  "${SIGNAL_EVENTLIST_PATH}"
 
 "${BUILD_DIR}/bin/mk_dist" \
   --selection "selection_pass != 0" \

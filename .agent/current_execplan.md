@@ -1,5 +1,96 @@
 # ExecPlan
 
+## ExecPlan Addendum: Align `ana` Origin Filtering With `test.root`
+
+### 1. Objective
+Update the `ana` event-list build path so the `overlay` and `signal` origin
+filters work on the truth branches that actually exist in `test.root`.
+
+### 2. Constraints
+- Keep the public `Ana` headers stable.
+- Keep the change inside `ana/` build-time logic and fixture verification.
+- Prefer one boundary fix over broader app or sample-definition churn.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer plain data and namespace functions
+- keep module boundaries sharp
+
+This pass should adapt `ana::build_event_list(...)` to the persisted ntuple
+surface, not move origin logic into `io/` or add a second selection layer.
+
+### 4. System map
+- `ana/EventListBuild.cc`
+- `io/bits/DERIVED`
+- `tools/test-root-smoke.sh`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### narrow boundary repair
+- keep the canonical origin rules as `count_strange`-based when available
+- fall back to `truth_has_strange_fs` only when the legacy branch is absent
+- keep the fallback local to the event-list build boundary
+
+#### real-fixture proof
+- extend the existing `test.root` smoke rather than add a new harness
+- verify that `overlay` and `signal` eventlists partition the fixture the same
+  way `truth_has_strange_fs` does
+
+### 6. Milestones
+
+#### Milestone A: Make origin filtering follow the available truth branches
+- status: done
+- hypothesis: a small fallback at the event-list build boundary is enough to
+  keep old ntuples working while accepting the `test.root` truth surface
+- files / symbols touched:
+  - `ana::build_event_list(...)` sample-origin selection path
+  - `io/bits/DERIVED`
+  - `tools/test-root-smoke.sh`
+- expected behavior risk: low
+- verification commands:
+  - `bash -n tools/test-root-smoke.sh`
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/EventListBuild.cc io/bits/DERIVED tools/test-root-smoke.sh`
+  - `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B /tmp/amarantin-ana-check -DCMAKE_BUILD_TYPE=Release -DAMARANTIN_TEST_ROOT_FIXTURE=/work/test.root && cmake --build /tmp/amarantin-ana-check --parallel && ctest --test-dir /tmp/amarantin-ana-check --output-on-failure -R testroot_pipeline_smoke'`
+- acceptance criteria:
+  - `overlay` no longer requires `count_strange` when `truth_has_strange_fs`
+    is present instead
+  - `signal` no longer requires `count_strange` when `truth_has_strange_fs`
+    is present instead
+  - the real-fixture smoke proves the two eventlists match the strange-truth
+    partition from `test.root`
+- verification results:
+  - `bash -n tools/test-root-smoke.sh` passed
+  - focused `git diff --check` passed
+  - Docker configure/build plus `ctest -R testroot_pipeline_smoke` passed
+    with the real fixture mounted at `/work/test.root`
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed target or public header changes
+  - `ana` keeps preferring the legacy `count_strange` branch when present
+- reviewer sign-off:
+  - explicit user request in-thread to align `ana` with the variables available
+    in `test.root`
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- new abstraction added: 0
+
+### 9. Decision log
+- preserve `SignalDefinition.hh` as-is and keep the fallback in
+  `EventListBuild.cc`
+- use `truth_has_strange_fs` as the direct replacement for the missing
+  generic strange-count split on `test.root`
+
+### 10. Stop conditions
+- stop after the fixture-backed `overlay` / `signal` split is green in Docker
+- do not broaden this pass into app default-tree cleanup
+
 ## ExecPlan Addendum: Real test.root Coverage Expansion
 
 ### 1. Objective

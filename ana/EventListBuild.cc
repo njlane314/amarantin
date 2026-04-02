@@ -22,6 +22,11 @@ namespace
 {
     using RunSubrunKey = std::pair<int, int>;
 
+    const char *strange_truth_branch_name()
+    {
+        return "truth_has_strange_fs";
+    }
+
     cuts::Config cuts_config_for(const ana::BuildConfig &config)
     {
         cuts::Config cuts_config;
@@ -31,27 +36,72 @@ namespace
         return cuts_config;
     }
 
+    std::string fallback_sample_selection_expression(const DatasetIO::Sample &sample)
+    {
+        using Origin = DatasetIO::Sample::Origin;
+
+        if (sample.origin == Origin::kOverlay)
+            return "truth_has_strange_fs == 0";
+        if (sample.origin == Origin::kSignal)
+            return "truth_has_strange_fs != 0";
+        return "";
+    }
+
+    std::string sample_selection_requirement(const DatasetIO::Sample &sample,
+                                             const ana::SampleSelectionRule &rule)
+    {
+        if (!rule.required_branch)
+            return "<unknown>";
+
+        if (std::string(rule.required_branch) == "count_strange")
+        {
+            const std::string fallback = fallback_sample_selection_expression(sample);
+            if (!fallback.empty())
+                return std::string(rule.required_branch) + " or " + strange_truth_branch_name();
+        }
+
+        return rule.required_branch;
+    }
+
+    std::string analysis_selection_expression(const DatasetIO::Sample &sample,
+                                              TChain &chain,
+                                              const ana::SampleSelectionRule &rule)
+    {
+        if (!rule.expression)
+            return "";
+
+        if (!rule.required_branch || chain.GetBranch(rule.required_branch))
+            return rule.expression;
+
+        if (std::string(rule.required_branch) == "count_strange" &&
+            chain.GetBranch(strange_truth_branch_name()))
+        {
+            const std::string fallback = fallback_sample_selection_expression(sample);
+            if (!fallback.empty())
+                return fallback;
+        }
+
+        throw std::runtime_error(
+            "ana::build_event_list: sample origin " +
+            std::string(DatasetIO::Sample::origin_name(sample.origin)) +
+            " requires branch " + sample_selection_requirement(sample, rule) +
+            " for analysis-specific EventList filtering");
+    }
+
     std::string build_selection_expression(const DatasetIO::Sample &sample,
                                            TChain &chain,
                                            const std::string &selection_expr)
     {
         const ana::SampleSelectionRule rule = ana::sample_selection_rule(sample);
-        if (!rule.expression)
+        const std::string analysis_expr =
+            analysis_selection_expression(sample, chain, rule);
+        if (analysis_expr.empty())
             return selection_expr;
 
-        if (rule.required_branch && !chain.GetBranch(rule.required_branch))
-        {
-            throw std::runtime_error(
-                "ana::build_event_list: sample origin " +
-                std::string(DatasetIO::Sample::origin_name(sample.origin)) +
-                " requires branch " + rule.required_branch +
-                " for analysis-specific EventList filtering");
-        }
-
         if (selection_expr.empty())
-            return rule.expression;
+            return analysis_expr;
 
-        return "(" + selection_expr + ") && (" + rule.expression + ")";
+        return "(" + selection_expr + ") && (" + analysis_expr + ")";
     }
 
     std::vector<std::string> branch_names(TTree *tree)

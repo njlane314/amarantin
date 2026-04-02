@@ -306,9 +306,11 @@ the selected event tree:
 
   overlay
     count_strange == 0
+    or, when `count_strange` is absent, truth_has_strange_fs == 0
 
   signal
     count_strange > 0
+    or, when `count_strange` is absent, truth_has_strange_fs != 0
 
 This filtering is applied on top of the configured event-list selection
 expression.

@@ -2,6 +2,62 @@
 
 ## Current milestone
 - status: done
+- subsystem: `ana` origin-filter alignment for `test.root`
+- design rule from `DESIGN.md`: adapt build-time analysis transforms to the
+  real ntuple surface without widening module boundaries or changing the
+  public `Ana` header surface
+
+## What changed
+- kept the canonical `overlay` / `signal` origin rules at the event-list build
+  boundary, but added a local fallback from legacy `count_strange` to
+  `truth_has_strange_fs`
+- documented that fallback in `io/bits/DERIVED`
+- extended the real `test.root` smoke so it builds `overlay` and `signal`
+  eventlists and checks their split against the fixture's
+  `truth_has_strange_fs` partition
+
+## Why this is simpler
+- `ana` now follows the persisted truth surface already present in the ntuple
+  instead of requiring a redundant legacy branch
+- the compatibility logic stays in one place, `ana::build_event_list(...)`,
+  rather than leaking into app defaults or I/O code
+- the existing fixture smoke now proves the origin split directly, instead of
+  relying on a manual branch audit
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- shell checks:
+-  `bash -n tools/test-root-smoke.sh`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/EventListBuild.cc io/bits/DERIVED tools/test-root-smoke.sh`
+- smoke checks:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B /tmp/amarantin-ana-check -DCMAKE_BUILD_TYPE=Release -DAMARANTIN_TEST_ROOT_FIXTURE=/work/test.root && cmake --build /tmp/amarantin-ana-check --parallel && ctest --test-dir /tmp/amarantin-ana-check --output-on-failure -R testroot_pipeline_smoke'`
+- results:
+  - `bash -n tools/test-root-smoke.sh` passed
+  - focused `git diff --check` passed
+  - Docker configure/build plus `ctest -R testroot_pipeline_smoke` passed
+    against the real fixture
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - small positive; one fallback path plus one fixture assertion
+
+## Decisions
+- preserve the installed `SignalDefinition.hh` surface
+- keep `count_strange` as the first-choice branch for compatibility and use
+  `truth_has_strange_fs` only when needed
+
+## Remaining hotspots
+- the default CLI tree/selection names still do not match raw `test.root`;
+  this pass only aligns the `ana` library's origin split with the available
+  truth branches
+
+## Current milestone
+- status: done
 - subsystem: real `test.root` coverage expansion
 - design rule from `DESIGN.md`: keep the fixture smoke small and direct while
   exercising the real persisted row-wise and cached-bin surfaces
