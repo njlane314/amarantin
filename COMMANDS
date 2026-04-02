@@ -309,11 +309,14 @@ Notes:
 Macro runner
 ------------
 Run one ROOT macro through the common wrapper
-  bash tools/run-macro inspect_weights build/eventlists/run1.root
+  bash tools/run-macro inspect_weights build/eventlists/run1.root beam-s0
+  bash tools/run-macro inspect_cutflow build/eventlists/run1.root beam-s0
+  bash tools/run-macro inspect_categories build/eventlists/run1.root beam-s0
   bash tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector
   bash tools/run-macro plot_efficiency build/eventlists/run1.root topological_score "selected != 0" "__pass_muon__" 50 0 1 beam-s0
   bash tools/run-macro inspect_dist output.dists.root beam-s0
-  bash tools/run-macro inspect_systematics output.dists.root beam-s0 muon_region
+  bash tools/run-macro inspect_systematics output.dists.root beam-s0
+  bash tools/run-macro inspect_covariance build/exports/beam-s0.frac_cov.root
 
 Notes
 -----
@@ -321,6 +324,12 @@ Notes
   Uses simple literal inference with optional prefixes instead of scraping the
   macro signature at runtime. Use `s:<text>` when a string value would
   otherwise look numeric.
+  The most useful inspection entrypoints are now:
+    `inspect_weights`
+    `inspect_cutflow`
+    `inspect_categories`
+    `inspect_systematics`
+    `inspect_covariance`
 
 `mk_sample`
   Accepts an optional `--run-db PATH`. If omitted, it checks

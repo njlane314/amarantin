@@ -249,10 +249,29 @@ The stacked correlation contract is strict:
   * `detector` and `genie_knobs` correlate across rows only by shared
     persisted source labels
   * `genie`, `flux`, and `reint` correlate across rows only when retained
-    universes survive on every contributing row with matching family branch
-    name and universe count
+     universes survive on every contributing row with matching family branch
+     name and universe count
   * if that exact family contract is unavailable, `mk_cov` rejects the
-    stacked export instead of guessing a block-diagonal merge
+     stacked export instead of guessing a block-diagonal merge
+
+Macro inspection helpers
+------------------------
+
+Run one ROOT macro through the shared wrapper:
+
+    bash tools/run-macro inspect_weights build/eventlists/run1.root beam-s0
+    bash tools/run-macro inspect_cutflow build/eventlists/run1.root beam-s0
+    bash tools/run-macro inspect_categories build/eventlists/run1.root beam-s0
+    bash tools/run-macro inspect_systematics output.dists.root beam-s0
+    bash tools/run-macro inspect_covariance build/exports/beam-s0.frac_cov.root
+
+These macros are read-only summaries over persisted surfaces:
+
+  * `inspect_weights` checks `__w_norm__`, `__w_cv__`, `__w__`, and `__w2__`
+  * `inspect_cutflow` prints stage-by-stage selected yields from `EventListIO`
+  * `inspect_categories` prints persisted event-category yields
+  * `inspect_systematics` prints detector / knob / family payload summaries
+  * `inspect_covariance` prints exported matrix dimensions and diagonal summary
 
 Creating a sample list
 ----------------------

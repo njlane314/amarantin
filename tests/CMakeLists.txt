@@ -165,7 +165,7 @@ if(TARGET Syst)
   endif()
 endif()
 
-if(TARGET IO AND TARGET Ana AND TARGET Plot AND TARGET Syst AND TARGET Fit)
+if(TARGET IO AND TARGET Ana AND TARGET Plot AND TARGET Syst AND TARGET Fit AND TARGET mk_cov)
   add_test(NAME macro_analysis_smoke
     COMMAND "${CMAKE_COMMAND}" -E env
       "AMARANTIN_BUILD_DIR=${CMAKE_BINARY_DIR}"
@@ -183,6 +183,7 @@ if(TARGET IO AND TARGET Ana AND TARGET Plot AND TARGET Syst AND TARGET Fit)
       Plot
       Syst
       Fit
+      mk_cov
     )
   endif()
 endif()

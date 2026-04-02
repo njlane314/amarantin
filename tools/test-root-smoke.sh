@@ -224,8 +224,11 @@ PRINT_SAMPLE_LOG="${TMP_DIR}/print_sample.log"
 PRINT_DATASET_LOG="${TMP_DIR}/print_dataset.log"
 PRINT_EVENTLIST_LOG="${TMP_DIR}/print_eventlist.log"
 INSPECT_WEIGHTS_LOG="${TMP_DIR}/inspect_weights.log"
+INSPECT_CUTFLOW_LOG="${TMP_DIR}/inspect_cutflow.log"
+INSPECT_CATEGORIES_LOG="${TMP_DIR}/inspect_categories.log"
 INSPECT_DIST_LOG="${TMP_DIR}/inspect_dist.log"
 INSPECT_SYSTEMATICS_LOG="${TMP_DIR}/inspect_systematics.log"
+INSPECT_COVARIANCE_LOG="${TMP_DIR}/inspect_covariance.log"
 SNAPSHOT_MACRO_LOG="${TMP_DIR}/mk_snapshot.log"
 
 printf '%s\n' "${FIXTURE_PATH}" > "${LIST_PATH}"
@@ -316,6 +319,15 @@ run_macro_capture "${INSPECT_WEIGHTS_LOG}" inspect_weights "${EVENTLIST_PATH}" b
 grep -F "sample=beam origin=external variation=nominal nominal=- entries=" "${INSPECT_WEIGHTS_LOG}" >/dev/null
 grep -F "nonfinite_w=0 inconsistent_w=0" "${INSPECT_WEIGHTS_LOG}" >/dev/null
 
+run_macro_capture "${INSPECT_CUTFLOW_LOG}" inspect_cutflow "${EVENTLIST_PATH}" beam
+grep -F "sample=beam origin=external variation=nominal selection_name=raw" "${INSPECT_CUTFLOW_LOG}" >/dev/null
+grep -F "stage=trigger passed=" "${INSPECT_CUTFLOW_LOG}" >/dev/null
+grep -F "stage=selection_pass passed=" "${INSPECT_CUTFLOW_LOG}" >/dev/null
+
+run_macro_capture "${INSPECT_CATEGORIES_LOG}" inspect_categories "${EVENTLIST_PATH}" beam
+grep -F "sample=beam origin=external variation=nominal" "${INSPECT_CATEGORIES_LOG}" >/dev/null
+grep -F "category=1 label=external" "${INSPECT_CATEGORIES_LOG}" >/dev/null
+
 run_macro_capture "${INSPECT_DIST_LOG}" inspect_dist "${DIST_PATH}" beam
 grep -F "branch=topological_score" "${INSPECT_DIST_LOG}" >/dev/null
 grep -F "selection=selection_pass != 0" "${INSPECT_DIST_LOG}" >/dev/null
@@ -336,6 +348,10 @@ grep -F "genie branch=weightsGenie" "${INSPECT_SYSTEMATICS_LOG}" >/dev/null
 grep -F "flux branch=weightsPPFX" "${INSPECT_SYSTEMATICS_LOG}" >/dev/null
 grep -F "reint branch=weightsReint" "${INSPECT_SYSTEMATICS_LOG}" >/dev/null
 grep -F "genie_knob_source_count=0" "${INSPECT_SYSTEMATICS_LOG}" >/dev/null
+
+run_macro_capture "${INSPECT_COVARIANCE_LOG}" inspect_covariance "${COV_PATH}"
+grep -F "matrix=abs_covariance type=double rows=10 cols=10" "${INSPECT_COVARIANCE_LOG}" >/dev/null
+grep -F "matrix=frac_covariance type=float rows=10 cols=10" "${INSPECT_COVARIANCE_LOG}" >/dev/null
 
 run_macro_capture "${SNAPSHOT_MACRO_LOG}" \
   mk_snapshot \
