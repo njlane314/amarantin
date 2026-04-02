@@ -68,6 +68,10 @@ Some older stack / unstack helpers still read `EventListIO` directly.
 Treat those as row-wise compatibility paths rather than the long-term final
 plotting default.
 
+When those row-wise helpers enumerate an `EventListIO` by default, they skip
+detector-variation samples. Pass an explicit sample key or explicit entry list
+if you intentionally want one of those alternate samples.
+
 The stack / unstack path assumes the usual EventListIO-derived columns such as
 __event_category__ and __w__.
 

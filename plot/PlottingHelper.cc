@@ -3,20 +3,35 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "TDirectory.h"
 #include "TH1D.h"
 #include "TTree.h"
 
 namespace plot_utils
 {
+    namespace
+    {
+        bool include_default_sample(const DatasetIO::Sample &sample)
+        {
+            return sample.variation != DatasetIO::Sample::Variation::kDetector;
+        }
+    }
+
     std::vector<Entry> make_entries(const EventListIO &event_list)
     {
         std::vector<Entry> entries;
         const auto keys = event_list.sample_keys();
         entries.reserve(keys.size());
         for (const auto &key : keys)
-            entries.push_back(Entry{&event_list, key, event_list.sample(key)});
+        {
+            DatasetIO::Sample sample = event_list.sample(key);
+            if (!include_default_sample(sample))
+                continue;
+            entries.push_back(Entry{&event_list, key, std::move(sample)});
+        }
         return entries;
     }
 
@@ -164,6 +179,14 @@ namespace plot_utils
         else if (!selection.empty() && selection != "1")
             weight_expr = selection;
 
-        tree->Draw(draw_expr.c_str(), weight_expr.c_str(), "goff");
+        TDirectory *original_directory = hist.GetDirectory();
+        hist.SetDirectory(gDirectory);
+        const Long64_t drawn = tree->Draw(draw_expr.c_str(), weight_expr.c_str(), "goff");
+        hist.SetDirectory(original_directory);
+        if (drawn < 0)
+        {
+            throw std::runtime_error("plot_utils::fill_histogram: failed to draw histogram for " +
+                                     variable);
+        }
     }
 }

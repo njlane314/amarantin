@@ -2,6 +2,60 @@
 
 ## Current milestone
 - status: done
+- subsystem: rigorous `plot/` validation and `IO` boundary hardening
+- design rule from `DESIGN.md`: keep `plot/` rendering-only and make the
+  persisted row/bin surfaces fail clearly instead of silently
+
+## What changed
+- hardened default `EventListIO` plot enumeration so detector-variation
+  samples are not treated as nominal row-wise inputs
+- hardened row-wise plot filling so bad `TTree::Draw(...)` formulas fail
+  explicitly
+- hardened cached-spectrum plotting so malformed `nominal` / `sumw2` payloads
+  fail before a histogram is built
+- started a self-contained `plot_rigorous_check` executable under `tests/`
+- documented the default detector-variation skip in `plot/README`
+
+## Why this is simpler
+- row-wise plots now match the nominal/data view users usually intend instead
+  of silently pulling detector alternates into the stack
+- bad plot expressions stop at the rendering boundary instead of returning an
+  empty image that looks valid
+- one deterministic test covers the main `plot/` and `IO` contracts directly
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md plot/EventListPlotting.cc plot/PlottingHelper.cc plot/EfficiencyPlot.cc plot/README tests/CMakeLists.txt tests/plot_rigorous_check.cc`
+- smoke checks:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/plot-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/plot-rigorous --parallel && ctest --test-dir .build/plot-rigorous --output-on-failure'`
+- results:
+  - focused `git diff --check` passed
+  - Docker `ctest` passed with:
+    - `plot_rigorous_check`
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - positive; one deterministic regression plus small fail-fast guards
+
+## Decisions
+- default row-wise `EventListIO` plotting should treat detector samples as
+  opt-in
+- explicit sample-key selection should remain able to target detector samples
+
+## Remaining hotspots
+- the committed plot coverage still does not exercise the event-display image
+  path or cached-plot consumers outside the in-repo helpers
+
+## Current milestone
+- status: done
 - subsystem: rigorous `io/` validation and persistence-contract hardening
 - design rule from `DESIGN.md`: keep `io/` persistence-only and make the
   workflow chain easier to trust without adding wrapper ceremony

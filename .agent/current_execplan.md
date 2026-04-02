@@ -1,5 +1,114 @@
 # ExecPlan
 
+## ExecPlan Addendum: Rigorous Plot Validation
+
+### 1. Objective
+Harden the `plot/` to `IO` boundary so row-wise plots stop silently
+double-counting detector-variation samples or swallowing bad tree formulas,
+then add one self-contained regression test that checks the main
+`EventListIO` and `DistributionIO` plotting contracts directly.
+
+### 2. Constraints
+- Keep the pass local to `plot/` plus one new `tests/` entrypoint.
+- Keep `plot/` rendering-only; do not move persistence or selection logic into
+  it.
+- Do not pull the broader dirty-worktree harness into the published change.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- `plot/`: rendering only
+- downstream code should usually open `EventListIO` and stay on that surface
+- add abstractions only when they delete complexity
+
+The goal is a safer rendering boundary and deterministic coverage, not a
+`plot/` redesign.
+
+### 4. System map
+- `plot/EventListPlotting.cc`
+- `plot/PlottingHelper.cc`
+- `plot/EfficiencyPlot.cc`
+- `plot/README`
+- `tests/CMakeLists.txt`
+- `tests/plot_rigorous_check.cc`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### default row-wise sample filtering
+- treat detector-variation samples as alternate systematics lanes, not default
+  row-wise plotting inputs
+- keep explicit sample-key access intact
+
+#### explicit draw/payload failures
+- reject `TTree::Draw(...)` formula failures instead of accepting empty plots
+- reject malformed cached-spectrum `nominal` / `sumw2` shapes before building
+  a `TH1D`
+
+#### self-contained plot regression coverage
+- build one synthetic `EventListIO` fixture with nominal, detector, and data
+  rows
+- check default sample selection, alias-driven stack/unstack rendering,
+  `EfficiencyPlot`, and cached-spectrum plotting
+
+### 6. Milestones
+
+#### Milestone A: Harden plot/IO assumptions and add a rigorous `plot/` regression test
+- status: done
+- hypothesis: the row-wise plot path becomes easier to trust when detector
+  alternates are excluded by default and bad draw expressions fail explicitly
+- files / symbols touched:
+  - `plot_utils::selected_sample_keys(...)`
+  - `plot_utils::make_entries(...)`
+  - `plot_utils::fill_histogram(...)`
+  - `plot_utils::EfficiencyPlot::compute(...)`
+  - `tests/plot_rigorous_check.cc`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md plot/EventListPlotting.cc plot/PlottingHelper.cc plot/EfficiencyPlot.cc plot/README tests/CMakeLists.txt tests/plot_rigorous_check.cc`
+  - `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/plot-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/plot-rigorous --parallel && ctest --test-dir .build/plot-rigorous --output-on-failure'`
+- acceptance criteria:
+  - default row-wise plot enumeration skips detector-variation samples
+  - explicit detector sample selection still works
+  - bad event-list plot formulas fail explicitly
+  - malformed cached-spectrum payloads fail explicitly at the plot boundary
+  - the Docker CTest suite is green
+- verification results:
+  - focused `git diff --check` passed
+  - Docker configure/build/ctest passed with:
+    - `plot_rigorous_check`
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed target or public header changes
+  - CTest gains one new internal regression executable
+  - default row-wise `EventListIO` plotting now ignores detector variations
+    unless the caller selects them explicitly
+- reviewer sign-off:
+  - explicit user request in-thread to do the same rigorous pass for `plot/`
+    and its connection with `IO`
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- implicit assumptions targeted:
+  - detector-variation samples should not be treated as default nominal plot
+    inputs
+  - `TTree::Draw(...)` formula failures should not quietly produce empty plots
+  - cached plot payloads should match their declared histogram shapes
+
+### 9. Decision log
+- keep the new regression synthetic and self-contained
+- keep explicit detector sample access available through explicit sample-key
+  selection
+
+### 10. Stop conditions
+- stop after the plot regression is green in Docker
+- do not expand this pass into a broader `plot/` redesign
+
 ## ExecPlan Addendum: Rigorous IO Validation
 
 ### 1. Objective

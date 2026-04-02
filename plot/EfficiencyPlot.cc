@@ -14,6 +14,7 @@
 
 #include "EventListPlotting.hh"
 
+#include "TDirectory.h"
 #include "TCanvas.h"
 #include "TColor.h"
 #include "TGraphAsymmErrors.h"
@@ -65,6 +66,27 @@ namespace
     double histogram_yield(const TH1D &hist)
     {
         return hist.Integral(0, hist.GetNbinsX() + 1);
+    }
+
+    void draw_checked(TTree *tree,
+                      TH1D &hist,
+                      const std::string &variable,
+                      const std::string &selection,
+                      const char *label)
+    {
+        if (!tree)
+            return;
+
+        TDirectory *original_directory = hist.GetDirectory();
+        hist.SetDirectory(gDirectory);
+        const std::string draw_expr = variable + ">>+" + hist.GetName();
+        const Long64_t drawn = tree->Draw(draw_expr.c_str(), selection.c_str(), "goff");
+        hist.SetDirectory(original_directory);
+        if (drawn < 0)
+        {
+            throw std::runtime_error(std::string("plot_utils::EfficiencyPlot: failed to draw ") +
+                                     label);
+        }
     }
 
     std::unique_ptr<TGraphAsymmErrors> make_efficiency_graph(const TH1D &passed,
@@ -213,11 +235,8 @@ namespace plot_utils
             if (!tree)
                 continue;
 
-            const std::string total_draw = spec_.branch_expr + ">>+" + total_name;
-            const std::string passed_draw = spec_.branch_expr + ">>+" + passed_name;
-
-            tree->Draw(total_draw.c_str(), total_weight.c_str(), "goff");
-            tree->Draw(passed_draw.c_str(), pass_weight.c_str(), "goff");
+            draw_checked(tree, *h_total_, spec_.branch_expr, total_weight, "denominator histogram");
+            draw_checked(tree, *h_passed_, spec_.branch_expr, pass_weight, "passed histogram");
 
             n_denom_ += count_selected_entries(tree, denom_selection);
             n_pass_ += count_selected_entries(tree, pass_selection);

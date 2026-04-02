@@ -1,3 +1,29 @@
+if(TARGET Plot)
+  add_executable(plot_rigorous_check plot_rigorous_check.cc)
+
+  target_link_libraries(plot_rigorous_check
+    PRIVATE
+      IO
+      Plot
+      amarantin_build_options
+  )
+
+  set_target_properties(plot_rigorous_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+
+  add_test(NAME plot_rigorous_check
+    COMMAND "${CMAKE_BINARY_DIR}/bin/plot_rigorous_check"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      Plot
+      plot_rigorous_check
+    )
+  endif()
+endif()
+
 if(TARGET IO)
   add_executable(io_rigorous_check io_rigorous_check.cc)
 
