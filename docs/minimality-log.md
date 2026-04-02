@@ -2,6 +2,60 @@
 
 ## Current milestone
 - status: done
+- subsystem: rigorous `io/` validation and persistence-contract hardening
+- design rule from `DESIGN.md`: keep `io/` persistence-only and make the
+  workflow chain easier to trust without adding wrapper ceremony
+
+## What changed
+- hardened `ShardIO::scan(...)` so the scanned file list matches the public
+  provenance surface
+- hardened `SampleIO::read(...)` so persisted beam/polarity metadata is
+  validated on read
+- hardened `DistributionIO::write(...)` so malformed payload shapes fail
+  before they are persisted
+- started a self-contained `io_rigorous_check` executable under `tests/`
+- made `EventListIO` store/read subrun trees by leaf name while preserving the
+  explicit metadata path
+
+## Why this is simpler
+- the main `io/` boundary assumptions now fail where the persistence surface is
+  constructed instead of leaking silent inconsistencies downstream
+- one deterministic test exercises the chain directly with tiny in-process
+  ROOT and SQLite fixtures
+- the event-list subrun-tree contract is easier to explain: metadata can keep
+  the explicit path while the stored object stays a plain tree key
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/ShardIO.cc io/SampleIO.cc io/EventListIO.cc io/DistributionIO.cc tests/CMakeLists.txt tests/io_rigorous_check.cc`
+- smoke checks:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/io-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/io-rigorous --parallel && ctest --test-dir .build/io-rigorous --output-on-failure'`
+- results:
+  - focused `git diff --check` passed
+  - Docker `ctest` passed with:
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - positive; one deterministic regression plus small fail-fast guards
+
+## Decisions
+- keep the new regression self-contained and publishable on its own
+- keep the event-list subrun-tree fix minimal and persistence-focused
+
+## Remaining hotspots
+- broader committed IO coverage still does not exercise external malformed
+  dataset/event-list files built outside the in-repo writers
+
+## Current milestone
+- status: done
 - subsystem: rigorous `syst/` validation and assumption hardening
 - design rule from `DESIGN.md`: make the data flow easier to trust without
   adding wrapper ceremony

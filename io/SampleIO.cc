@@ -431,6 +431,7 @@ void SampleIO::read(const std::string &path)
         variation_ = variation_from(utils::read_named(s, "variation"));
         beam_ = beam_from(utils::read_named(s, "beam"));
         polarity_ = polarity_from(utils::read_named(s, "polarity"));
+        validate_metadata();
         normalisation_mode_ = utils::read_named_or(s, "normalisation_mode");
 
         subrun_pot_sum_ = utils::read_param<double>(s, "subrun_pot_sum");

@@ -1,5 +1,105 @@
 # ExecPlan
 
+## ExecPlan Addendum: Rigorous IO Validation
+
+### 1. Objective
+Harden the `io/` persistence chain against malformed persisted metadata and
+payload-shape mistakes, then add one self-contained regression test that
+checks the main shard, sample, dataset, event-list, and distribution
+contracts directly.
+
+### 2. Constraints
+- Keep `io/` persistence-only.
+- Keep the pass local to `io/` plus one new `tests/` entrypoint.
+- Do not pull the broader dirty-worktree smoke harness into the published
+  change.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep `io/` persistence-only
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+The goal is stricter persistence contracts and better regression coverage, not
+an `io/` redesign.
+
+### 4. System map
+- `io/ShardIO.cc`
+- `io/SampleIO.cc`
+- `io/EventListIO.cc`
+- `io/DistributionIO.cc`
+- `tests/CMakeLists.txt`
+- `tests/io_rigorous_check.cc`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### explicit persistence-contract checks
+- keep `ShardIO::scan(...)` aligned with the public `files()` accessor
+- validate persisted `SampleIO` metadata on read
+- reject malformed `DistributionIO::Spectrum` payload shapes before write
+
+#### self-contained IO regression coverage
+- build tiny ROOT and SQLite fixtures in-process
+- check shard exposure aggregation, sample/dataset roundtrips, event-list
+  sample and subrun-tree access, and cached-spectrum rebinning
+- assert the main malformed-input failures explicitly
+
+### 6. Milestones
+
+#### Milestone A: Harden IO assumptions and add a rigorous `io/` regression test
+- status: done
+- hypothesis: `io/` becomes easier to trust when its public persistence
+  surface rejects malformed metadata/payloads and one deterministic test
+  exercises the full chain directly
+- files / symbols touched:
+  - `ShardIO::scan(...)`
+  - `SampleIO::read(...)`
+  - subrun-tree persistence/readback in `EventListIO`
+  - `DistributionIO::write(...)`
+  - `tests/io_rigorous_check.cc`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md io/ShardIO.cc io/SampleIO.cc io/EventListIO.cc io/DistributionIO.cc tests/CMakeLists.txt tests/io_rigorous_check.cc`
+  - `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/io-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/io-rigorous --parallel && ctest --test-dir .build/io-rigorous --output-on-failure'`
+- acceptance criteria:
+  - shard scans keep their input-file provenance
+  - invalid persisted sample metadata fails on read
+  - event-list subrun-tree lookup survives explicit tree paths
+  - cached-spectrum payload-shape mismatches fail explicitly
+  - the Docker CTest suite is green
+- verification results:
+  - focused `git diff --check` passed
+  - Docker configure/build/ctest passed with:
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed target or public header changes
+  - CTest gains one new internal regression executable
+- reviewer sign-off:
+  - explicit user request in-thread to do the same rigorous pass for `io/`
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- implicit assumptions targeted:
+  - `ShardIO::scan(...)` must keep the file list that it just scanned
+  - persisted sample metadata should obey the same beam/polarity rules on read
+  - event-list subrun-tree readback should not depend on path-vs-leaf naming
+  - cached spectrum payloads should match their declared shapes
+
+### 9. Decision log
+- keep the new regression synthetic and self-contained
+- port only the minimal event-list subrun-tree fix needed for this pass
+
+### 10. Stop conditions
+- stop after the IO regression is green in Docker
+- do not expand this pass into a broader `io/` redesign
+
 ## ExecPlan Addendum: Rigorous Systematics Validation
 
 ### 1. Objective

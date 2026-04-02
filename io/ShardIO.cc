@@ -173,6 +173,7 @@ void ShardIO::scan(const std::vector<std::string> &files)
 {
     if (files.empty()) throw std::runtime_error("ShardIO: no input files provided for subrun scan.");
 
+    files_ = files;
     subruns_.clear();
     generated_exposures_.clear();
 

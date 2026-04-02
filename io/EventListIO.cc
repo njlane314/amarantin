@@ -143,6 +143,16 @@ namespace
                                 EventListIO::passes_signal_definition_branch_name());
     }
 
+    std::string leaf_tree_name(const std::string &tree_name)
+    {
+        const std::string::size_type pos = tree_name.find_last_of('/');
+        if (pos == std::string::npos)
+            return tree_name;
+        if (pos + 1 >= tree_name.size())
+            return "";
+        return tree_name.substr(pos + 1);
+    }
+
 }
 
 EventListIO::EventListIO(const std::string &path, Mode mode)
@@ -250,8 +260,11 @@ void EventListIO::write_sample(const std::string &sample_key,
     selected_tree->Write("selected", TObject::kOverwrite);
 
     subruns_dir->cd();
-    subrun_tree->SetName(subrun_tree_name.c_str());
-    subrun_tree->Write(subrun_tree_name.c_str(), TObject::kOverwrite);
+    const std::string stored_subrun_tree_name = leaf_tree_name(subrun_tree_name);
+    const char *persisted_name =
+        stored_subrun_tree_name.empty() ? subrun_tree_name.c_str() : stored_subrun_tree_name.c_str();
+    subrun_tree->SetName(persisted_name);
+    subrun_tree->Write(persisted_name, TObject::kOverwrite);
 }
 
 void EventListIO::flush()
@@ -342,10 +355,13 @@ TTree *EventListIO::subrun_tree(const std::string &sample_key) const
 {
     require_open_();
     const std::string subrun_tree_name = metadata().subrun_tree_name;
+    const std::string leaf_name = leaf_tree_name(subrun_tree_name);
 
     TDirectory *sample_dir = sample_dir_for(file_, sample_key, false);
     TDirectory *subruns_dir = utils::must_dir(sample_dir, "subruns", false);
     TTree *tree = dynamic_cast<TTree *>(subruns_dir->Get(subrun_tree_name.c_str()));
+    if (!tree && !leaf_name.empty() && leaf_name != subrun_tree_name)
+        tree = dynamic_cast<TTree *>(subruns_dir->Get(leaf_name.c_str()));
     if (!tree)
         throw std::runtime_error("EventListIO: missing subrun tree for sample: " + sample_key);
     return tree;

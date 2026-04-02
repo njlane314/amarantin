@@ -1,3 +1,29 @@
+if(TARGET IO)
+  add_executable(io_rigorous_check io_rigorous_check.cc)
+
+  target_link_libraries(io_rigorous_check
+    PRIVATE
+      IO
+      SQLite::SQLite3
+      amarantin_build_options
+  )
+
+  set_target_properties(io_rigorous_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+
+  add_test(NAME io_rigorous_check
+    COMMAND "${CMAKE_BINARY_DIR}/bin/io_rigorous_check"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      IO
+      io_rigorous_check
+    )
+  endif()
+endif()
+
 if(TARGET Syst)
   add_executable(systematics_rigorous_check systematics_rigorous_check.cc)
 

@@ -13,6 +13,202 @@
 
 namespace
 {
+    void require_count_non_negative(const char *label, int count)
+    {
+        if (count < 0)
+            throw std::runtime_error(std::string("DistributionIO: negative count for ") + label);
+    }
+
+    void require_vector_nbins(const char *label,
+                              const std::vector<double> &values,
+                              int nbins)
+    {
+        if (values.empty())
+            return;
+        if (values.size() != static_cast<std::size_t>(nbins))
+        {
+            throw std::runtime_error(std::string("DistributionIO: ") + label +
+                                     " size does not match histogram bins");
+        }
+    }
+
+    void require_vector_square(const char *label,
+                               const std::vector<double> &values,
+                               int nbins)
+    {
+        if (values.empty())
+            return;
+        if (values.size() != static_cast<std::size_t>(nbins * nbins))
+        {
+            throw std::runtime_error(std::string("DistributionIO: ") + label +
+                                     " size does not match histogram covariance bins");
+        }
+    }
+
+    void require_source_major_size(const char *label,
+                                   const std::vector<double> &values,
+                                   int row_count,
+                                   int nbins)
+    {
+        if (values.empty())
+            return;
+        require_count_non_negative(label, row_count);
+        if (values.size() != static_cast<std::size_t>(row_count * nbins))
+        {
+            throw std::runtime_error(std::string("DistributionIO: ") + label +
+                                     " size does not match source-major payload shape");
+        }
+    }
+
+    void require_bin_major_size(const char *label,
+                                const std::vector<double> &values,
+                                long long column_count,
+                                int nbins)
+    {
+        if (values.empty())
+            return;
+        if (column_count < 0)
+        {
+            throw std::runtime_error(std::string("DistributionIO: negative column count for ") +
+                                     label);
+        }
+        if (values.size() !=
+            static_cast<std::size_t>(static_cast<std::size_t>(nbins) *
+                                     static_cast<std::size_t>(column_count)))
+        {
+            throw std::runtime_error(std::string("DistributionIO: ") + label +
+                                     " size does not match bin-major payload shape");
+        }
+    }
+
+    void require_string_count_match(const char *label,
+                                    const std::vector<std::string> &values,
+                                    int expected)
+    {
+        if (values.empty() && expected == 0)
+            return;
+        if (expected <= 0)
+        {
+            throw std::runtime_error(std::string("DistributionIO: ") + label +
+                                     " is populated but the corresponding count is not positive");
+        }
+        if (values.size() != static_cast<std::size_t>(expected))
+        {
+            throw std::runtime_error(std::string("DistributionIO: ") + label +
+                                     " size does not match the corresponding count");
+        }
+    }
+
+    void validate_universe_family(const char *label,
+                                  const DistributionIO::UniverseFamily &family,
+                                  int nbins)
+    {
+        if (family.empty())
+        {
+            if (!family.branch_name.empty() || family.n_variations != 0 || family.eigen_rank != 0)
+            {
+                throw std::runtime_error(std::string("DistributionIO: inconsistent empty family state for ") +
+                                         label);
+            }
+            return;
+        }
+
+        if (family.branch_name.empty())
+        {
+            throw std::runtime_error(std::string("DistributionIO: missing branch name for ") + label);
+        }
+        if (family.n_variations < 0)
+        {
+            throw std::runtime_error(std::string("DistributionIO: negative variation count for ") +
+                                     label);
+        }
+        if (family.eigen_rank < 0)
+        {
+            throw std::runtime_error(std::string("DistributionIO: negative eigen rank for ") + label);
+        }
+
+        require_vector_nbins((std::string(label) + " sigma").c_str(), family.sigma, nbins);
+        require_vector_square((std::string(label) + " covariance").c_str(),
+                              family.covariance,
+                              nbins);
+        require_bin_major_size((std::string(label) + " universe histograms").c_str(),
+                               family.universe_histograms,
+                               family.n_variations,
+                               nbins);
+        if (!family.eigenvalues.empty() &&
+            family.eigenvalues.size() != static_cast<std::size_t>(family.eigen_rank))
+        {
+            throw std::runtime_error(std::string("DistributionIO: ") + label +
+                                     " eigenvalue count does not match eigen rank");
+        }
+        require_bin_major_size((std::string(label) + " eigenmodes").c_str(),
+                               family.eigenmodes,
+                               family.eigen_rank,
+                               nbins);
+    }
+
+    void validate_spectrum_for_write(const std::string &sample_key,
+                                     const std::string &cache_key,
+                                     const DistributionIO::Spectrum &spectrum)
+    {
+        if (spectrum.spec.nbins <= 0)
+            throw std::runtime_error("DistributionIO: spectrum nbins must be positive");
+        if (!(spectrum.spec.xmax > spectrum.spec.xmin))
+            throw std::runtime_error("DistributionIO: spectrum range is invalid");
+        if (!spectrum.spec.sample_key.empty() && spectrum.spec.sample_key != sample_key)
+        {
+            throw std::runtime_error("DistributionIO: spectrum sample_key does not match write key");
+        }
+        if (!spectrum.spec.cache_key.empty() && spectrum.spec.cache_key != cache_key)
+        {
+            throw std::runtime_error("DistributionIO: spectrum cache_key does not match write key");
+        }
+
+        require_vector_nbins("nominal", spectrum.nominal, spectrum.spec.nbins);
+        require_vector_nbins("sumw2", spectrum.sumw2, spectrum.spec.nbins);
+        require_vector_nbins("detector_down", spectrum.detector_down, spectrum.spec.nbins);
+        require_vector_nbins("detector_up", spectrum.detector_up, spectrum.spec.nbins);
+        require_vector_nbins("total_down", spectrum.total_down, spectrum.spec.nbins);
+        require_vector_nbins("total_up", spectrum.total_up, spectrum.spec.nbins);
+
+        require_count_non_negative("detector_source_count", spectrum.detector_source_count);
+        require_string_count_match("detector_source_labels",
+                                   spectrum.detector_source_labels,
+                                   spectrum.detector_source_count);
+        require_string_count_match("detector_sample_keys",
+                                   spectrum.detector_sample_keys,
+                                   spectrum.detector_source_count);
+        require_source_major_size("detector_shift_vectors",
+                                  spectrum.detector_shift_vectors,
+                                  spectrum.detector_source_count,
+                                  spectrum.spec.nbins);
+        require_vector_square("detector_covariance",
+                              spectrum.detector_covariance,
+                              spectrum.spec.nbins);
+
+        require_count_non_negative("genie_knob_source_count", spectrum.genie_knob_source_count);
+        require_string_count_match("genie_knob_source_labels",
+                                   spectrum.genie_knob_source_labels,
+                                   spectrum.genie_knob_source_count);
+        require_source_major_size("genie_knob_shift_vectors",
+                                  spectrum.genie_knob_shift_vectors,
+                                  spectrum.genie_knob_source_count,
+                                  spectrum.spec.nbins);
+        require_vector_square("genie_knob_covariance",
+                              spectrum.genie_knob_covariance,
+                              spectrum.spec.nbins);
+
+        require_count_non_negative("detector_template_count", spectrum.detector_template_count);
+        require_source_major_size("detector_templates",
+                                  spectrum.detector_templates,
+                                  spectrum.detector_template_count,
+                                  spectrum.spec.nbins);
+
+        validate_universe_family("genie", spectrum.genie, spectrum.spec.nbins);
+        validate_universe_family("flux", spectrum.flux, spectrum.spec.nbins);
+        validate_universe_family("reint", spectrum.reint, spectrum.spec.nbins);
+    }
+
     TDirectory *sample_dir_for(TFile *file, const std::string &sample_key, bool create)
     {
         TDirectory *samples = utils::must_dir(file, "samples", create);
@@ -598,6 +794,8 @@ void DistributionIO::write(const std::string &sample_key,
         throw std::runtime_error("DistributionIO: sample_key must not be empty");
     if (cache_key.empty())
         throw std::runtime_error("DistributionIO: cache_key must not be empty");
+
+    validate_spectrum_for_write(sample_key, cache_key, spectrum);
 
     TDirectory *spectrum_dir = dist_dir_for(file_, sample_key, cache_key, true);
     TDirectory *meta_dir = utils::must_dir(spectrum_dir, "meta", true);
