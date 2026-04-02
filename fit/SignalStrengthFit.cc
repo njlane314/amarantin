@@ -45,6 +45,73 @@ namespace
         return std::max(lower, std::min(value, upper));
     }
 
+    bool has_partial_envelope(const std::vector<double> &down,
+                              const std::vector<double> &up)
+    {
+        return down.empty() != up.empty();
+    }
+
+    bool family_has_fit_payload(const DistributionIO::UniverseFamily &family)
+    {
+        return !family.sigma.empty() ||
+               family.eigen_rank > 0 ||
+               !family.eigenmodes.empty();
+    }
+
+    void validate_family_payload(const DistributionIO::UniverseFamily &family,
+                                 std::size_t nbins,
+                                 const char *label)
+    {
+        if (!family_has_fit_payload(family))
+            return;
+
+        if (family.branch_name.empty())
+        {
+            throw std::runtime_error(std::string("fit::validate_problem: ") +
+                                     label +
+                                     " family branch_name is required when fit payload is present");
+        }
+        if (family.eigen_rank < 0)
+        {
+            throw std::runtime_error(std::string("fit::validate_problem: ") +
+                                     label +
+                                     " family eigen_rank must not be negative");
+        }
+        if (!family.sigma.empty() && family.sigma.size() != nbins)
+        {
+            throw std::runtime_error(std::string("fit::validate_problem: ") +
+                                     label +
+                                     " family sigma size does not match nbins");
+        }
+        if (!family.covariance.empty() &&
+            family.covariance.size() != nbins * nbins)
+        {
+            throw std::runtime_error(std::string("fit::validate_problem: ") +
+                                     label +
+                                     " family covariance size does not match nbins");
+        }
+        if (!family.eigenvalues.empty() &&
+            family.eigenvalues.size() != static_cast<std::size_t>(family.eigen_rank))
+        {
+            throw std::runtime_error(std::string("fit::validate_problem: ") +
+                                     label +
+                                     " family eigenvalue count does not match eigen_rank");
+        }
+        if (family.eigen_rank == 0 && !family.eigenmodes.empty())
+        {
+            throw std::runtime_error(std::string("fit::validate_problem: ") +
+                                     label +
+                                     " family eigenmodes require a positive eigen_rank");
+        }
+        if (family.eigen_rank > 0 &&
+            family.eigenmodes.size() != nbins * static_cast<std::size_t>(family.eigen_rank))
+        {
+            throw std::runtime_error(std::string("fit::validate_problem: ") +
+                                     label +
+                                     " family eigenmodes size does not match nbins * eigen_rank");
+        }
+    }
+
     const DistributionIO::UniverseFamily &family_for(const fit::Process &process,
                                                      fit::SourceKind source)
     {
@@ -315,27 +382,64 @@ namespace
             throw std::runtime_error("fit::validate_problem: problem.channel must not be null");
         if (problem.signal_process.empty())
             throw std::runtime_error("fit::validate_problem: signal_process must not be empty");
+        if (problem.channel->spec.nbins <= 0)
+            throw std::runtime_error("fit::validate_problem: channel spec nbins must be positive");
+        if (!(problem.channel->spec.xmax > problem.channel->spec.xmin))
+        {
+            throw std::runtime_error("fit::validate_problem: channel spec range is invalid");
+        }
         if (problem.mu_upper < problem.mu_lower)
             throw std::runtime_error("fit::validate_problem: mu bounds are inverted");
         if (problem.channel->data.size() != static_cast<std::size_t>(problem.channel->spec.nbins))
             throw std::runtime_error("fit::validate_problem: channel data size does not match nbins");
-        if (!problem.channel->find_process(problem.signal_process))
+        const fit::Process *signal_process = problem.channel->find_process(problem.signal_process);
+        if (!signal_process)
             throw std::runtime_error("fit::validate_problem: signal process is not present in the channel");
+        if (signal_process->kind != fit::ProcessKind::kSignal)
+        {
+            throw std::runtime_error(
+                "fit::validate_problem: signal process must refer to a signal-kind process");
+        }
+
+        std::vector<std::string> seen_non_data_process_names;
 
         for (const auto &process : problem.channel->processes)
         {
             if (process.kind == fit::ProcessKind::kData)
                 continue;
 
+            if (std::find(seen_non_data_process_names.begin(),
+                          seen_non_data_process_names.end(),
+                          process.name) != seen_non_data_process_names.end())
+            {
+                throw std::runtime_error("fit::validate_problem: duplicate non-data process name: " +
+                                         process.name);
+            }
+            seen_non_data_process_names.push_back(process.name);
+
             const std::size_t nbins = static_cast<std::size_t>(problem.channel->spec.nbins);
             if (process.nominal.size() != nbins)
                 throw std::runtime_error("fit::validate_problem: process nominal size does not match nbins");
             if (!process.sumw2.empty() && process.sumw2.size() != nbins)
                 throw std::runtime_error("fit::validate_problem: process sumw2 size does not match nbins");
+            if (process.detector_source_count < 0)
+                throw std::runtime_error("fit::validate_problem: detector_source_count must not be negative");
+            if (process.genie_knob_source_count < 0)
+                throw std::runtime_error("fit::validate_problem: genie_knob_source_count must not be negative");
+            if (process.detector_template_count < 0)
+                throw std::runtime_error("fit::validate_problem: detector_template_count must not be negative");
+            if (has_partial_envelope(process.detector_down, process.detector_up))
+            {
+                throw std::runtime_error("fit::validate_problem: detector envelope is incomplete");
+            }
             if (has_detector_envelope(process) &&
                 (process.detector_down.size() != nbins || process.detector_up.size() != nbins))
             {
                 throw std::runtime_error("fit::validate_problem: detector envelope size does not match nbins");
+            }
+            if (has_partial_envelope(process.total_down, process.total_up))
+            {
+                throw std::runtime_error("fit::validate_problem: total envelope is incomplete");
             }
             if (has_total_envelope(process) &&
                 (process.total_down.size() != nbins || process.total_up.size() != nbins))
@@ -381,6 +485,10 @@ namespace
             {
                 throw std::runtime_error("fit::validate_problem: genie_knob_source_labels size does not match genie_knob_source_count");
             }
+
+            validate_family_payload(process.genie, nbins, "genie");
+            validate_family_payload(process.flux, nbins, "flux");
+            validate_family_payload(process.reint, nbins, "reint");
         }
 
         for (const auto &nuisance : problem.nuisances)

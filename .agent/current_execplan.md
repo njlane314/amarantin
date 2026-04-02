@@ -1,5 +1,106 @@
 # ExecPlan
 
+## ExecPlan Addendum: Rigorous Fit Validation
+
+### 1. Objective
+Harden the `fit/` boundary against malformed cached fit payloads and ambiguous
+channel definitions, then add one self-contained regression test that checks
+the default nuisance construction, prediction math, and fit convergence path
+directly.
+
+### 2. Constraints
+- Keep the pass local to `fit/` plus one new `tests/` entrypoint.
+- Keep the fit API small; do not redesign `mk_fit` or the persisted
+  `DistributionIO` surface in this pass.
+- Do not pull the broader dirty-worktree harness into the published change.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- prefer plain data and namespace functions
+- keep workflows in `app/`
+- add abstractions only when they delete complexity
+
+The goal is a stricter fit boundary and deterministic coverage, not a broader
+fit-layer rewrite.
+
+### 4. System map
+- `fit/SignalStrengthFit.cc`
+- `fit/README`
+- `tests/CMakeLists.txt`
+- `tests/fit_rigorous_check.cc`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### explicit fit-contract checks
+- reject duplicate non-data process names and invalid signal-process kinds
+- reject partial detector/total envelopes and malformed family payload shapes
+- reject invalid channel binning before prediction or fitting starts
+
+#### self-contained fit regression coverage
+- build one synthetic fit channel directly in-process
+- check nuisance sharing across processes, family/knob/detector/total math,
+  and one simple profile fit
+- assert the main malformed-input failures explicitly
+
+### 6. Milestones
+
+#### Milestone A: Harden fit assumptions and add a rigorous `fit/` regression test
+- status: done
+- hypothesis: the fit library becomes easier to trust when malformed cached
+  payloads fail at the fit boundary and one deterministic test exercises the
+  default builder and calculator directly
+- files / symbols touched:
+  - `fit::validate_problem(...)`
+  - fit-library prediction / builder assumptions documented in `fit/README`
+  - `tests/fit_rigorous_check.cc`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/README fit/SignalStrengthFit.cc tests/CMakeLists.txt tests/fit_rigorous_check.cc`
+  - `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/fit-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/fit-rigorous --parallel && ctest --test-dir .build/fit-rigorous --output-on-failure'`
+- acceptance criteria:
+  - malformed fit-channel definitions fail explicitly at the fit boundary
+  - the default builder shares family, detector, and knob nuisances across
+    processes as intended
+  - signal scaling and nuisance shifts produce the expected predicted bins
+  - a simple one-parameter profile fit converges with the expected result
+  - the Docker CTest suite is green
+- verification results:
+  - focused `git diff --check` passed
+  - Docker configure/build/ctest passed with:
+    - `fit_rigorous_check`
+    - `plot_rigorous_check`
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed target or public header changes
+  - CTest gains one new internal regression executable
+- reviewer sign-off:
+  - explicit user request in-thread to validate the fit library
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- implicit assumptions targeted:
+  - `signal_process` should name a real signal process, not any process
+  - one channel should not carry duplicate non-data process names
+  - family/envelope payloads should match the declared histogram shape
+  - fit prediction should be exercised through the same nuisance builder used
+    by `mk_fit`
+
+### 9. Decision log
+- keep the new regression synthetic and self-contained
+- harden only the narrow fit boundary checks needed for deterministic
+  validation
+
+### 10. Stop conditions
+- stop after the fit regression is green in Docker
+- do not expand this pass into a broader fit-framework redesign
+
 ## ExecPlan Addendum: Rigorous Plot Validation
 
 ### 1. Objective

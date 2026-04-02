@@ -1,3 +1,28 @@
+if(TARGET Fit)
+  add_executable(fit_rigorous_check fit_rigorous_check.cc)
+
+  target_link_libraries(fit_rigorous_check
+    PRIVATE
+      Fit
+      amarantin_build_options
+  )
+
+  set_target_properties(fit_rigorous_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+
+  add_test(NAME fit_rigorous_check
+    COMMAND "${CMAKE_BINARY_DIR}/bin/fit_rigorous_check"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      Fit
+      fit_rigorous_check
+    )
+  endif()
+endif()
+
 if(TARGET Plot)
   add_executable(plot_rigorous_check plot_rigorous_check.cc)
 

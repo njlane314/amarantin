@@ -2,6 +2,59 @@
 
 ## Current milestone
 - status: done
+- subsystem: rigorous `fit/` validation and boundary hardening
+- design rule from `DESIGN.md`: keep the fit surface plain and make malformed
+  channel/cache inputs fail where prediction and fitting begin
+
+## What changed
+- hardened `fit::validate_problem(...)` so duplicate non-data process names,
+  invalid signal-process kinds, malformed family payloads, incomplete
+  envelopes, and invalid channel binning fail explicitly
+- started a self-contained `fit_rigorous_check` executable under `tests/`
+- documented the unique non-data process / signal-process expectations in
+  `fit/README`
+
+## Why this is simpler
+- the main fit assumptions now fail at the fit boundary instead of producing
+  ambiguous nuisance construction or late runtime errors
+- one deterministic test exercises the default nuisance builder and prediction
+  math directly, without needing a broader fixture chain
+
+## Verification
+- configure/build commands:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/fit-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/fit-rigorous --parallel && ctest --test-dir .build/fit-rigorous --output-on-failure'`
+- target-only commands:
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md fit/README fit/SignalStrengthFit.cc tests/CMakeLists.txt tests/fit_rigorous_check.cc`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed
+  - Docker `ctest` passed with:
+    - `fit_rigorous_check`
+    - `plot_rigorous_check`
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - positive; one deterministic regression plus small fail-fast guards
+
+## Decisions
+- keep the new fit regression synthetic and self-contained
+- harden only the boundary checks that make the persisted fit payload easier
+  to trust
+
+## Remaining hotspots
+- the committed fit coverage is still synthetic; it does not yet exercise
+  multi-channel coupling or covariance-driven downstream consumers beyond the
+  one-channel `mk_fit` path
+
+## Current milestone
+- status: done
 - subsystem: rigorous `plot/` validation and `IO` boundary hardening
 - design rule from `DESIGN.md`: keep `plot/` rendering-only and make the
   persisted row/bin surfaces fail clearly instead of silently
