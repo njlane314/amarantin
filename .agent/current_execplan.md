@@ -1,5 +1,128 @@
 # ExecPlan
 
+## ExecPlan Addendum: Real test.root Coverage Expansion
+
+### 1. Objective
+Expand the optional `test.root` fixture smoke so it exercises the real
+reweight/systematics path and the analyzer inspection surface, then verify the
+result in Docker against the actual fixture file.
+
+### 2. Constraints
+- Keep the fixture smoke optional; do not make the build depend on a committed
+  binary fixture.
+- Use the real `test.root` only for paths that are compatible with its branch
+  layout.
+- Keep the pass local to fixture-smoke plumbing, one compiled checker, and
+  small doc updates.
+
+### 3. Design anchor
+From `DESIGN.md` and `VISION.md`:
+- libraries provide reusable pieces; apps and macros orchestrate those pieces
+- `EventListIO` is the row-wise downstream surface
+- `DistributionIO` is the cached bin-wise surface
+- debug macros should stay thin and inspection-oriented
+
+The goal is broader fixture-backed coverage, not a larger fixture framework.
+
+### 4. System map
+- `tests/CMakeLists.txt`
+- `tests/testroot_pipeline_check.cc`
+- `tools/test-root-smoke.sh`
+- `ana/EventListBuild.cc`
+- `syst/ReweightFill.cc`
+- `tests/systematics_rigorous_check.cc`
+- `COMMANDS`
+- `INSTALL`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### optional fixture-smoke wiring
+- add one CMake fixture path knob instead of hard-coding one local file layout
+- keep the smoke absent when no fixture is available
+
+#### broader real-fixture coverage
+- build a systematics-rich `DistributionIO` cache from `test.root`
+- validate `Snapshot`, row-wise plotting, covariance export, and fit outputs
+- drive analyzer macros on those real outputs through `tools/run-macro`
+
+#### skip incompatible fixture paths
+- do not force `plot_event_display` through this fixture because the required
+  detector-image branches are not part of `test.root`
+
+### 6. Milestones
+
+#### Milestone A: Expand the optional `test.root` smoke to cover the real downstream outputs
+- status: done
+- hypothesis: the code paths that matter most for this fixture are the real
+  row-wise weighting, reweight-systematics caching, downstream export/fit
+  outputs, and analyzer-facing inspection macros
+- files / symbols touched:
+  - optional fixture-smoke wiring in `tests/CMakeLists.txt`
+  - `tests/testroot_pipeline_check.cc`
+  - `tools/test-root-smoke.sh`
+  - explicit-tree subrun alias handling in `ana::build_event_list(...)`
+  - empty GENIE knob-pair placeholder handling in `syst::detail::compute_sample(...)`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- syst/ReweightFill.cc tests/systematics_rigorous_check.cc tests/testroot_pipeline_check.cc tools/test-root-smoke.sh ana/EventListBuild.cc .agent/current_execplan.md docs/minimality-log.md tests/CMakeLists.txt COMMANDS INSTALL`
+  - `bash -n tools/test-root-smoke.sh`
+  - `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/testroot-rigorous -DCMAKE_BUILD_TYPE=Release -DAMARANTIN_TEST_ROOT_FIXTURE=/work/test.root && cmake --build .build/testroot-rigorous --parallel && ctest --test-dir .build/testroot-rigorous --output-on-failure'`
+- acceptance criteria:
+  - the optional fixture smoke runs when a real `test.root` path is provided
+  - the fixture cache includes real GENIE, flux, and reint payloads, and
+    treats empty GENIE knob-pair placeholder branches as absent
+  - the fixture smoke validates `Snapshot`, row-wise plotting, covariance
+    export, fit outputs, and analyzer macros on those outputs
+  - the Docker CTest suite is green with the real fixture
+- verification results:
+  - focused `git diff --check` passed
+  - `bash -n tools/test-root-smoke.sh` passed
+  - Docker configure/build/ctest passed with:
+    - `testroot_pipeline_smoke`
+    - `fit_rigorous_check`
+    - `plot_rigorous_check`
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+    - `macro_analysis_smoke`
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed target or public header changes
+  - CTest gains one optional fixture smoke when a real fixture path is
+    available
+- reviewer sign-off:
+  - explicit user request in-thread to test any remaining real-fixture gaps
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- implicit assumptions targeted:
+  - the optional fixture smoke should cover more than the nominal histogram
+    path
+  - analyzer macros should be proven against real `test.root` outputs, not
+    only synthetic fixtures
+  - explicit `nuselection/EventSelectionFilter` paths should work when the
+    event tree exposes `sub` instead of `subRun`
+  - empty GENIE knob-pair branches on real files should not be treated as a
+    malformed populated payload
+
+### 9. Decision log
+- keep the fixture file optional instead of committing a binary blob by
+  default
+- skip event-display coverage in this pass because the fixture does not expose
+  the required image branches
+- keep the explicit `nuselection/...` tree paths in the fixture smoke instead
+  of flattening them to default names
+- treat empty GENIE knob-pair branches on `test.root` as absent rather than as
+  a truncated payload
+
+### 10. Stop conditions
+- stop after the expanded fixture suite is green in Docker
+- do not turn this pass into a broad detector-fixture framework
+
 ## ExecPlan Addendum: Analyzer Macro Validation
 
 ### 1. Objective

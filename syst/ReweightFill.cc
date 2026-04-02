@@ -210,10 +210,15 @@ namespace syst::detail
 
     void PairedShiftAccumulator::accumulate(int bin, int nbins, double base_weight)
     {
-        ensure_size(nbins);
         if (!raw_up || !raw_down || source_labels.empty())
             return;
-        if (raw_up->size() != source_labels.size() || raw_down->size() != source_labels.size())
+
+        const std::size_t up_size = raw_up->size();
+        const std::size_t down_size = raw_down->size();
+        if (up_size == 0 && down_size == 0)
+            return;
+        ensure_size(nbins);
+        if (up_size != source_labels.size() || down_size != source_labels.size())
         {
             throw std::runtime_error(
                 "syst: GENIE knob-pair payload size does not match the reviewed local knob contract");

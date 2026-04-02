@@ -757,6 +757,35 @@ namespace
             "GENIE knob size mismatch");
     }
 
+    void test_empty_knob_payload_ignored()
+    {
+        EventRow row;
+        row.x = 0.5;
+        row.weight = 2.0;
+
+        std::unique_ptr<TTree> tree(make_selected_tree(
+            {row},
+            TreeOptions{true, false, false, false, false, false, true}));
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 1;
+        spec.xmin = 0.0;
+        spec.xmax = 1.0;
+
+        syst::SystematicsOptions options;
+        options.enable_genie_knobs = true;
+
+        const syst::detail::ComputedSample out =
+            syst::detail::compute_sample(tree.get(), spec, options);
+
+        require_close_vector(out.nominal, {2.0}, "empty GENIE knob payload nominal");
+        require(out.genie_knobs.has_value(),
+                "empty GENIE knob branches should still bind when present");
+        require(out.genie_knobs->shift_vectors.empty(),
+                "empty GENIE knob payload should be ignored");
+    }
+
     void test_duplicate_detector_labels_rejected()
     {
         const TempDir temp = make_temp_dir();
@@ -826,6 +855,7 @@ int main()
         test_missing_weight_branch_rejected();
         test_inconsistent_universe_count_rejected();
         test_knob_size_mismatch_rejected();
+        test_empty_knob_payload_ignored();
         test_duplicate_detector_labels_rejected();
         test_detector_nominal_mismatch_rejected();
         std::cout << "systematics_rigorous_check=ok\n";

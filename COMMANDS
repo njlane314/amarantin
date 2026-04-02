@@ -64,6 +64,20 @@ Configure
 Build everything
   cmake --build build --parallel
 
+Run post-build checks from `build/`
+  ctest --output-on-failure
+
+Run post-build checks from the repo root
+  cmake --build build --target check
+
+Notes:
+  If `test.root` exists in the source tree at configure time, or if CMake is
+  configured with `-DAMARANTIN_TEST_ROOT_FIXTURE=/path/to/test.root`, the
+  checks also run a fixture smoke that feeds it through `mk_sample`,
+  `mk_dataset`, `mk_eventlist`, `mk_dist`, `mk_fit`, and `mk_cov`, then
+  verifies `Snapshot`, row-wise plotting, `EfficiencyPlot`, and the analyzer
+  inspection macros on those real outputs.
+
 Build selected targets
   cmake --build build --target IO
   cmake --build build --target Ana

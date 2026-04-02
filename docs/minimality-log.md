@@ -2,6 +2,79 @@
 
 ## Current milestone
 - status: done
+- subsystem: real `test.root` coverage expansion
+- design rule from `DESIGN.md`: keep the fixture smoke small and direct while
+  exercising the real persisted row-wise and cached-bin surfaces
+
+## What changed
+- started an optional `test.root` fixture smoke under `tests/`
+- broadened the fixture checker so it validates `Snapshot`, row-wise plotting,
+  covariance export, and fit outputs on the real fixture outputs
+- broadened the fixture shell smoke so it drives the analyzer macros against
+  those real outputs
+- made the fixture path configurable with one CMake cache variable instead of
+  only one hard-coded local filename
+- added a second real-fixture `mk_eventlist --preset muon` pass so the
+  selection-definition path is exercised on the same file
+- taught `ana::build_event_list(...)` to accept `sub` as the event-tree
+  subrun branch alias for explicit tree paths
+- taught the reweight systematics path to ignore empty GENIE knob-pair
+  placeholder branches instead of treating them as malformed populated payloads
+
+## Why this is simpler
+- one optional smoke now checks the real downstream fixture path instead of
+  leaving the most analysis-facing outputs to synthetic coverage only
+- the fixture remains opt-in through one path knob rather than becoming a
+  required binary input for every configure
+- the analyzer inspection surface is now checked on the same real outputs a
+  user would inspect manually
+- the explicit-tree fixture path works with the existing `sub` branch name
+  instead of needing a special fixture rewrite
+- empty knob placeholder branches now collapse to "absent" at the boundary,
+  which matches the persisted cache contract and avoids fake zero-valued knob
+  components
+
+## Verification
+- configure/build commands:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/testroot-rigorous -DCMAKE_BUILD_TYPE=Release -DAMARANTIN_TEST_ROOT_FIXTURE=/work/test.root && cmake --build .build/testroot-rigorous --parallel && ctest --test-dir .build/testroot-rigorous --output-on-failure'`
+- target-only commands:
+- shell checks:
+-  `git diff --check -- syst/ReweightFill.cc tests/systematics_rigorous_check.cc tests/testroot_pipeline_check.cc tools/test-root-smoke.sh ana/EventListBuild.cc .agent/current_execplan.md docs/minimality-log.md tests/CMakeLists.txt COMMANDS INSTALL`
+-  `bash -n tools/test-root-smoke.sh`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed
+  - `bash -n tools/test-root-smoke.sh` passed
+  - Docker `ctest` passed with:
+    - `testroot_pipeline_smoke`
+    - `fit_rigorous_check`
+    - `plot_rigorous_check`
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+    - `macro_analysis_smoke`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - positive; one optional fixture checker plus a broader shell smoke
+
+## Decisions
+- keep `test.root` optional through a CMake path knob
+- skip event-display fixture coverage because the needed detector-image
+  branches are not part of this fixture
+- keep the fixture smoke on the explicit `nuselection/...` tree paths
+- treat empty `weightsGenieUp` / `weightsGenieDn` vectors as an absent knob
+  lane, not as a malformed populated one
+
+## Remaining hotspots
+- detector-variation and stacked multi-sample paths still need other fixtures;
+  one single-file `test.root` cannot cover them cleanly
+
+## Current milestone
+- status: done
 - subsystem: analyzer-facing macro validation
 - design rule from `DESIGN.md`: keep macros thin and make the persisted
   `EventListIO` and `DistributionIO` debug surfaces directly inspectable

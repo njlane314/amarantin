@@ -529,7 +529,9 @@ namespace
         const bool has_ppfx_cv = chain.GetBranch("ppfx_cv") != nullptr;
         const bool has_rootino_fix = chain.GetBranch("RootinoFix") != nullptr;
         const bool has_run = chain.GetBranch("run") != nullptr;
-        const bool has_subrun = chain.GetBranch("subRun") != nullptr;
+        const char *subrun_branch_name = chain.GetBranch("subRun") ? "subRun" :
+                                         (chain.GetBranch("sub") ? "sub" : nullptr);
+        const bool has_subrun = subrun_branch_name != nullptr;
         const bool has_nu_pdg = chain.GetBranch("nu_pdg") != nullptr;
         const bool has_int_ccnc = chain.GetBranch("int_ccnc") != nullptr;
         const bool has_is_nu_mu_cc = chain.GetBranch("is_nu_mu_cc") != nullptr;
@@ -581,7 +583,7 @@ namespace
         {
             throw std::runtime_error("ana::build_event_list: event tree " + event_tree_name +
                                      " for sample " + sample_context(sample_key, sample) +
-                                     " must expose run and subRun branches");
+                                     " must expose run and subRun/sub branches");
         }
 
         if (has_weight_spline)
@@ -595,7 +597,7 @@ namespace
         if (has_rootino_fix)
             chain.SetBranchAddress("RootinoFix", &rootino_fix);
         chain.SetBranchAddress("run", &run);
-        chain.SetBranchAddress("subRun", &subrun);
+        chain.SetBranchAddress(subrun_branch_name, &subrun);
         if (has_nu_pdg)
             chain.SetBranchAddress("nu_pdg", &nu_pdg);
         if (has_int_ccnc)

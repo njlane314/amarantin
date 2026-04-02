@@ -1,3 +1,67 @@
+set(AMARANTIN_TEST_ROOT_FIXTURE "${CMAKE_SOURCE_DIR}/test.root" CACHE FILEPATH
+  "Optional path to the test.root fixture used by the end-to-end smoke")
+
+if(NOT TARGET mk_sample OR
+   NOT TARGET mk_dataset OR
+   NOT TARGET mk_eventlist OR
+   NOT TARGET mk_dist OR
+   NOT TARGET mk_fit OR
+   NOT TARGET mk_cov OR
+   NOT TARGET IO OR
+   NOT TARGET Ana OR
+   NOT TARGET Plot OR
+   NOT TARGET Syst OR
+   NOT TARGET Fit)
+  message(STATUS
+    "amarantin: skipping test.root fixture smoke; required targets are disabled")
+elseif(NOT EXISTS "${AMARANTIN_TEST_ROOT_FIXTURE}")
+  message(STATUS
+    "amarantin: skipping test.root fixture smoke; missing ${AMARANTIN_TEST_ROOT_FIXTURE}")
+else()
+  add_executable(testroot_pipeline_check testroot_pipeline_check.cc)
+
+  target_link_libraries(testroot_pipeline_check
+    PRIVATE
+      Ana
+      IO
+      Plot
+      amarantin_build_options
+  )
+
+  set_target_properties(testroot_pipeline_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+
+  add_test(NAME testroot_pipeline_smoke
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "AMARANTIN_BUILD_DIR=${CMAKE_BINARY_DIR}"
+      bash "${CMAKE_SOURCE_DIR}/tools/test-root-smoke.sh"
+      "${CMAKE_BINARY_DIR}"
+      "${AMARANTIN_TEST_ROOT_FIXTURE}"
+  )
+
+  set_tests_properties(testroot_pipeline_smoke PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      mk_sample
+      mk_dataset
+      mk_eventlist
+      mk_dist
+      mk_fit
+      mk_cov
+      IO
+      Ana
+      Plot
+      Syst
+      Fit
+      testroot_pipeline_check
+    )
+  endif()
+endif()
+
 if(TARGET Fit)
   add_executable(fit_rigorous_check fit_rigorous_check.cc)
 

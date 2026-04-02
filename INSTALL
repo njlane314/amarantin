@@ -211,6 +211,22 @@ A simple smoke test is:
 
   build/bin/mk_sample --help
 
+A broader post-build check run from `build/` is:
+
+  ctest --output-on-failure
+
+From the repo root:
+
+  cmake --build build --target check
+
+If `test.root` exists in the source tree when CMake configures the build, or
+if configuration sets
+`-DAMARANTIN_TEST_ROOT_FIXTURE=/path/to/test.root`, that check run also
+exercises the
+`mk_sample -> mk_dataset -> mk_eventlist -> mk_dist -> mk_fit -> mk_cov`
+fixture pipeline, plus `Snapshot`, row-wise plotting, one `EfficiencyPlot`
+render, and the analyzer inspection macros on those real outputs.
+
 A focused stacked-export smoke, once the ROOT build is available, is:
 
   tools/systematics-sbnfit-export-smoke.sh
