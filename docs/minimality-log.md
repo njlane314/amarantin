@@ -2,6 +2,56 @@
 
 ## Current milestone
 - status: done
+- subsystem: rigorous `syst/` validation and assumption hardening
+- design rule from `DESIGN.md`: make the data flow easier to trust without
+  adding wrapper ceremony
+
+## What changed
+- restored the root `BUILD_TESTING` / `check` wiring so committed tests are
+  actually configured by CMake
+- added one self-contained `systematics_rigorous_check` executable under
+  `tests/`
+- hardened `syst::detail::compute_sample(...)` so missing `__w__` and changing
+  universe counts fail explicitly
+- made detector work in `syst/Systematics.cc` obey `enable_detector`
+
+## Why this is simpler
+- the main `syst/` assumptions now fail at the boundary where they matter,
+  instead of producing silent nonsense
+- one deterministic test covers the core detector/reweight math directly,
+  without needing a larger fixture harness
+- the detector option surface now matches runtime behavior
+
+## Verification
+- configure/build commands:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/docker-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/docker-rigorous --parallel && ctest --test-dir .build/docker-rigorous --output-on-failure'`
+- target-only commands:
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/ReweightFill.cc syst/Systematics.cc tests/CMakeLists.txt tests/systematics_rigorous_check.cc`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed
+  - Docker `ctest` passed with:
+    - `systematics_rigorous_check`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - positive; one new deterministic regression test plus small fail-fast guards
+
+## Decisions
+- keep the new regression test synthetic and self-contained
+- reject malformed selected-tree/systematic payloads explicitly
+
+## Remaining hotspots
+- eigenmode-compression specifics and legacy sigma-only cache compatibility are
+  still covered only indirectly
+
+## Current milestone
+- status: done
 - subsystem: dead systematics surface cleanup
 - design rule from `DESIGN.md`: delete obsolete options and unread payload
   fields once they stop paying for their complexity

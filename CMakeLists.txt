@@ -21,6 +21,8 @@ endif()
 
 option(AMARANTIN_BUILD_APP "Build the CLI applications" ON)
 
+include(CTest)
+
 find_package(SQLite3 REQUIRED)
 
 add_library(amarantin_root_deps INTERFACE)
@@ -120,6 +122,16 @@ add_subdirectory(plot)
 add_subdirectory(fit)
 if(AMARANTIN_BUILD_APP)
   add_subdirectory(app)
+endif()
+if(BUILD_TESTING)
+  if(NOT TARGET check)
+    add_custom_target(check
+      COMMAND "${CMAKE_CTEST_COMMAND}" --output-on-failure
+      WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+      USES_TERMINAL
+    )
+  endif()
+  add_subdirectory(tests)
 endif()
 
 configure_package_config_file(

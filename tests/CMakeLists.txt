@@ -1,0 +1,25 @@
+if(TARGET Syst)
+  add_executable(systematics_rigorous_check systematics_rigorous_check.cc)
+
+  target_link_libraries(systematics_rigorous_check
+    PRIVATE
+      IO
+      Syst
+      amarantin_build_options
+  )
+
+  set_target_properties(systematics_rigorous_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+
+  add_test(NAME systematics_rigorous_check
+    COMMAND "${CMAKE_BINARY_DIR}/bin/systematics_rigorous_check"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      Syst
+      systematics_rigorous_check
+    )
+  endif()
+endif()

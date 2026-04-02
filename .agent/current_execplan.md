@@ -1,5 +1,99 @@
 # ExecPlan
 
+## ExecPlan Addendum: Rigorous Systematics Validation
+
+### 1. Objective
+Harden the live `syst/` calculation path against malformed selected trees and
+add one self-contained regression test that checks the detector, reweighting,
+rebinning, and total-envelope math directly.
+
+### 2. Constraints
+- Keep the pass local to `syst/` plus one new `tests/` entrypoint.
+- Do not depend on the broader uncommitted local fixture harness.
+- Preserve the current cache format and CLI surface.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+- keep module boundaries sharp
+
+The goal is tighter validation and sharper tests, not a redesign of the
+systematics API.
+
+### 4. System map
+- `CMakeLists.txt`
+- `syst/ReweightFill.cc`
+- `syst/Systematics.cc`
+- `tests/CMakeLists.txt`
+- `tests/systematics_rigorous_check.cc`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### explicit malformed-input rejection
+- reject missing `__w__` on selected trees
+- reject universe-family size changes across entries
+- honour `enable_detector` instead of inferring detector work from a non-empty
+  sample-key list alone
+
+#### calculation-level regression coverage
+- build one synthetic `EventListIO` fixture in-process
+- check detector covariance, PPFX fallback, GENIE knob-pair shifts, exact cache
+  rebinning, and total-envelope quadrature
+- assert the main failure cases explicitly
+
+### 6. Milestones
+
+#### Milestone A: Harden assumptions and add a rigorous `syst/` regression test
+- status: done
+- hypothesis: `syst/` becomes safer and easier to trust when malformed trees
+  fail fast and the core covariance math is covered by one deterministic test
+- files / symbols touched:
+  - root `BUILD_TESTING` / `check` wiring in `CMakeLists.txt`
+  - `syst::detail::compute_sample(...)`
+  - detector gate in `syst::build_cache_entry(...)`
+  - `tests/systematics_rigorous_check.cc`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/ReweightFill.cc syst/Systematics.cc tests/CMakeLists.txt tests/systematics_rigorous_check.cc`
+  - `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/docker-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/docker-rigorous --parallel && ctest --test-dir .build/docker-rigorous --output-on-failure'`
+- acceptance criteria:
+  - malformed selected-tree/systematic payload assumptions fail with explicit
+    errors
+  - one deterministic test covers the main detector and reweighting math paths
+  - the Docker CTest suite is green
+- verification results:
+  - focused `git diff --check` passed
+  - Docker configure/build/ctest passed with the new
+    `systematics_rigorous_check` plus the existing suite green
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed target or public header changes
+  - CTest gains one new internal regression executable
+- reviewer sign-off:
+  - explicit user request in-thread to test systematics rigorously
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- implicit assumptions removed:
+  - selected trees must carry `__w__`
+  - universe-family widths must stay stable across entries
+  - detector work now follows `enable_detector`
+
+### 9. Decision log
+- keep the new test synthetic and self-contained so it can be committed
+  independently of the broader local smoke harness
+- harden the live code path instead of weakening tests around malformed input
+
+### 10. Stop conditions
+- stop after the calculation-level regression test is green in Docker
+- do not expand this pass into a broader `syst/` redesign
+
 ## ExecPlan Addendum: Dead Systematics Surface Cleanup
 
 ### 1. Objective

@@ -111,8 +111,17 @@ namespace
 
         syst::detail::UniverseAccumulator family;
         family.branch_name = branch_name;
-        tree->SetBranchAddress(family.branch_name.c_str(), &family.raw);
         return family;
+    }
+
+    void bind_universe_family(TTree *tree,
+                              syst::detail::UniverseAccumulator &family)
+    {
+        if (!tree || family.branch_name.empty())
+            return;
+
+        family.raw = nullptr;
+        tree->SetBranchAddress(family.branch_name.c_str(), &family.raw);
     }
 
     std::optional<syst::detail::UniverseAccumulator>
@@ -142,9 +151,19 @@ namespace
         paired.up_branch_name = "weightsGenieUp";
         paired.down_branch_name = "weightsGenieDn";
         paired.source_labels = genie_knob_source_labels();
+        return paired;
+    }
+
+    void bind_genie_knob_pairs(TTree *tree,
+                               syst::detail::PairedShiftAccumulator &paired)
+    {
+        if (!tree)
+            return;
+
+        paired.raw_up = nullptr;
+        paired.raw_down = nullptr;
         tree->SetBranchAddress(paired.up_branch_name.c_str(), &paired.raw_up);
         tree->SetBranchAddress(paired.down_branch_name.c_str(), &paired.raw_down);
-        return paired;
     }
 }
 
@@ -166,6 +185,12 @@ namespace syst::detail
         ensure_size(nbins);
         if (n_universes == 0 || !raw)
             return;
+        if (raw->size() != n_universes)
+        {
+            throw std::runtime_error(
+                "syst: universe family " + branch_name +
+                " changed size across entries");
+        }
 
         const std::size_t offset = static_cast<std::size_t>(bin) * n_universes;
         const std::size_t n = std::min(n_universes, raw->size());
@@ -221,6 +246,12 @@ namespace syst::detail
         out.sumw2.assign(static_cast<std::size_t>(spec.nbins), 0.0);
 
         double central_weight = 1.0;
+        if (!tree->GetBranch(kCentralWeightBranch))
+        {
+            throw std::runtime_error(
+                std::string("syst: missing required selected-tree branch ") +
+                kCentralWeightBranch);
+        }
         tree->SetBranchAddress(kCentralWeightBranch, &central_weight);
 
         TTreeFormula observable("systematics_observable", spec.branch_expr.c_str(), tree);
@@ -229,13 +260,29 @@ namespace syst::detail
             selection.reset(new TTreeFormula("systematics_selection", spec.selection_expr.c_str(), tree));
 
         if (options.enable_genie_knobs)
+        {
             out.genie_knobs = make_genie_knob_pairs(tree);
+            if (out.genie_knobs)
+                bind_genie_knob_pairs(tree, *out.genie_knobs);
+        }
         if (options.enable_genie)
+        {
             out.genie = make_universe_family(tree, "weightsGenie");
+            if (out.genie)
+                bind_universe_family(tree, *out.genie);
+        }
         if (options.enable_flux)
+        {
             out.flux = make_flux_family(tree);
+            if (out.flux)
+                bind_universe_family(tree, *out.flux);
+        }
         if (options.enable_reint)
+        {
             out.reint = make_universe_family(tree, "weightsReint");
+            if (out.reint)
+                bind_universe_family(tree, *out.reint);
+        }
 
         const Long64_t n_entries = tree->GetEntries();
         for (Long64_t entry = 0; entry < n_entries; ++entry)

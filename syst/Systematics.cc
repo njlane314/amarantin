@@ -224,7 +224,7 @@ namespace
         syst::Envelope genie_knob_envelope;
 
         std::vector<std::vector<double>> detector_histograms;
-        if (!options.detector_sample_keys.empty())
+        if (options.enable_detector && !options.detector_sample_keys.empty())
         {
             const std::vector<syst::detail::DetectorSourceMatch> detector_sources =
                 syst::detail::resolve_detector_source_matches(eventlist,
