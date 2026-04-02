@@ -32,12 +32,13 @@ Use s:<text> when a string value would otherwise look numeric.
 
 Examples:
   tools/run-macro print_eventlist build/eventlists/run1.root
+  tools/run-macro inspect_weights build/eventlists/run1.root
   tools/run-macro plot_topological_score build/eventlists/run1.root beam-s0
   tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector
   tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector 512 512
   tools/run-macro mk_snapshot build/eventlists/run1.root train.root reco_neutrino_vertex_x,__w__
-  tools/run-macro fit_channel output.channels.root muon_region signal
-  tools/run-macro scan_mu output.channels.root muon_region signal
+  tools/run-macro inspect_dist output.dists.root beam-s0
+  tools/run-macro inspect_systematics output.dists.root beam-s0 muon_region
 
 Available names are discovered from:
   io/macro

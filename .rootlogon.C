@@ -81,7 +81,6 @@
 
         #include "SampleIO.hh"
         #include "SampleDef.hh"
-        #include "ChannelIO.hh"
         #include "DatasetIO.hh"
         #include "DistributionIO.hh"
         #include "EventListIO.hh"

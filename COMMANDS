@@ -295,9 +295,11 @@ Notes:
 Macro runner
 ------------
 Run one ROOT macro through the common wrapper
+  bash tools/run-macro inspect_weights build/eventlists/run1.root
   bash tools/run-macro plot_event_display build/eventlists/run1.root beam-s0 0 U detector
   bash tools/run-macro plot_efficiency build/eventlists/run1.root topological_score "selected != 0" "__pass_muon__" 50 0 1 beam-s0
   bash tools/run-macro inspect_dist output.dists.root beam-s0
+  bash tools/run-macro inspect_systematics output.dists.root beam-s0 muon_region
 
 Notes
 -----

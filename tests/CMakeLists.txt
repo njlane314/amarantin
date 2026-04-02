@@ -100,3 +100,25 @@ if(TARGET Syst)
     )
   endif()
 endif()
+
+if(TARGET IO AND TARGET Ana AND TARGET Plot AND TARGET Syst AND TARGET Fit)
+  add_test(NAME macro_analysis_smoke
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "AMARANTIN_BUILD_DIR=${CMAKE_BINARY_DIR}"
+      bash "${CMAKE_SOURCE_DIR}/tools/macro-analysis-smoke.sh"
+  )
+
+  set_tests_properties(macro_analysis_smoke PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      IO
+      Ana
+      Plot
+      Syst
+      Fit
+    )
+  endif()
+endif()

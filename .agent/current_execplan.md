@@ -1,5 +1,117 @@
 # ExecPlan
 
+## ExecPlan Addendum: Analyzer Macro Validation
+
+### 1. Objective
+Add a small set of analyzer-facing ROOT macros that inspect the row-wise
+weight surface and cached systematics payloads directly, then verify those
+macros end to end through `tools/run-macro`.
+
+### 2. Constraints
+- Keep macros thin and read-only.
+- Do not turn local macros into a second workflow framework.
+- Keep the pass local to macro files, the macro runner path, and one smoke
+  test entrypoint.
+
+### 3. Design anchor
+From `DESIGN.md` and `VISION.md`:
+- libraries provide reusable pieces; applications and macros orchestrate those
+- `EventListIO` is the row-wise debug / inspection surface
+- `DistributionIO` is the fine-bin cache surface
+- thin macros may wrap inspection paths, but they should stay small
+
+The goal is analyzer-facing inspection helpers with deterministic verification,
+not a new downstream plotting framework.
+
+### 4. System map
+- `.rootlogon.C`
+- `io/macro/inspect_weights.C`
+- `plot/macro/inspect_systematics.C`
+- `tools/run-macro`
+- `tools/macro-analysis-smoke.sh`
+- `tests/CMakeLists.txt`
+- `COMMANDS`
+- `USAGE`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### analyzer-facing inspection macros
+- add one macro that summarises persisted event weights per `EventListIO`
+  sample
+- add one macro that summarises detector, knob, and family payloads on one
+  cached `DistributionIO::Spectrum`
+
+#### macro-runner path cleanup
+- remove stale `.rootlogon.C` includes that break the ROOT macro path
+- replace deleted fit-macro examples in `tools/run-macro` and `COMMANDS`
+
+#### deterministic macro verification
+- build a tiny synthetic event-list and cache fixture
+- run the new macros through `tools/run-macro`
+- assert the printed summaries directly in one smoke test
+
+### 6. Milestones
+
+#### Milestone A: Add analyzer inspection macros and verify the macro runner path
+- status: done
+- hypothesis: a small read-only macro layer is worth keeping when it exposes
+  the persisted weight and systematics surfaces directly and is exercised
+  through the real ROOT runner path
+- files / symbols touched:
+  - `.rootlogon.C`
+  - `inspect_weights(...)`
+  - `inspect_systematics(...)`
+  - `tools/macro-analysis-smoke.sh`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md .rootlogon.C io/macro/inspect_weights.C plot/macro/inspect_systematics.C tools/run-macro tools/macro-analysis-smoke.sh tests/CMakeLists.txt COMMANDS USAGE`
+  - `bash -n tools/run-macro`
+  - `bash -n tools/macro-analysis-smoke.sh`
+  - `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/macro-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/macro-rigorous --parallel && ctest --test-dir .build/macro-rigorous --output-on-failure'`
+- acceptance criteria:
+  - analyzer-facing macros exist for weight-surface and systematics-payload
+    inspection
+  - `tools/run-macro` examples point at real macros
+  - the ROOT macro path no longer depends on deleted headers
+  - the macro smoke is green in Docker
+- verification results:
+  - focused `git diff --check` passed
+  - `bash -n tools/run-macro` passed
+  - `bash -n tools/macro-analysis-smoke.sh` passed
+  - Docker configure/build/ctest passed with:
+    - `fit_rigorous_check`
+    - `plot_rigorous_check`
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+    - `macro_analysis_smoke`
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed target or public header changes
+  - CTest gains one shell-driven macro smoke
+- reviewer sign-off:
+  - explicit user request in-thread to write analyzer-facing macros and test
+    them
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- implicit assumptions targeted:
+  - the ROOT macro path should not depend on deleted headers
+  - analyzer inspection of `__w_norm__`, `__w_cv__`, `__w__`, and cached
+    systematics should not require hand-written ROOT sessions
+
+### 9. Decision log
+- keep the new macros read-only and debug-oriented
+- avoid inventing a final-region semantic plot macro surface in this pass
+
+### 10. Stop conditions
+- stop after the macro smoke is green in Docker
+- do not broaden this pass into a macro-framework redesign
+
 ## ExecPlan Addendum: Rigorous Fit Validation
 
 ### 1. Objective

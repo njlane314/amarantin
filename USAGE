@@ -701,6 +701,23 @@ This keeps `DistributionIO` as the normal persisted cache surface and writes a
 plain-text fit summary as the final downstream product without a separate
 persistent channel step.
 
+Typical debug macro workflow
+----------------------------
+
+After an `EventListIO` or `DistributionIO` file exists, use the common macro
+wrapper for quick inspection:
+
+    bash tools/run-macro inspect_weights build/eventlists/run1-numi-fhc.root
+    bash tools/run-macro inspect_dist build/dists/run1-numi-fhc.root beam-s0
+    bash tools/run-macro inspect_systematics build/dists/run1-numi-fhc.root beam-s0 muon_region
+
+`inspect_weights` summarises the persisted `__w_norm__`, `__w_cv__`, `__w__`,
+and `__w2__` branches per sample so weight-surface problems are visible
+without hand-writing a ROOT session.
+
+`inspect_systematics` summarises the cached detector, GENIE knob, and
+multisim-family payloads on one `DistributionIO::Spectrum`.
+
 How the stamp files work
 ------------------------
 

@@ -2,6 +2,68 @@
 
 ## Current milestone
 - status: done
+- subsystem: analyzer-facing macro validation
+- design rule from `DESIGN.md`: keep macros thin and make the persisted
+  `EventListIO` and `DistributionIO` debug surfaces directly inspectable
+
+## What changed
+- added a read-only `inspect_weights` macro over the persisted event-weight
+  surface
+- added a read-only `inspect_systematics` macro over one cached spectrum's
+  detector / knob / family payloads
+- started a shell-driven macro smoke that runs both through `tools/run-macro`
+- removed a stale deleted-header include from `.rootlogon.C`
+- replaced stale deleted fit-macro examples in the macro-runner docs
+
+## Why this is simpler
+- analyzer debug sessions can inspect the main persisted weight and
+  systematics surfaces without retyping ROOT snippets by hand
+- the shared macro path is easier to trust when it no longer depends on a
+  deleted header
+- one smoke now exercises the real ROOT macro runner path end to end
+
+## Verification
+- configure/build commands:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B .build/macro-rigorous -DCMAKE_BUILD_TYPE=Release && cmake --build .build/macro-rigorous --parallel && ctest --test-dir .build/macro-rigorous --output-on-failure'`
+- target-only commands:
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md .rootlogon.C io/macro/inspect_weights.C plot/macro/inspect_systematics.C tools/run-macro tools/macro-analysis-smoke.sh tests/CMakeLists.txt COMMANDS USAGE`
+-  `bash -n tools/run-macro`
+-  `bash -n tools/macro-analysis-smoke.sh`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed
+  - `bash -n tools/run-macro` passed
+  - `bash -n tools/macro-analysis-smoke.sh` passed
+  - Docker `ctest` passed with:
+    - `fit_rigorous_check`
+    - `plot_rigorous_check`
+    - `io_rigorous_check`
+    - `systematics_rigorous_check`
+    - `macro_analysis_smoke`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - positive; two thin macros plus one shell smoke and small runner/doc
+    cleanup
+
+## Decisions
+- keep the new macros read-only and inspection-oriented
+- defer any semantic final-region plotting macro surface until the repo has a
+  cleaner downstream query API
+
+## Remaining hotspots
+- the macro surface is still local convenience code; it should not grow into a
+  second application workflow
+- final-region analyzer macros still need a cleaner semantic query API before
+  they can avoid raw sample/cache choices cleanly
+
+## Current milestone
+- status: done
 - subsystem: rigorous `fit/` validation and boundary hardening
 - design rule from `DESIGN.md`: keep the fit surface plain and make malformed
   channel/cache inputs fail where prediction and fitting begin
