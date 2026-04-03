@@ -50,6 +50,12 @@ namespace
         return (value > 0.0) ? value : -value;
     }
 
+    bool has_partial_envelope(const std::vector<double> &down,
+                              const std::vector<double> &up)
+    {
+        return down.empty() != up.empty();
+    }
+
     bool has_detector_templates(const fit::Process &process)
     {
         return process.detector_template_count > 0 &&
@@ -220,14 +226,33 @@ namespace
                          int nbins,
                          const std::string &label)
     {
+        const bool have_payload = !family.sigma.empty() ||
+                                  family.eigen_rank > 0 ||
+                                  !family.eigenmodes.empty();
+
+        if (have_payload && family.branch_name.empty())
+            throw std::runtime_error("fit: " + label + " branch_name is required when fit payload is present");
+
         if (!family.sigma.empty() &&
             static_cast<int>(family.sigma.size()) != nbins)
         {
             throw std::runtime_error("fit: " + label + " sigma size does not match channel bin count");
         }
 
+        if (!family.covariance.empty() &&
+            static_cast<int>(family.covariance.size()) != nbins * nbins)
+        {
+            throw std::runtime_error("fit: " + label + " covariance size does not match channel bin count");
+        }
+
         if (family.eigen_rank < 0)
             throw std::runtime_error("fit: " + label + " eigen_rank must not be negative");
+
+        if (!family.eigenvalues.empty() &&
+            static_cast<int>(family.eigenvalues.size()) != family.eigen_rank)
+        {
+            throw std::runtime_error("fit: " + label + " eigenvalue count does not match eigen_rank");
+        }
 
         if (!family.eigenmodes.empty())
         {
@@ -275,12 +300,23 @@ namespace
                     throw std::runtime_error("fit: observed data bins must be finite and non-negative");
             }
 
+            std::vector<std::string> seen_non_data_process_names;
+
             for (const auto &process : channel.processes)
             {
                 if (process.name.empty())
                     throw std::runtime_error("fit: process name must not be empty");
                 if (process.kind == fit::ProcessKind::kData)
                     throw std::runtime_error("fit: data rows must not be stored as fit processes");
+                if (std::find(seen_non_data_process_names.begin(),
+                              seen_non_data_process_names.end(),
+                              process.name) != seen_non_data_process_names.end())
+                {
+                    throw std::runtime_error("fit: duplicate non-data process name in channel " +
+                                             channel.spec.channel_key + ": " +
+                                             process.name);
+                }
+                seen_non_data_process_names.push_back(process.name);
                 if (static_cast<int>(process.nominal.size()) != channel.spec.nbins)
                     throw std::runtime_error("fit: process nominal size does not match channel bin count");
                 if (!process.sumw2.empty() &&
@@ -288,6 +324,12 @@ namespace
                 {
                     throw std::runtime_error("fit: process sumw2 size does not match channel bin count");
                 }
+                if (process.detector_source_count < 0)
+                    throw std::runtime_error("fit: detector_source_count must not be negative");
+                if (process.genie_knob_source_count < 0)
+                    throw std::runtime_error("fit: genie_knob_source_count must not be negative");
+                if (process.detector_template_count < 0)
+                    throw std::runtime_error("fit: detector_template_count must not be negative");
                 if (!process.detector_shift_vectors.empty())
                 {
                     const std::size_t expected =
@@ -318,12 +360,16 @@ namespace
                         throw std::runtime_error("fit: detector template payload is truncated");
                     }
                 }
+                if (has_partial_envelope(process.detector_down, process.detector_up))
+                    throw std::runtime_error("fit: detector envelope is incomplete");
                 if ((!process.detector_down.empty() || !process.detector_up.empty()) &&
                     (static_cast<int>(process.detector_down.size()) != channel.spec.nbins ||
                      static_cast<int>(process.detector_up.size()) != channel.spec.nbins))
                 {
                     throw std::runtime_error("fit: detector envelope size does not match channel bin count");
                 }
+                if (has_partial_envelope(process.total_down, process.total_up))
+                    throw std::runtime_error("fit: total envelope is incomplete");
                 if ((!process.total_down.empty() || !process.total_up.empty()) &&
                     (static_cast<int>(process.total_down.size()) != channel.spec.nbins ||
                      static_cast<int>(process.total_up.size()) != channel.spec.nbins))

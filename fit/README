@@ -28,17 +28,13 @@ Typical workflow:
     build/dists/final.dists.root \
     numu_signal_region
 
-Manifest rows are:
+Single-channel manifest rows are:
 
   process-name kind sample-key [cache-key]
 
 Rows with kind `data` fill the observed bins automatically. Without manifest
 data rows, pass `--data-bins` or use `--allow-zero-data` when an empty
 observation is intentional.
-
-Single-channel manifest rows are:
-
-  process-name kind sample-key [cache-key]
 
 Combined SR/CR-style manifests use one explicit fit-channel token per row:
 
@@ -50,6 +46,8 @@ the intended one.
 For programmatic use, `app/mk_fit.cc` remains the reference path behind the
 `mk_fit` CLI for turning cached `DistributionIO::Spectrum` payloads into one or
 more `fit::Channel` objects.
+
+The fit library expects one unique non-data process name per channel.
 
 A `fit::Problem` now describes one HistFactory measurement:
   - each `fit::Channel` becomes one HistFactory channel
