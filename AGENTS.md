@@ -2,13 +2,18 @@
 
 ## Read first
 Before editing, read these files in this order:
-1. `DESIGN.md`
-2. `COMMANDS`
-3. `INSTALL`
-4. `USAGE`
-5. `CMakeLists.txt` and the relevant subdirectory `CMakeLists.txt`
+1. `.agent/analysis/ccnumu_hyperon.md`
+2. `DESIGN.md`
+3. `COMMANDS`
+4. `INSTALL`
+5. `USAGE`
+6. `CMakeLists.txt` and the relevant subdirectory `CMakeLists.txt`
 
-`DESIGN.md` is the source of truth for style and architecture.
+`.agent/analysis/ccnumu_hyperon.md` is the working analysis-memory document for
+this repo. `DESIGN.md` remains the source of truth for style and architecture.
+
+Update `.agent/analysis/ccnumu_hyperon.md` whenever the analysis-facing sample
+rules, fit structure, or training-snapshot requirements change.
 
 ## Repository map
 - `io/`

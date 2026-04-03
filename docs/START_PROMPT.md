@@ -1,4 +1,9 @@
-Read `DESIGN.md`, `COMMANDS`, `INSTALL`, `USAGE`, the root `CMakeLists.txt`, and the relevant subdirectory `CMakeLists.txt` files before editing.
+Read `.agent/analysis/ccnumu_hyperon.md`, `DESIGN.md`, `COMMANDS`, `INSTALL`,
+`USAGE`, the root `CMakeLists.txt`, and the relevant subdirectory
+`CMakeLists.txt` files before editing.
+
+Use `.agent/analysis/ccnumu_hyperon.md` for analysis-specific working context.
+`DESIGN.md` remains authoritative for architecture and coding style.
 
 Goal:
 Make `amarantin` materially smaller, flatter, more direct, and easier to grep, while preserving behavior and public installed surfaces by default.
