@@ -26,10 +26,23 @@ include(CTest)
 find_package(SQLite3 REQUIRED)
 
 add_library(amarantin_root_deps INTERFACE)
+add_library(amarantin_root_fit_deps INTERFACE)
+target_link_libraries(amarantin_root_fit_deps INTERFACE amarantin_root_deps)
 
 find_program(ROOT_CONFIG_EXECUTABLE NAMES root-config)
 if(ROOT_DIR)
-  find_package(ROOT REQUIRED CONFIG COMPONENTS Core RIO Tree Hist MathCore Minuit2)
+  find_package(ROOT REQUIRED CONFIG COMPONENTS
+    Core
+    RIO
+    Tree
+    Hist
+    MathCore
+    Minuit2
+    RooFitCore
+    RooFit
+    RooStats
+    HistFactory
+  )
   target_link_libraries(amarantin_root_deps INTERFACE
     ROOT::Core
     ROOT::RIO
@@ -37,6 +50,12 @@ if(ROOT_DIR)
     ROOT::Hist
     ROOT::MathCore
     ROOT::Minuit2
+  )
+  target_link_libraries(amarantin_root_fit_deps INTERFACE
+    ROOT::RooFitCore
+    ROOT::RooFit
+    ROOT::RooStats
+    ROOT::HistFactory
   )
 elseif(ROOT_CONFIG_EXECUTABLE)
   execute_process(
@@ -63,10 +82,12 @@ elseif(ROOT_CONFIG_EXECUTABLE)
   separate_arguments(ROOT_CFLAGS NATIVE_COMMAND "${ROOT_CFLAGS_RAW}")
   separate_arguments(ROOT_LIBS NATIVE_COMMAND "${ROOT_LIBS_RAW}")
   list(APPEND ROOT_LIBS MathCore Minuit2)
+  set(ROOT_FIT_LIBS RooFitCore RooFit RooStats HistFactory)
 
   target_include_directories(amarantin_root_deps INTERFACE "${ROOT_INCLUDEDIR}")
   target_compile_options(amarantin_root_deps INTERFACE ${ROOT_CFLAGS})
   target_link_libraries(amarantin_root_deps INTERFACE ${ROOT_LIBS})
+  target_link_libraries(amarantin_root_fit_deps INTERFACE ${ROOT_FIT_LIBS})
 else()
   message(FATAL_ERROR
     "ROOT not found. Source your ROOT environment, set ROOT_DIR, "

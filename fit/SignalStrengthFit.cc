@@ -1,171 +1,53 @@
 #include "SignalStrengthFit.hh"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <limits>
-#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "Math/Factory.h"
-#include "Math/Functor.h"
-#include "Math/Minimizer.h"
+#include "RooAbsData.h"
+#include "RooAbsPdf.h"
+#include "RooAbsReal.h"
+#include "RooArgList.h"
+#include "RooArgSet.h"
+#include "RooDataSet.h"
+#include "RooFit.h"
+#include "RooFitResult.h"
+#include "RooMinimizer.h"
+#include "RooRealVar.h"
+#include "RooStats/HistFactory/HistFactoryNavigation.h"
+#include "RooStats/HistFactory/MakeModelAndMeasurementsFast.h"
+#include "RooStats/ModelConfig.h"
+#include "TH1D.h"
+#include "TIterator.h"
+#include "TMatrixDSym.h"
 
 namespace
 {
-    constexpr double kYieldFloor = 1e-9;
-    constexpr double kDefaultStep = 0.1;
-    constexpr int kCrossingBisectionIterations = 48;
+    constexpr double kTemplateFloor = 1e-9;
+    constexpr double kShiftTolerance = 1e-12;
 
-    struct ProfilePoint
+    struct VarState
     {
-        bool converged = false;
-        int minimizer_status = -1;
-        double edm = 0.0;
-        double mu = 1.0;
-        double objective = std::numeric_limits<double>::infinity();
-        std::vector<double> nuisance_values;
-        std::vector<std::string> parameter_names;
-        std::vector<double> parameter_values;
-        std::vector<double> covariance;
+        RooRealVar *var = nullptr;
+        double value = 0.0;
+        bool constant = false;
     };
 
-    struct IntervalEstimate
+    double positive_error_lo(double value)
     {
-        double error = std::numeric_limits<double>::quiet_NaN();
-        bool found = false;
-    };
-
-    double clamp_value(double value, double lower, double upper)
-    {
-        return std::max(lower, std::min(value, upper));
+        return (value < 0.0) ? -value : value;
     }
 
-    bool has_partial_envelope(const std::vector<double> &down,
-                              const std::vector<double> &up)
+    double positive_error_hi(double value)
     {
-        return down.empty() != up.empty();
-    }
-
-    bool family_has_fit_payload(const DistributionIO::UniverseFamily &family)
-    {
-        return !family.sigma.empty() ||
-               family.eigen_rank > 0 ||
-               !family.eigenmodes.empty();
-    }
-
-    void validate_family_payload(const DistributionIO::UniverseFamily &family,
-                                 std::size_t nbins,
-                                 const char *label)
-    {
-        if (!family_has_fit_payload(family))
-            return;
-
-        if (family.branch_name.empty())
-        {
-            throw std::runtime_error(std::string("fit::validate_problem: ") +
-                                     label +
-                                     " family branch_name is required when fit payload is present");
-        }
-        if (family.eigen_rank < 0)
-        {
-            throw std::runtime_error(std::string("fit::validate_problem: ") +
-                                     label +
-                                     " family eigen_rank must not be negative");
-        }
-        if (!family.sigma.empty() && family.sigma.size() != nbins)
-        {
-            throw std::runtime_error(std::string("fit::validate_problem: ") +
-                                     label +
-                                     " family sigma size does not match nbins");
-        }
-        if (!family.covariance.empty() &&
-            family.covariance.size() != nbins * nbins)
-        {
-            throw std::runtime_error(std::string("fit::validate_problem: ") +
-                                     label +
-                                     " family covariance size does not match nbins");
-        }
-        if (!family.eigenvalues.empty() &&
-            family.eigenvalues.size() != static_cast<std::size_t>(family.eigen_rank))
-        {
-            throw std::runtime_error(std::string("fit::validate_problem: ") +
-                                     label +
-                                     " family eigenvalue count does not match eigen_rank");
-        }
-        if (family.eigen_rank == 0 && !family.eigenmodes.empty())
-        {
-            throw std::runtime_error(std::string("fit::validate_problem: ") +
-                                     label +
-                                     " family eigenmodes require a positive eigen_rank");
-        }
-        if (family.eigen_rank > 0 &&
-            family.eigenmodes.size() != nbins * static_cast<std::size_t>(family.eigen_rank))
-        {
-            throw std::runtime_error(std::string("fit::validate_problem: ") +
-                                     label +
-                                     " family eigenmodes size does not match nbins * eigen_rank");
-        }
-    }
-
-    const DistributionIO::UniverseFamily &family_for(const fit::Process &process,
-                                                     fit::SourceKind source)
-    {
-        switch (source)
-        {
-            case fit::SourceKind::kGenieMode:
-                return process.genie;
-            case fit::SourceKind::kFluxMode:
-                return process.flux;
-            case fit::SourceKind::kReintMode:
-                return process.reint;
-            default:
-                break;
-        }
-        throw std::runtime_error("fit::family_for: source is not a family mode");
-    }
-
-    int family_mode_count(const DistributionIO::UniverseFamily &family)
-    {
-        if (family.eigen_rank > 0 && !family.eigenmodes.empty())
-            return family.eigen_rank;
-        if (!family.sigma.empty())
-            return 1;
-        return 0;
-    }
-
-    double family_mode_value(const DistributionIO::UniverseFamily &family,
-                             int mode_index,
-                             int bin)
-    {
-        if (mode_index < 0)
-            throw std::runtime_error("fit::family_mode_value: mode_index must not be negative");
-
-        if (family.eigen_rank > 0 && !family.eigenmodes.empty())
-        {
-            if (mode_index >= family.eigen_rank)
-                throw std::runtime_error("fit::family_mode_value: mode_index out of range");
-            const std::size_t index =
-                static_cast<std::size_t>(bin * family.eigen_rank + mode_index);
-            if (index >= family.eigenmodes.size())
-                throw std::runtime_error("fit::family_mode_value: eigenmode payload is truncated");
-            return family.eigenmodes[index];
-        }
-
-        if (!family.sigma.empty())
-        {
-            if (mode_index != 0)
-                throw std::runtime_error("fit::family_mode_value: sigma-only family exposes only one mode");
-            if (static_cast<std::size_t>(bin) >= family.sigma.size())
-                throw std::runtime_error("fit::family_mode_value: sigma payload is truncated");
-            return family.sigma[static_cast<std::size_t>(bin)];
-        }
-
-        throw std::runtime_error("fit::family_mode_value: family has no usable fit payload");
+        return (value > 0.0) ? value : -value;
     }
 
     bool has_detector_templates(const fit::Process &process)
@@ -186,54 +68,6 @@ namespace
                !process.genie_knob_shift_vectors.empty();
     }
 
-    double detector_template_value(const fit::Process &process,
-                                   int template_index,
-                                   int bin)
-    {
-        if (!has_detector_templates(process))
-            throw std::runtime_error("fit::detector_template_value: process has no detector templates");
-        if (template_index < 0 || template_index >= process.detector_template_count)
-            throw std::runtime_error("fit::detector_template_value: template_index out of range");
-
-        const std::size_t index =
-            static_cast<std::size_t>(template_index * process.nominal.size() + static_cast<std::size_t>(bin));
-        if (index >= process.detector_templates.size())
-            throw std::runtime_error("fit::detector_template_value: detector template payload is truncated");
-        return process.detector_templates[index];
-    }
-
-    double detector_shift_value(const fit::Process &process,
-                                int source_index,
-                                int bin)
-    {
-        if (!has_detector_shift_sources(process))
-            throw std::runtime_error("fit::detector_shift_value: process has no detector shift sources");
-        if (source_index < 0 || source_index >= process.detector_source_count)
-            throw std::runtime_error("fit::detector_shift_value: source_index out of range");
-
-        const std::size_t index =
-            static_cast<std::size_t>(source_index * process.nominal.size() + static_cast<std::size_t>(bin));
-        if (index >= process.detector_shift_vectors.size())
-            throw std::runtime_error("fit::detector_shift_value: detector shift payload is truncated");
-        return process.detector_shift_vectors[index];
-    }
-
-    double genie_knob_shift_value(const fit::Process &process,
-                                  int source_index,
-                                  int bin)
-    {
-        if (!has_genie_knob_shift_sources(process))
-            throw std::runtime_error("fit::genie_knob_shift_value: process has no GENIE knob shift sources");
-        if (source_index < 0 || source_index >= process.genie_knob_source_count)
-            throw std::runtime_error("fit::genie_knob_shift_value: source_index out of range");
-
-        const std::size_t index =
-            static_cast<std::size_t>(source_index * process.nominal.size() + static_cast<std::size_t>(bin));
-        if (index >= process.genie_knob_shift_vectors.size())
-            throw std::runtime_error("fit::genie_knob_shift_value: GENIE knob shift payload is truncated");
-        return process.genie_knob_shift_vectors[index];
-    }
-
     bool has_detector_envelope(const fit::Process &process)
     {
         return !process.detector_down.empty() &&
@@ -246,42 +80,47 @@ namespace
                !process.total_up.empty();
     }
 
-    double envelope_morphed_value(const std::vector<double> &nominal,
-                                  const std::vector<double> &down,
-                                  const std::vector<double> &up,
-                                  int bin,
-                                  double theta)
+    int family_mode_count(const fit::Family &family)
     {
-        const double nominal_value = nominal.at(static_cast<std::size_t>(bin));
-        const double down_value = down.at(static_cast<std::size_t>(bin));
-        const double up_value = up.at(static_cast<std::size_t>(bin));
-
-        // Interpolate the explicit down / nominal / up templates with a smooth
-        // quadratic inside [-1, 1], then continue with linear tails.
-        const double a = 0.5 * (up_value + down_value - 2.0 * nominal_value);
-        const double b = 0.5 * (up_value - down_value);
-        if (theta >= -1.0 && theta <= 1.0)
-            return nominal_value + b * theta + a * theta * theta;
-
-        const double slope_up = b + 2.0 * a;
-        const double slope_down = b - 2.0 * a;
-        if (theta > 1.0)
-            return up_value + (theta - 1.0) * slope_up;
-        return down_value + (theta + 1.0) * slope_down;
+        if (family.eigen_rank > 0 && !family.eigenmodes.empty())
+            return family.eigen_rank;
+        if (!family.sigma.empty())
+            return 1;
+        return 0;
     }
 
-    double envelope_shift(const std::vector<double> &nominal,
-                          const std::vector<double> &down,
-                          const std::vector<double> &up,
-                          int bin,
-                          double theta)
+    double family_mode_value(const fit::Family &family,
+                             int mode_index,
+                             int bin)
     {
-        return envelope_morphed_value(nominal, down, up, bin, theta) -
-               nominal.at(static_cast<std::size_t>(bin));
+        if (mode_index < 0)
+            throw std::runtime_error("fit: mode_index must not be negative");
+
+        if (family.eigen_rank > 0 && !family.eigenmodes.empty())
+        {
+            if (mode_index >= family.eigen_rank)
+                throw std::runtime_error("fit: family mode_index out of range");
+            const std::size_t index =
+                static_cast<std::size_t>(bin * family.eigen_rank + mode_index);
+            if (index >= family.eigenmodes.size())
+                throw std::runtime_error("fit: family eigenmode payload is truncated");
+            return family.eigenmodes[index];
+        }
+
+        if (!family.sigma.empty())
+        {
+            if (mode_index != 0)
+                throw std::runtime_error("fit: sigma-only family exposes only one mode");
+            if (static_cast<std::size_t>(bin) >= family.sigma.size())
+                throw std::runtime_error("fit: family sigma payload is truncated");
+            return family.sigma[static_cast<std::size_t>(bin)];
+        }
+
+        throw std::runtime_error("fit: family has no usable fit payload");
     }
 
     std::string mode_name(const char *label,
-                          const DistributionIO::UniverseFamily &family,
+                          const fit::Family &family,
                           int mode_index)
     {
         std::string name(label);
@@ -351,639 +190,6 @@ namespace
         return name;
     }
 
-    std::vector<double> initial_nuisance_values(const fit::Problem &problem)
-    {
-        std::vector<double> values;
-        values.reserve(problem.nuisances.size());
-        for (const auto &nuisance : problem.nuisances)
-            values.push_back(clamp_value(nuisance.start_value, nuisance.lower, nuisance.upper));
-        return values;
-    }
-
-    void fill_covariance(ROOT::Math::Minimizer &minimizer,
-                         int n_parameters,
-                         std::vector<double> &covariance)
-    {
-        covariance.assign(static_cast<std::size_t>(n_parameters * n_parameters), 0.0);
-        for (int row = 0; row < n_parameters; ++row)
-        {
-            for (int col = 0; col < n_parameters; ++col)
-            {
-                covariance[static_cast<std::size_t>(row * n_parameters + col)] =
-                    minimizer.CovMatrix(static_cast<unsigned int>(row),
-                                        static_cast<unsigned int>(col));
-            }
-        }
-    }
-
-    void validate_problem(const fit::Problem &problem)
-    {
-        if (!problem.channel)
-            throw std::runtime_error("fit::validate_problem: problem.channel must not be null");
-        if (problem.signal_process.empty())
-            throw std::runtime_error("fit::validate_problem: signal_process must not be empty");
-        if (problem.channel->spec.nbins <= 0)
-            throw std::runtime_error("fit::validate_problem: channel spec nbins must be positive");
-        if (!(problem.channel->spec.xmax > problem.channel->spec.xmin))
-        {
-            throw std::runtime_error("fit::validate_problem: channel spec range is invalid");
-        }
-        if (problem.mu_upper < problem.mu_lower)
-            throw std::runtime_error("fit::validate_problem: mu bounds are inverted");
-        if (problem.channel->data.size() != static_cast<std::size_t>(problem.channel->spec.nbins))
-            throw std::runtime_error("fit::validate_problem: channel data size does not match nbins");
-        const fit::Process *signal_process = problem.channel->find_process(problem.signal_process);
-        if (!signal_process)
-            throw std::runtime_error("fit::validate_problem: signal process is not present in the channel");
-        if (signal_process->kind != fit::ProcessKind::kSignal)
-        {
-            throw std::runtime_error(
-                "fit::validate_problem: signal process must refer to a signal-kind process");
-        }
-
-        std::vector<std::string> seen_non_data_process_names;
-
-        for (const auto &process : problem.channel->processes)
-        {
-            if (process.kind == fit::ProcessKind::kData)
-                continue;
-
-            if (std::find(seen_non_data_process_names.begin(),
-                          seen_non_data_process_names.end(),
-                          process.name) != seen_non_data_process_names.end())
-            {
-                throw std::runtime_error("fit::validate_problem: duplicate non-data process name: " +
-                                         process.name);
-            }
-            seen_non_data_process_names.push_back(process.name);
-
-            const std::size_t nbins = static_cast<std::size_t>(problem.channel->spec.nbins);
-            if (process.nominal.size() != nbins)
-                throw std::runtime_error("fit::validate_problem: process nominal size does not match nbins");
-            if (!process.sumw2.empty() && process.sumw2.size() != nbins)
-                throw std::runtime_error("fit::validate_problem: process sumw2 size does not match nbins");
-            if (process.detector_source_count < 0)
-                throw std::runtime_error("fit::validate_problem: detector_source_count must not be negative");
-            if (process.genie_knob_source_count < 0)
-                throw std::runtime_error("fit::validate_problem: genie_knob_source_count must not be negative");
-            if (process.detector_template_count < 0)
-                throw std::runtime_error("fit::validate_problem: detector_template_count must not be negative");
-            if (has_partial_envelope(process.detector_down, process.detector_up))
-            {
-                throw std::runtime_error("fit::validate_problem: detector envelope is incomplete");
-            }
-            if (has_detector_envelope(process) &&
-                (process.detector_down.size() != nbins || process.detector_up.size() != nbins))
-            {
-                throw std::runtime_error("fit::validate_problem: detector envelope size does not match nbins");
-            }
-            if (has_partial_envelope(process.total_down, process.total_up))
-            {
-                throw std::runtime_error("fit::validate_problem: total envelope is incomplete");
-            }
-            if (has_total_envelope(process) &&
-                (process.total_down.size() != nbins || process.total_up.size() != nbins))
-            {
-                throw std::runtime_error("fit::validate_problem: total envelope size does not match nbins");
-            }
-            if (has_detector_templates(process))
-            {
-                const std::size_t expected =
-                    static_cast<std::size_t>(process.detector_template_count) * nbins;
-                if (process.detector_templates.size() != expected)
-                    throw std::runtime_error("fit::validate_problem: detector template payload is truncated");
-            }
-            if (has_detector_shift_sources(process))
-            {
-                const std::size_t expected =
-                    static_cast<std::size_t>(process.detector_source_count) * nbins;
-                if (process.detector_shift_vectors.size() != expected)
-                    throw std::runtime_error("fit::validate_problem: detector shift payload is truncated");
-            }
-            if (has_genie_knob_shift_sources(process))
-            {
-                const std::size_t expected =
-                    static_cast<std::size_t>(process.genie_knob_source_count) * nbins;
-                if (process.genie_knob_shift_vectors.size() != expected)
-                    throw std::runtime_error("fit::validate_problem: GENIE knob shift payload is truncated");
-            }
-            if (has_detector_templates(process) &&
-                !process.detector_sample_keys.empty() &&
-                static_cast<int>(process.detector_sample_keys.size()) != process.detector_template_count)
-            {
-                throw std::runtime_error("fit::validate_problem: detector_sample_keys size does not match detector_template_count");
-            }
-            if (has_detector_shift_sources(process) &&
-                !process.detector_source_labels.empty() &&
-                static_cast<int>(process.detector_source_labels.size()) != process.detector_source_count)
-            {
-                throw std::runtime_error("fit::validate_problem: detector_source_labels size does not match detector_source_count");
-            }
-            if (has_genie_knob_shift_sources(process) &&
-                !process.genie_knob_source_labels.empty() &&
-                static_cast<int>(process.genie_knob_source_labels.size()) != process.genie_knob_source_count)
-            {
-                throw std::runtime_error("fit::validate_problem: genie_knob_source_labels size does not match genie_knob_source_count");
-            }
-
-            validate_family_payload(process.genie, nbins, "genie");
-            validate_family_payload(process.flux, nbins, "flux");
-            validate_family_payload(process.reint, nbins, "reint");
-        }
-
-        for (const auto &nuisance : problem.nuisances)
-        {
-            if (nuisance.upper < nuisance.lower)
-                throw std::runtime_error("fit::validate_problem: nuisance bounds are inverted");
-            if (nuisance.constrained && nuisance.prior_sigma <= 0.0)
-                throw std::runtime_error("fit::validate_problem: constrained nuisance prior_sigma must be positive");
-
-            for (const auto &term : nuisance.terms)
-            {
-                const fit::Process *process = problem.channel->find_process(term.process_name);
-                if (!process)
-                    throw std::runtime_error("fit::validate_problem: nuisance term references unknown process");
-
-                switch (term.source)
-                {
-                    case fit::SourceKind::kGenieKnobShift:
-                        if (!has_genie_knob_shift_sources(*process) ||
-                            term.index < 0 ||
-                            term.index >= process->genie_knob_source_count)
-                        {
-                            throw std::runtime_error("fit::validate_problem: GENIE knob shift nuisance term out of range");
-                        }
-                        break;
-                    case fit::SourceKind::kGenieMode:
-                    case fit::SourceKind::kFluxMode:
-                    case fit::SourceKind::kReintMode:
-                    {
-                        const DistributionIO::UniverseFamily &family = family_for(*process, term.source);
-                        const int mode_count = family_mode_count(family);
-                        if (term.index < 0 || term.index >= mode_count)
-                            throw std::runtime_error("fit::validate_problem: family nuisance term mode_index out of range");
-                        break;
-                    }
-                    case fit::SourceKind::kDetectorShift:
-                        if (!has_detector_shift_sources(*process) ||
-                            term.index < 0 ||
-                            term.index >= process->detector_source_count)
-                        {
-                            throw std::runtime_error("fit::validate_problem: detector shift nuisance term out of range");
-                        }
-                        break;
-                    case fit::SourceKind::kDetectorTemplate:
-                        if (!has_detector_templates(*process) ||
-                            term.index < 0 ||
-                            term.index >= process->detector_template_count)
-                        {
-                            throw std::runtime_error("fit::validate_problem: detector template nuisance term out of range");
-                        }
-                        break;
-                    case fit::SourceKind::kDetectorEnvelope:
-                        if (!has_detector_envelope(*process))
-                            throw std::runtime_error("fit::validate_problem: detector envelope nuisance term references missing payload");
-                        break;
-                    case fit::SourceKind::kStatBin:
-                        if (term.index < 0 ||
-                            static_cast<std::size_t>(term.index) >= process->sumw2.size())
-                        {
-                            throw std::runtime_error("fit::validate_problem: stat nuisance term bin out of range");
-                        }
-                        break;
-                    case fit::SourceKind::kTotalEnvelope:
-                        if (!has_total_envelope(*process))
-                            throw std::runtime_error("fit::validate_problem: total-envelope nuisance term references missing payload");
-                        break;
-                }
-            }
-        }
-    }
-
-    double term_shift(const fit::Process &process,
-                      const fit::ShiftTerm &term,
-                      int bin,
-                      double theta)
-    {
-        switch (term.source)
-        {
-            case fit::SourceKind::kGenieMode:
-            case fit::SourceKind::kFluxMode:
-            case fit::SourceKind::kReintMode:
-            {
-                const DistributionIO::UniverseFamily &family = family_for(process, term.source);
-                return term.coefficient *
-                       family_mode_value(family, term.index, bin) *
-                       theta;
-            }
-            case fit::SourceKind::kGenieKnobShift:
-                return term.coefficient *
-                       genie_knob_shift_value(process, term.index, bin) *
-                       theta;
-            case fit::SourceKind::kDetectorShift:
-                return term.coefficient *
-                       detector_shift_value(process, term.index, bin) *
-                       theta;
-            case fit::SourceKind::kDetectorTemplate:
-            {
-                const double nominal = process.nominal.at(static_cast<std::size_t>(bin));
-                const double varied = detector_template_value(process, term.index, bin);
-                return term.coefficient * (varied - nominal) * theta;
-            }
-            case fit::SourceKind::kDetectorEnvelope:
-                return term.coefficient *
-                       envelope_shift(process.nominal,
-                                      process.detector_down,
-                                      process.detector_up,
-                                      bin,
-                                      theta);
-            case fit::SourceKind::kStatBin:
-                if (term.index != bin)
-                    return 0.0;
-                return term.coefficient *
-                       std::sqrt(std::max(0.0, process.sumw2.at(static_cast<std::size_t>(bin)))) *
-                       theta;
-            case fit::SourceKind::kTotalEnvelope:
-                return term.coefficient *
-                       envelope_shift(process.nominal,
-                                      process.total_down,
-                                      process.total_up,
-                                      bin,
-                                      theta);
-        }
-
-        throw std::runtime_error("fit::term_shift: unknown nuisance source");
-    }
-
-    double process_bin_yield(const fit::Problem &problem,
-                             const fit::Process &process,
-                             int bin,
-                             double mu,
-                             const double *nuisance_values)
-    {
-        double value = process.nominal.at(static_cast<std::size_t>(bin));
-
-        for (std::size_t nuisance_index = 0; nuisance_index < problem.nuisances.size(); ++nuisance_index)
-        {
-            const double theta = nuisance_values ? nuisance_values[nuisance_index] : 0.0;
-            const auto &nuisance = problem.nuisances[nuisance_index];
-            for (const auto &term : nuisance.terms)
-            {
-                if (term.process_name != process.name)
-                    continue;
-                value += term_shift(process, term, bin, theta);
-            }
-        }
-
-        if (process.name == problem.signal_process)
-            value *= mu;
-
-        if (!std::isfinite(value))
-            throw std::runtime_error("fit::process_bin_yield: non-finite process prediction");
-        return std::max(0.0, value);
-    }
-
-    void accumulate_prediction(const fit::Problem &problem,
-                               double mu,
-                               const double *nuisance_values,
-                               std::vector<double> &signal,
-                               std::vector<double> &background,
-                               std::vector<double> &total)
-    {
-        const int nbins = problem.channel->spec.nbins;
-        signal.assign(static_cast<std::size_t>(nbins), 0.0);
-        background.assign(static_cast<std::size_t>(nbins), 0.0);
-        total.assign(static_cast<std::size_t>(nbins), 0.0);
-
-        for (int bin = 0; bin < nbins; ++bin)
-        {
-            for (const auto &process : problem.channel->processes)
-            {
-                if (process.kind == fit::ProcessKind::kData)
-                    continue;
-
-                const double value = process_bin_yield(problem, process, bin, mu, nuisance_values);
-                if (process.name == problem.signal_process)
-                    signal[static_cast<std::size_t>(bin)] += value;
-                else
-                    background[static_cast<std::size_t>(bin)] += value;
-                total[static_cast<std::size_t>(bin)] += value;
-            }
-
-            total[static_cast<std::size_t>(bin)] =
-                std::max(kYieldFloor, total[static_cast<std::size_t>(bin)]);
-        }
-    }
-
-    double objective_unchecked(const fit::Problem &problem,
-                               double mu,
-                               const double *nuisance_values)
-    {
-        std::vector<double> signal;
-        std::vector<double> background;
-        std::vector<double> total;
-        accumulate_prediction(problem, mu, nuisance_values, signal, background, total);
-
-        double q = 0.0;
-        for (int bin = 0; bin < problem.channel->spec.nbins; ++bin)
-        {
-            const double n = problem.channel->data.at(static_cast<std::size_t>(bin));
-            const double lambda = total.at(static_cast<std::size_t>(bin));
-            if (n > 0.0)
-                q += 2.0 * (lambda - n - n * std::log(lambda / n));
-            else
-                q += 2.0 * lambda;
-        }
-
-        for (std::size_t i = 0; i < problem.nuisances.size(); ++i)
-        {
-            const auto &nuisance = problem.nuisances[i];
-            if (!nuisance.constrained)
-                continue;
-            const double theta = nuisance_values ? nuisance_values[i] : 0.0;
-            const double pull = (theta - nuisance.prior_center) / nuisance.prior_sigma;
-            q += pull * pull;
-        }
-
-        return q;
-    }
-
-    class ProfileObjective
-    {
-    public:
-        ProfileObjective(const fit::Problem &problem, double mu)
-            : problem_(problem), mu_(mu)
-        {
-        }
-
-        double operator()(const double *parameters) const
-        {
-            return objective_unchecked(problem_, mu_, parameters);
-        }
-
-    private:
-        const fit::Problem &problem_;
-        double mu_ = 1.0;
-    };
-
-    class JointObjective
-    {
-    public:
-        explicit JointObjective(const fit::Problem &problem)
-            : problem_(problem)
-        {
-        }
-
-        double operator()(const double *parameters) const
-        {
-            const std::size_t n_nuisances = problem_.nuisances.size();
-            const double mu = parameters[n_nuisances];
-            return objective_unchecked(problem_, mu, parameters);
-        }
-
-    private:
-        const fit::Problem &problem_;
-    };
-
-    std::unique_ptr<ROOT::Math::Minimizer> make_minimizer(const fit::FitOptions &options)
-    {
-        std::unique_ptr<ROOT::Math::Minimizer> minimizer(
-            ROOT::Math::Factory::CreateMinimizer("Minuit2", "Migrad"));
-        if (!minimizer)
-            throw std::runtime_error("fit::make_minimizer: failed to create Minuit2 minimizer");
-
-        minimizer->SetMaxIterations(options.max_iterations);
-        minimizer->SetMaxFunctionCalls(options.max_function_calls);
-        minimizer->SetTolerance(options.tolerance);
-        minimizer->SetPrintLevel(options.print_level);
-        minimizer->SetStrategy(options.strategy);
-        minimizer->SetErrorDef(1.0);
-        return minimizer;
-    }
-
-    void set_nuisance_variable(ROOT::Math::Minimizer &minimizer,
-                               unsigned int index,
-                               const fit::Nuisance &nuisance,
-                               double value)
-    {
-        const double start = clamp_value(value, nuisance.lower, nuisance.upper);
-        const double step = nuisance.step > 0.0 ? nuisance.step : kDefaultStep;
-
-        if (nuisance.fixed || nuisance.upper == nuisance.lower)
-        {
-            minimizer.SetFixedVariable(index, nuisance.name.c_str(), start);
-            return;
-        }
-
-        minimizer.SetLimitedVariable(index,
-                                     nuisance.name.c_str(),
-                                     start,
-                                     step,
-                                     nuisance.lower,
-                                     nuisance.upper);
-    }
-
-    ProfilePoint minimise_at_mu(const fit::Problem &problem,
-                                double mu,
-                                const std::vector<double> &seed,
-                                const fit::FitOptions &options)
-    {
-        ProfilePoint out;
-        out.mu = clamp_value(mu, problem.mu_lower, problem.mu_upper);
-        out.nuisance_values =
-            seed.size() == problem.nuisances.size() ? seed : initial_nuisance_values(problem);
-        out.parameter_names.reserve(problem.nuisances.size());
-
-        if (problem.nuisances.empty())
-        {
-            out.converged = true;
-            out.minimizer_status = 0;
-            out.objective = objective_unchecked(problem, out.mu, nullptr);
-            return out;
-        }
-
-        std::unique_ptr<ROOT::Math::Minimizer> minimizer = make_minimizer(options);
-        ProfileObjective objective(problem, out.mu);
-        ROOT::Math::Functor functor(objective, static_cast<unsigned int>(problem.nuisances.size()));
-        minimizer->SetFunction(functor);
-
-        for (std::size_t i = 0; i < problem.nuisances.size(); ++i)
-        {
-            set_nuisance_variable(*minimizer,
-                                  static_cast<unsigned int>(i),
-                                  problem.nuisances[i],
-                                  out.nuisance_values[i]);
-            out.parameter_names.push_back(problem.nuisances[i].name);
-        }
-
-        out.converged = minimizer->Minimize();
-        out.minimizer_status = minimizer->Status();
-        out.edm = minimizer->Edm();
-        out.objective = minimizer->MinValue();
-
-        const double *parameters = minimizer->X();
-        out.nuisance_values.assign(parameters, parameters + problem.nuisances.size());
-        out.parameter_values = out.nuisance_values;
-
-        if (options.run_hesse)
-        {
-            minimizer->Hesse();
-            fill_covariance(*minimizer,
-                            static_cast<int>(problem.nuisances.size()),
-                            out.covariance);
-        }
-
-        return out;
-    }
-
-    ProfilePoint frozen_at_mu(const fit::Problem &problem,
-                              double mu,
-                              const std::vector<double> &frozen_values)
-    {
-        ProfilePoint out;
-        out.mu = clamp_value(mu, problem.mu_lower, problem.mu_upper);
-        out.converged = true;
-        out.minimizer_status = 0;
-        out.nuisance_values =
-            frozen_values.size() == problem.nuisances.size() ? frozen_values : initial_nuisance_values(problem);
-        out.objective = objective_unchecked(problem, out.mu, out.nuisance_values.data());
-        return out;
-    }
-
-    ProfilePoint minimise_joint(const fit::Problem &problem,
-                                const fit::FitOptions &options)
-    {
-        ProfilePoint out;
-        out.mu = clamp_value(problem.mu_start, problem.mu_lower, problem.mu_upper);
-        out.nuisance_values = initial_nuisance_values(problem);
-        out.parameter_names.reserve(problem.nuisances.size() + 1);
-
-        std::unique_ptr<ROOT::Math::Minimizer> minimizer = make_minimizer(options);
-        JointObjective objective(problem);
-        const unsigned int n_parameters =
-            static_cast<unsigned int>(problem.nuisances.size() + 1);
-        ROOT::Math::Functor functor(objective, n_parameters);
-        minimizer->SetFunction(functor);
-
-        for (std::size_t i = 0; i < problem.nuisances.size(); ++i)
-        {
-            set_nuisance_variable(*minimizer,
-                                  static_cast<unsigned int>(i),
-                                  problem.nuisances[i],
-                                  out.nuisance_values[i]);
-            out.parameter_names.push_back(problem.nuisances[i].name);
-        }
-
-        const double mu_range = std::max(problem.mu_upper - problem.mu_lower, 1.0);
-        const double mu_step = std::max(kDefaultStep, 0.05 * mu_range);
-        minimizer->SetLimitedVariable(static_cast<unsigned int>(problem.nuisances.size()),
-                                      "mu",
-                                      out.mu,
-                                      mu_step,
-                                      problem.mu_lower,
-                                      problem.mu_upper);
-        out.parameter_names.push_back("mu");
-
-        out.converged = minimizer->Minimize();
-        out.minimizer_status = minimizer->Status();
-        out.edm = minimizer->Edm();
-        out.objective = minimizer->MinValue();
-
-        const double *parameters = minimizer->X();
-        out.nuisance_values.assign(parameters, parameters + problem.nuisances.size());
-        out.mu = parameters[problem.nuisances.size()];
-        out.parameter_values.assign(parameters, parameters + n_parameters);
-
-        if (options.run_hesse)
-        {
-            minimizer->Hesse();
-            fill_covariance(*minimizer,
-                            static_cast<int>(n_parameters),
-                            out.covariance);
-        }
-
-        return out;
-    }
-
-    IntervalEstimate scan_crossing(const fit::Problem &problem,
-                                   const fit::FitOptions &options,
-                                   const ProfilePoint &best_point,
-                                   bool upward,
-                                   bool freeze_nuisances)
-    {
-        IntervalEstimate out;
-        const double target = best_point.objective + 1.0;
-        const double start = best_point.mu;
-        const double bound = upward ? problem.mu_upper : problem.mu_lower;
-
-        if ((upward && bound <= start) || (!upward && bound >= start))
-            return out;
-
-        ProfilePoint previous_point = best_point;
-        const int scan_points = std::max(16, options.scan_points);
-        for (int step = 1; step <= scan_points; ++step)
-        {
-            const double fraction = static_cast<double>(step) / static_cast<double>(scan_points);
-            const double mu = upward
-                                  ? start + (bound - start) * fraction
-                                  : start - (start - bound) * fraction;
-
-            ProfilePoint point = freeze_nuisances
-                                     ? frozen_at_mu(problem, mu, best_point.nuisance_values)
-                                     : minimise_at_mu(problem, mu, previous_point.nuisance_values, options);
-
-            if (point.objective >= target)
-            {
-                ProfilePoint left_point = previous_point;
-                ProfilePoint right_point = point;
-
-                for (int iter = 0; iter < kCrossingBisectionIterations; ++iter)
-                {
-                    const double mid_mu = 0.5 * (left_point.mu + right_point.mu);
-                    const std::vector<double> &seed =
-                        freeze_nuisances ? best_point.nuisance_values : left_point.nuisance_values;
-
-                    ProfilePoint mid_point = freeze_nuisances
-                                                 ? frozen_at_mu(problem, mid_mu, best_point.nuisance_values)
-                                                 : minimise_at_mu(problem, mid_mu, seed, options);
-
-                    if (mid_point.objective >= target)
-                        right_point = mid_point;
-                    else
-                        left_point = mid_point;
-
-                    if (std::abs(right_point.mu - left_point.mu) < options.tolerance)
-                        break;
-                }
-
-                const double crossing = 0.5 * (left_point.mu + right_point.mu);
-                out.error = upward ? (crossing - start) : (start - crossing);
-                out.found = true;
-                return out;
-            }
-
-            previous_point = point;
-        }
-
-        return out;
-    }
-
-    std::size_t ensure_nuisance(fit::Problem &problem,
-                                std::map<std::string, std::size_t> &indices,
-                                const std::string &name)
-    {
-        const auto it = indices.find(name);
-        if (it != indices.end())
-            return it->second;
-
-        fit::Nuisance nuisance;
-        nuisance.name = name;
-        problem.nuisances.push_back(std::move(nuisance));
-        const std::size_t index = problem.nuisances.size() - 1;
-        indices[name] = index;
-        return index;
-    }
-
     bool process_has_family_payload(const fit::Process &process)
     {
         return family_mode_count(process.genie) > 0 ||
@@ -1002,38 +208,655 @@ namespace
     {
         return has_genie_knob_shift_sources(process);
     }
+
+    bool channel_name_is_valid(const std::string &channel_key)
+    {
+        return !channel_key.empty() &&
+               std::isdigit(static_cast<unsigned char>(channel_key.front())) == 0 &&
+               channel_key.find(',') == std::string::npos;
+    }
+
+    void validate_family(const fit::Family &family,
+                         int nbins,
+                         const std::string &label)
+    {
+        if (!family.sigma.empty() &&
+            static_cast<int>(family.sigma.size()) != nbins)
+        {
+            throw std::runtime_error("fit: " + label + " sigma size does not match channel bin count");
+        }
+
+        if (family.eigen_rank < 0)
+            throw std::runtime_error("fit: " + label + " eigen_rank must not be negative");
+
+        if (!family.eigenmodes.empty())
+        {
+            const std::size_t expected =
+                static_cast<std::size_t>(family.eigen_rank * nbins);
+            if (family.eigen_rank == 0 || family.eigenmodes.size() != expected)
+            {
+                throw std::runtime_error("fit: " + label + " eigenmode payload is truncated");
+            }
+        }
+    }
+
+    void validate_problem(const fit::Problem &problem)
+    {
+        if (problem.channels.empty())
+            throw std::runtime_error("fit: at least one fit channel is required");
+        if (problem.poi_name.empty())
+            throw std::runtime_error("fit: poi_name must not be empty");
+        if (problem.mu_lower > problem.mu_upper)
+            throw std::runtime_error("fit: mu bounds are inverted");
+        if (problem.mu_start < problem.mu_lower || problem.mu_start > problem.mu_upper)
+            throw std::runtime_error("fit: mu_start lies outside the configured bounds");
+
+        bool have_signal = false;
+
+        for (const auto &channel : problem.channels)
+        {
+            if (!channel_name_is_valid(channel.spec.channel_key))
+            {
+                throw std::runtime_error(
+                    "fit: channel names must be non-empty, must not start with a digit, and must not contain ','");
+            }
+            if (channel.spec.nbins <= 0)
+                throw std::runtime_error("fit: channel nbins must be positive");
+            if (!(channel.spec.xmax > channel.spec.xmin))
+                throw std::runtime_error("fit: channel histogram range is invalid");
+            if (static_cast<int>(channel.data.size()) != channel.spec.nbins)
+                throw std::runtime_error("fit: observed data size does not match channel bin count");
+            if (channel.processes.empty())
+                throw std::runtime_error("fit: every channel must contain at least one process");
+
+            for (double value : channel.data)
+            {
+                if (!std::isfinite(value) || value < 0.0)
+                    throw std::runtime_error("fit: observed data bins must be finite and non-negative");
+            }
+
+            for (const auto &process : channel.processes)
+            {
+                if (process.name.empty())
+                    throw std::runtime_error("fit: process name must not be empty");
+                if (process.kind == fit::ProcessKind::kData)
+                    throw std::runtime_error("fit: data rows must not be stored as fit processes");
+                if (static_cast<int>(process.nominal.size()) != channel.spec.nbins)
+                    throw std::runtime_error("fit: process nominal size does not match channel bin count");
+                if (!process.sumw2.empty() &&
+                    static_cast<int>(process.sumw2.size()) != channel.spec.nbins)
+                {
+                    throw std::runtime_error("fit: process sumw2 size does not match channel bin count");
+                }
+                if (!process.detector_shift_vectors.empty())
+                {
+                    const std::size_t expected =
+                        static_cast<std::size_t>(process.detector_source_count * channel.spec.nbins);
+                    if (process.detector_source_count <= 0 ||
+                        process.detector_shift_vectors.size() != expected)
+                    {
+                        throw std::runtime_error("fit: detector shift payload is truncated");
+                    }
+                }
+                if (!process.genie_knob_shift_vectors.empty())
+                {
+                    const std::size_t expected =
+                        static_cast<std::size_t>(process.genie_knob_source_count * channel.spec.nbins);
+                    if (process.genie_knob_source_count <= 0 ||
+                        process.genie_knob_shift_vectors.size() != expected)
+                    {
+                        throw std::runtime_error("fit: GENIE knob shift payload is truncated");
+                    }
+                }
+                if (!process.detector_templates.empty())
+                {
+                    const std::size_t expected =
+                        static_cast<std::size_t>(process.detector_template_count * channel.spec.nbins);
+                    if (process.detector_template_count <= 0 ||
+                        process.detector_templates.size() != expected)
+                    {
+                        throw std::runtime_error("fit: detector template payload is truncated");
+                    }
+                }
+                if ((!process.detector_down.empty() || !process.detector_up.empty()) &&
+                    (static_cast<int>(process.detector_down.size()) != channel.spec.nbins ||
+                     static_cast<int>(process.detector_up.size()) != channel.spec.nbins))
+                {
+                    throw std::runtime_error("fit: detector envelope size does not match channel bin count");
+                }
+                if ((!process.total_down.empty() || !process.total_up.empty()) &&
+                    (static_cast<int>(process.total_down.size()) != channel.spec.nbins ||
+                     static_cast<int>(process.total_up.size()) != channel.spec.nbins))
+                {
+                    throw std::runtime_error("fit: total envelope size does not match channel bin count");
+                }
+
+                validate_family(process.genie, channel.spec.nbins, "genie");
+                validate_family(process.flux, channel.spec.nbins, "flux");
+                validate_family(process.reint, channel.spec.nbins, "reint");
+
+                for (double value : process.nominal)
+                {
+                    if (!std::isfinite(value))
+                        throw std::runtime_error("fit: process nominal bins must be finite");
+                }
+
+                if (process.kind == fit::ProcessKind::kSignal)
+                    have_signal = true;
+            }
+        }
+
+        if (!have_signal)
+            throw std::runtime_error("fit: at least one signal process is required");
+    }
+
+    double floor_template_bin(double value)
+    {
+        if (!std::isfinite(value))
+            throw std::runtime_error("fit: non-finite template bin");
+        return std::max(kTemplateFloor, value);
+    }
+
+    std::unique_ptr<TH1D> make_hist(const std::string &name,
+                                    const fit::Channel &channel,
+                                    const std::vector<double> &values,
+                                    const std::vector<double> *sumw2 = nullptr,
+                                    bool floor_bins = true)
+    {
+        auto hist = std::make_unique<TH1D>(name.c_str(),
+                                           name.c_str(),
+                                           channel.spec.nbins,
+                                           channel.spec.xmin,
+                                           channel.spec.xmax);
+        hist->SetDirectory(nullptr);
+
+        for (int bin = 0; bin < channel.spec.nbins; ++bin)
+        {
+            const std::size_t index = static_cast<std::size_t>(bin);
+            const double content = floor_bins ? floor_template_bin(values.at(index))
+                                              : values.at(index);
+            hist->SetBinContent(bin + 1, content);
+
+            double error = 0.0;
+            if (sumw2 && sumw2->size() == values.size())
+                error = std::sqrt(std::max(0.0, sumw2->at(index)));
+            hist->SetBinError(bin + 1, error);
+        }
+
+        return hist;
+    }
+
+    std::vector<double> hist_contents(const TH1 &hist, int expected_bins)
+    {
+        std::vector<double> out(static_cast<std::size_t>(expected_bins), 0.0);
+        for (int bin = 0; bin < expected_bins; ++bin)
+            out[static_cast<std::size_t>(bin)] = hist.GetBinContent(bin + 1);
+        return out;
+    }
+
+    bool has_nonzero_shift(const std::vector<double> &shift)
+    {
+        for (double value : shift)
+        {
+            if (std::fabs(value) > kShiftTolerance)
+                return true;
+        }
+        return false;
+    }
+
+    bool differs_from_nominal(const std::vector<double> &nominal,
+                              const std::vector<double> &other)
+    {
+        if (nominal.size() != other.size())
+            return true;
+        for (std::size_t i = 0; i < nominal.size(); ++i)
+        {
+            if (std::fabs(nominal[i] - other[i]) > kShiftTolerance)
+                return true;
+        }
+        return false;
+    }
+
+    void add_histo_sys(RooStats::HistFactory::Sample &sample,
+                       const std::string &name,
+                       std::unique_ptr<TH1D> low,
+                       std::unique_ptr<TH1D> high)
+    {
+        RooStats::HistFactory::HistoSys syst;
+        syst.SetName(name);
+        syst.SetHistoLow(low.release());
+        syst.SetHistoHigh(high.release());
+        sample.AddHistoSys(syst);
+    }
+
+    void add_symmetric_shift_systematic(RooStats::HistFactory::Sample &sample,
+                                        const fit::Channel &channel,
+                                        const fit::Process &process,
+                                        const std::string &name,
+                                        const std::vector<double> &shift)
+    {
+        if (!has_nonzero_shift(shift))
+            return;
+
+        std::vector<double> low(process.nominal.size(), 0.0);
+        std::vector<double> high(process.nominal.size(), 0.0);
+        for (std::size_t bin = 0; bin < process.nominal.size(); ++bin)
+        {
+            low[bin] = process.nominal[bin] - shift[bin];
+            high[bin] = process.nominal[bin] + shift[bin];
+        }
+
+        add_histo_sys(
+            sample,
+            name,
+            make_hist(process.name + "_" + channel.spec.channel_key + "_" + name + "_down",
+                      channel,
+                      low),
+            make_hist(process.name + "_" + channel.spec.channel_key + "_" + name + "_up",
+                      channel,
+                      high));
+    }
+
+    void add_envelope_systematic(RooStats::HistFactory::Sample &sample,
+                                 const fit::Channel &channel,
+                                 const fit::Process &process,
+                                 const std::string &name,
+                                 const std::vector<double> &down,
+                                 const std::vector<double> &up)
+    {
+        if (!differs_from_nominal(process.nominal, down) &&
+            !differs_from_nominal(process.nominal, up))
+        {
+            return;
+        }
+
+        add_histo_sys(
+            sample,
+            name,
+            make_hist(process.name + "_" + channel.spec.channel_key + "_" + name + "_down",
+                      channel,
+                      down),
+            make_hist(process.name + "_" + channel.spec.channel_key + "_" + name + "_up",
+                      channel,
+                      up));
+    }
+
+    std::vector<double> source_major_slice(const std::vector<double> &payload,
+                                           int row_index,
+                                           int nbins)
+    {
+        std::vector<double> out(static_cast<std::size_t>(nbins), 0.0);
+        for (int bin = 0; bin < nbins; ++bin)
+        {
+            out[static_cast<std::size_t>(bin)] =
+                payload[static_cast<std::size_t>(row_index * nbins + bin)];
+        }
+        return out;
+    }
+
+    void add_process_systematics(RooStats::HistFactory::Sample &sample,
+                                 const fit::Channel &channel,
+                                 const fit::Process &process)
+    {
+        const int nbins = channel.spec.nbins;
+
+        const std::pair<const char *, const fit::Family *> families[] = {
+            {"genie", &process.genie},
+            {"flux", &process.flux},
+            {"reint", &process.reint},
+        };
+
+        for (const auto &entry : families)
+        {
+            const int mode_count = family_mode_count(*entry.second);
+            for (int mode = 0; mode < mode_count; ++mode)
+            {
+                std::vector<double> shift(static_cast<std::size_t>(nbins), 0.0);
+                for (int bin = 0; bin < nbins; ++bin)
+                    shift[static_cast<std::size_t>(bin)] =
+                        family_mode_value(*entry.second, mode, bin);
+                add_symmetric_shift_systematic(sample,
+                                               channel,
+                                               process,
+                                               mode_name(entry.first, *entry.second, mode),
+                                               shift);
+            }
+        }
+
+        if (has_genie_knob_shift_sources(process))
+        {
+            for (int row = 0; row < process.genie_knob_source_count; ++row)
+            {
+                add_symmetric_shift_systematic(sample,
+                                               channel,
+                                               process,
+                                               genie_knob_source_name(process, row),
+                                               source_major_slice(process.genie_knob_shift_vectors,
+                                                                  row,
+                                                                  nbins));
+            }
+        }
+
+        if (has_detector_shift_sources(process))
+        {
+            for (int row = 0; row < process.detector_source_count; ++row)
+            {
+                add_symmetric_shift_systematic(sample,
+                                               channel,
+                                               process,
+                                               detector_source_name(process, row),
+                                               source_major_slice(process.detector_shift_vectors,
+                                                                  row,
+                                                                  nbins));
+            }
+        }
+        else if (has_detector_templates(process))
+        {
+            for (int row = 0; row < process.detector_template_count; ++row)
+            {
+                const std::vector<double> varied =
+                    source_major_slice(process.detector_templates, row, nbins);
+                std::vector<double> shift(static_cast<std::size_t>(nbins), 0.0);
+                for (int bin = 0; bin < nbins; ++bin)
+                {
+                    shift[static_cast<std::size_t>(bin)] =
+                        varied[static_cast<std::size_t>(bin)] -
+                        process.nominal[static_cast<std::size_t>(bin)];
+                }
+                add_symmetric_shift_systematic(sample,
+                                               channel,
+                                               process,
+                                               detector_template_name(process, row),
+                                               shift);
+            }
+        }
+        else if (has_detector_envelope(process))
+        {
+            add_envelope_systematic(sample,
+                                    channel,
+                                    process,
+                                    detector_group_name(process),
+                                    process.detector_down,
+                                    process.detector_up);
+        }
+
+        if (!process_has_family_payload(process) &&
+            !process_has_genie_knob_payload(process) &&
+            !process_has_detector_payload(process) &&
+            has_total_envelope(process))
+        {
+            add_envelope_systematic(sample,
+                                    channel,
+                                    process,
+                                    "total:" + process.name,
+                                    process.total_down,
+                                    process.total_up);
+        }
+    }
+
+    bool process_has_mc_stat(const fit::Process &process)
+    {
+        if (process.sumw2.empty())
+            return false;
+        for (double value : process.sumw2)
+        {
+            if (value > 0.0)
+                return true;
+        }
+        return false;
+    }
+
+    RooStats::HistFactory::Measurement build_measurement(const fit::Problem &problem)
+    {
+        const std::string measurement_name =
+            problem.measurement_name.empty() ? std::string("measurement")
+                                             : problem.measurement_name;
+        RooStats::HistFactory::Measurement measurement(measurement_name.c_str(),
+                                                       measurement_name.c_str());
+        measurement.SetPOI(problem.poi_name);
+        measurement.SetLumi(problem.lumi);
+        measurement.SetLumiRelErr(problem.lumi_rel_error);
+
+        for (const auto &param : problem.constant_params)
+            measurement.AddConstantParam(param);
+
+        for (const auto &channel : problem.channels)
+        {
+            RooStats::HistFactory::Channel hf_channel(channel.spec.channel_key);
+            hf_channel.SetData(
+                make_hist(channel.spec.channel_key + "_data",
+                          channel,
+                          channel.data,
+                          nullptr,
+                          false)
+                    .release());
+            hf_channel.SetStatErrorConfig(channel.stat_rel_threshold,
+                                          channel.stat_constraint);
+
+            for (const auto &process : channel.processes)
+            {
+                RooStats::HistFactory::Sample sample(process.name);
+                sample.SetNormalizeByTheory(false);
+                sample.SetHisto(
+                    make_hist(process.name + "_" + channel.spec.channel_key + "_nominal",
+                              channel,
+                              process.nominal,
+                              process.sumw2.empty() ? nullptr : &process.sumw2)
+                        .release());
+
+                if (process.kind == fit::ProcessKind::kSignal)
+                {
+                    sample.AddNormFactor(problem.poi_name,
+                                         problem.mu_start,
+                                         problem.mu_lower,
+                                         problem.mu_upper);
+                }
+
+                if (process_has_mc_stat(process))
+                    sample.ActivateStatError();
+
+                add_process_systematics(sample, channel, process);
+                hf_channel.AddSample(sample);
+            }
+
+            if (!hf_channel.CheckHistograms())
+                throw std::runtime_error("fit: HistFactory channel histogram validation failed");
+
+            measurement.AddChannel(hf_channel);
+        }
+
+        return measurement;
+    }
+
+    std::vector<VarState> capture_var_states(const RooArgSet &parameters)
+    {
+        std::vector<VarState> states;
+        std::unique_ptr<TIterator> it{parameters.createIterator()};
+        for (TObject *obj = it->Next(); obj != nullptr; obj = it->Next())
+        {
+            auto *var = dynamic_cast<RooRealVar *>(obj);
+            if (!var)
+                continue;
+            states.push_back(VarState{var, var->getVal(), var->isConstant()});
+        }
+        return states;
+    }
+
+    void restore_var_states(const std::vector<VarState> &states)
+    {
+        for (const auto &state : states)
+        {
+            if (!state.var)
+                continue;
+            state.var->setVal(state.value);
+            state.var->setConstant(state.constant);
+        }
+    }
+
+    void set_all_constant(const RooArgSet &parameters, bool constant)
+    {
+        std::unique_ptr<TIterator> it{parameters.createIterator()};
+        for (TObject *obj = it->Next(); obj != nullptr; obj = it->Next())
+        {
+            auto *var = dynamic_cast<RooRealVar *>(obj);
+            if (var)
+                var->setConstant(constant);
+        }
+    }
+
+    std::unique_ptr<RooFitResult> run_fit(RooAbsPdf &pdf,
+                                          RooAbsData &data,
+                                          const RooArgSet &global_observables,
+                                          const RooArgSet &poi_set,
+                                          const fit::FitOptions &options)
+    {
+        using namespace RooFit;
+
+        auto nll = pdf.createNLL(data,
+                                 GlobalObservables(global_observables),
+                                 Offset(true));
+        if (!nll)
+            throw std::runtime_error("fit: failed to create the likelihood");
+
+        RooMinimizer minimizer(*nll);
+        minimizer.setMaxIterations(options.max_iterations);
+        minimizer.setMaxFunctionCalls(options.max_function_calls);
+        minimizer.setStrategy(options.strategy);
+        minimizer.setPrintLevel(options.print_level);
+        minimizer.setEps(options.tolerance);
+        minimizer.optimizeConst(2);
+
+        minimizer.minimize("Minuit2", "Migrad");
+        if (options.run_hesse)
+            minimizer.hesse();
+        minimizer.minos(poi_set);
+
+        std::unique_ptr<RooFitResult> result(minimizer.save());
+        if (!result)
+            throw std::runtime_error("fit: MINOS returned no RooFitResult");
+        return result;
+    }
+
+    std::vector<double> flatten_covariance(const RooFitResult &result)
+    {
+        const TMatrixDSym covariance = result.covarianceMatrix();
+        std::vector<double> out;
+        out.reserve(static_cast<std::size_t>(covariance.GetNrows() * covariance.GetNcols()));
+        for (int row = 0; row < covariance.GetNrows(); ++row)
+        {
+            for (int col = 0; col < covariance.GetNcols(); ++col)
+                out.push_back(covariance(row, col));
+        }
+        return out;
+    }
+
+    void fill_parameter_values(const RooFitResult &result, fit::Result &out)
+    {
+        RooArgList parameters = result.floatParsFinal();
+        out.parameter_names.reserve(static_cast<std::size_t>(parameters.getSize()));
+        out.parameter_values.reserve(static_cast<std::size_t>(parameters.getSize()));
+        for (int i = 0; i < parameters.getSize(); ++i)
+        {
+            auto *var = dynamic_cast<RooRealVar *>(parameters.at(i));
+            if (!var)
+                continue;
+            out.parameter_names.push_back(var->GetName());
+            out.parameter_values.push_back(var->getVal());
+        }
+        out.covariance = flatten_covariance(result);
+    }
+
+    void fill_nuisance_values(const RooArgSet *nuisances, fit::Result &out)
+    {
+        if (!nuisances)
+            return;
+
+        std::unique_ptr<TIterator> it{nuisances->createIterator()};
+        for (TObject *obj = it->Next(); obj != nullptr; obj = it->Next())
+        {
+            auto *var = dynamic_cast<RooRealVar *>(obj);
+            if (!var)
+                continue;
+            out.nuisance_names.push_back(var->GetName());
+            out.nuisance_values.push_back(var->getVal());
+        }
+    }
+
+    void add_bins_in_place(std::vector<double> &target,
+                           const std::vector<double> &source)
+    {
+        if (target.empty())
+        {
+            target = source;
+            return;
+        }
+
+        if (target.size() != source.size())
+            throw std::runtime_error("fit: predicted histogram bin counts do not match");
+
+        for (std::size_t i = 0; i < target.size(); ++i)
+            target[i] += source[i];
+    }
+
+    void fill_channel_predictions(const fit::Problem &problem,
+                                  RooStats::ModelConfig &model_config,
+                                  fit::Result &out)
+    {
+        RooStats::HistFactory::HistFactoryNavigation navigation(&model_config);
+
+        out.channels.reserve(problem.channels.size());
+        for (const auto &channel : problem.channels)
+        {
+            fit::ChannelResult channel_result;
+            channel_result.channel_key = channel.spec.channel_key;
+            channel_result.branch_expr = channel.spec.branch_expr;
+            channel_result.selection_expr = channel.spec.selection_expr;
+            channel_result.observed_source_keys = channel.data_source_keys;
+            channel_result.observed = channel.data;
+
+            std::unique_ptr<TH1> total_hist{
+                navigation.GetChannelHist(channel.spec.channel_key)};
+            if (!total_hist)
+                throw std::runtime_error("fit: failed to evaluate the fitted channel prediction");
+            channel_result.predicted_total = hist_contents(*total_hist,
+                                                          channel.spec.nbins);
+
+            for (const auto &process : channel.processes)
+            {
+                std::unique_ptr<TH1> sample_hist{
+                    navigation.GetSampleHist(channel.spec.channel_key,
+                                             process.name)};
+                if (!sample_hist)
+                    throw std::runtime_error("fit: failed to evaluate a fitted process prediction");
+
+                const std::vector<double> bins = hist_contents(*sample_hist,
+                                                               channel.spec.nbins);
+                if (process.kind == fit::ProcessKind::kSignal)
+                    add_bins_in_place(channel_result.predicted_signal, bins);
+                else if (process.kind == fit::ProcessKind::kBackground)
+                    add_bins_in_place(channel_result.predicted_background, bins);
+            }
+
+            if (channel_result.predicted_signal.empty())
+                channel_result.predicted_signal.assign(static_cast<std::size_t>(channel.spec.nbins), 0.0);
+            if (channel_result.predicted_background.empty())
+                channel_result.predicted_background.assign(static_cast<std::size_t>(channel.spec.nbins), 0.0);
+
+            out.channels.push_back(std::move(channel_result));
+        }
+
+        if (out.channels.size() == 1)
+        {
+            out.predicted_signal = out.channels.front().predicted_signal;
+            out.predicted_background = out.channels.front().predicted_background;
+            out.predicted_total = out.channels.front().predicted_total;
+        }
+    }
 }
 
 namespace fit
 {
-    const char *source_kind_name(SourceKind source)
-    {
-        switch (source)
-        {
-            case SourceKind::kGenieMode:
-                return "genie";
-            case SourceKind::kGenieKnobShift:
-                return "genie_knob";
-            case SourceKind::kFluxMode:
-                return "flux";
-            case SourceKind::kReintMode:
-                return "reint";
-            case SourceKind::kDetectorShift:
-                return "detector_shift";
-            case SourceKind::kDetectorTemplate:
-                return "detector_template";
-            case SourceKind::kDetectorEnvelope:
-                return "detector_envelope";
-            case SourceKind::kStatBin:
-                return "stat_bin";
-            case SourceKind::kTotalEnvelope:
-                return "total_envelope";
-        }
-
-        return "unknown";
-    }
-
-    const fit::Process *Channel::find_process(const std::string &name) const
+    const Process *Channel::find_process(const std::string &name) const
     {
         for (const auto &process : processes)
         {
@@ -1054,139 +877,23 @@ namespace fit
     }
 
     Problem make_independent_problem(const Channel &channel,
-                                     const std::string &signal_process,
+                                     double mu_start,
+                                     double mu_upper)
+    {
+        return make_independent_problem(std::vector<Channel>{channel},
+                                        mu_start,
+                                        mu_upper);
+    }
+
+    Problem make_independent_problem(const std::vector<Channel> &channels,
                                      double mu_start,
                                      double mu_upper)
     {
         Problem problem;
-        problem.channel = &channel;
-        problem.signal_process = signal_process;
+        problem.channels = channels;
         problem.mu_start = mu_start;
         problem.mu_upper = mu_upper;
-
-        std::map<std::string, std::size_t> nuisance_indices;
-
-        for (const auto &process : channel.processes)
-        {
-            if (process.kind == ProcessKind::kData)
-                continue;
-
-            const std::pair<SourceKind, const DistributionIO::UniverseFamily *> families[] = {
-                {SourceKind::kGenieMode, &process.genie},
-                {SourceKind::kFluxMode, &process.flux},
-                {SourceKind::kReintMode, &process.reint},
-            };
-
-            for (const auto &entry : families)
-            {
-                const int mode_count = family_mode_count(*entry.second);
-                for (int mode = 0; mode < mode_count; ++mode)
-                {
-                    const std::string name = mode_name(source_kind_name(entry.first),
-                                                       *entry.second,
-                                                       mode);
-                    const std::size_t nuisance_index =
-                        ensure_nuisance(problem, nuisance_indices, name);
-                    problem.nuisances[nuisance_index].terms.push_back(
-                        ShiftTerm{process.name, entry.first, mode, 1.0});
-                }
-            }
-
-            if (has_genie_knob_shift_sources(process))
-            {
-                for (int row = 0; row < process.genie_knob_source_count; ++row)
-                {
-                    const std::string name = genie_knob_source_name(process, row);
-                    const std::size_t nuisance_index =
-                        ensure_nuisance(problem, nuisance_indices, name);
-                    problem.nuisances[nuisance_index].terms.push_back(
-                        ShiftTerm{process.name, SourceKind::kGenieKnobShift, row, 1.0});
-                }
-            }
-
-            if (has_detector_shift_sources(process))
-            {
-                for (int row = 0; row < process.detector_source_count; ++row)
-                {
-                    const std::string name = detector_source_name(process, row);
-                    const std::size_t nuisance_index =
-                        ensure_nuisance(problem, nuisance_indices, name);
-                    problem.nuisances[nuisance_index].terms.push_back(
-                        ShiftTerm{process.name, SourceKind::kDetectorShift, row, 1.0});
-                }
-            }
-            else if (has_detector_templates(process))
-            {
-                for (int row = 0; row < process.detector_template_count; ++row)
-                {
-                    const std::string name = detector_template_name(process, row);
-                    const std::size_t nuisance_index =
-                        ensure_nuisance(problem, nuisance_indices, name);
-                    problem.nuisances[nuisance_index].terms.push_back(
-                        ShiftTerm{process.name, SourceKind::kDetectorTemplate, row, 1.0});
-                }
-            }
-            else if (has_detector_envelope(process))
-            {
-                const std::string name = detector_group_name(process);
-                const std::size_t nuisance_index =
-                    ensure_nuisance(problem, nuisance_indices, name);
-                problem.nuisances[nuisance_index].terms.push_back(
-                    ShiftTerm{process.name, SourceKind::kDetectorEnvelope, 0, 1.0});
-            }
-
-            for (std::size_t bin = 0; bin < process.sumw2.size(); ++bin)
-            {
-                if (process.sumw2[bin] <= 0.0)
-                    continue;
-
-                fit::Nuisance nuisance;
-                nuisance.name = "stat:" + process.name + ":bin" + std::to_string(bin);
-                nuisance.terms.push_back(
-                    ShiftTerm{process.name, SourceKind::kStatBin, static_cast<int>(bin), 1.0});
-                problem.nuisances.push_back(std::move(nuisance));
-            }
-
-            if (!process_has_family_payload(process) &&
-                !process_has_genie_knob_payload(process) &&
-                !process_has_detector_payload(process) &&
-                has_total_envelope(process))
-            {
-                fit::Nuisance nuisance;
-                nuisance.name = "total:" + process.name;
-                nuisance.terms.push_back(
-                    ShiftTerm{process.name, SourceKind::kTotalEnvelope, 0, 1.0});
-                problem.nuisances.push_back(std::move(nuisance));
-            }
-        }
-
         return problem;
-    }
-
-    std::vector<double> predict_bins(const Problem &problem,
-                                     double mu,
-                                     const std::vector<double> &nuisance_values)
-    {
-        validate_problem(problem);
-        if (nuisance_values.size() != problem.nuisances.size())
-            throw std::runtime_error("fit::predict_bins: nuisance_values size does not match problem.nuisances");
-
-        std::vector<double> signal;
-        std::vector<double> background;
-        std::vector<double> total;
-        accumulate_prediction(problem, mu, nuisance_values.data(), signal, background, total);
-        return total;
-    }
-
-    double objective(const Problem &problem,
-                     double mu,
-                     const std::vector<double> &nuisance_values)
-    {
-        validate_problem(problem);
-        if (nuisance_values.size() != problem.nuisances.size())
-            throw std::runtime_error("fit::objective: nuisance_values size does not match problem.nuisances");
-
-        return objective_unchecked(problem, mu, nuisance_values.data());
     }
 
     Result profile_signal_strength(const Problem &problem,
@@ -1194,50 +901,101 @@ namespace fit
     {
         validate_problem(problem);
 
-        ProfilePoint best_point = minimise_joint(problem, options);
+        RooStats::HistFactory::Measurement measurement =
+            build_measurement(problem);
+        auto workspace =
+            RooStats::HistFactory::MakeModelAndMeasurementFast(measurement);
+        if (!workspace)
+            throw std::runtime_error("fit: HistFactory returned no RooWorkspace");
 
-        const IntervalEstimate total_up =
-            scan_crossing(problem, options, best_point, true, false);
-        const IntervalEstimate total_down =
-            scan_crossing(problem, options, best_point, false, false);
+        auto *model_config =
+            dynamic_cast<RooStats::ModelConfig *>(workspace->obj("ModelConfig"));
+        if (!model_config)
+            throw std::runtime_error("fit: ModelConfig not found in workspace");
 
-        IntervalEstimate stat_up;
-        IntervalEstimate stat_down;
-        if (options.compute_stat_only_interval)
-        {
-            stat_up = scan_crossing(problem, options, best_point, true, true);
-            stat_down = scan_crossing(problem, options, best_point, false, true);
-        }
+        RooAbsPdf *pdf = model_config->GetPdf();
+        RooAbsData *data = workspace->data("obsData");
+        auto *poi =
+            dynamic_cast<RooRealVar *>(model_config->GetParametersOfInterest()->first());
+        if (!pdf || !data || !poi)
+            throw std::runtime_error("fit: workspace is missing the pdf, data, or POI");
+
+        RooArgSet global_observables;
+        if (model_config->GetGlobalObservables())
+            global_observables.add(*model_config->GetGlobalObservables());
+
+        RooArgSet poi_set(*poi);
+        std::unique_ptr<RooFitResult> fit_total =
+            run_fit(*pdf, *data, global_observables, poi_set, options);
 
         Result out;
-        out.converged = best_point.converged;
-        out.minimizer_status = best_point.minimizer_status;
-        out.edm = best_point.edm;
-        out.objective = best_point.objective;
-        out.mu_hat = best_point.mu;
-        out.mu_err_total_up = total_up.error;
-        out.mu_err_total_down = total_down.error;
-        out.mu_err_stat_up = stat_up.error;
-        out.mu_err_stat_down = stat_down.error;
-        out.mu_err_total_up_found = total_up.found;
-        out.mu_err_total_down_found = total_down.found;
-        out.mu_err_stat_up_found = stat_up.found;
-        out.mu_err_stat_down_found = stat_down.found;
-        out.nuisance_values = best_point.nuisance_values;
-        out.parameter_names = best_point.parameter_names;
-        out.parameter_values = best_point.parameter_values;
-        out.covariance = best_point.covariance;
+        out.minimizer_status = fit_total->status();
+        out.edm = fit_total->edm();
+        out.objective = fit_total->minNll();
+        out.mu_hat = poi->getVal();
+        out.mu_err_total_down = positive_error_lo(poi->getErrorLo());
+        out.mu_err_total_up = positive_error_hi(poi->getErrorHi());
+        out.mu_err_total_down_found =
+            std::isfinite(out.mu_err_total_down) && out.mu_err_total_down > 0.0;
+        out.mu_err_total_up_found =
+            std::isfinite(out.mu_err_total_up) && out.mu_err_total_up > 0.0;
+        out.converged = (out.minimizer_status == 0);
 
-        out.nuisance_names.reserve(problem.nuisances.size());
-        for (const auto &nuisance : problem.nuisances)
-            out.nuisance_names.push_back(nuisance.name);
+        fill_parameter_values(*fit_total, out);
+        fill_nuisance_values(model_config->GetNuisanceParameters(), out);
 
-        accumulate_prediction(problem,
-                              best_point.mu,
-                              best_point.nuisance_values.data(),
-                              out.predicted_signal,
-                              out.predicted_background,
-                              out.predicted_total);
+        RooArgSet model_parameters;
+        if (model_config->GetObservables())
+            pdf->getParameters(model_config->GetObservables(), model_parameters);
+        else
+            pdf->getParameters(data->get(), model_parameters);
+        const std::vector<VarState> full_fit_states =
+            capture_var_states(model_parameters);
+
+        if (!options.compute_stat_only_interval)
+        {
+            out.minimizer_status_stat = -1;
+        }
+        else if (!model_config->GetNuisanceParameters() ||
+                 model_config->GetNuisanceParameters()->getSize() == 0)
+        {
+            out.minimizer_status_stat = out.minimizer_status;
+            out.mu_err_stat_down = out.mu_err_total_down;
+            out.mu_err_stat_up = out.mu_err_total_up;
+            out.mu_err_stat_down_found = out.mu_err_total_down_found;
+            out.mu_err_stat_up_found = out.mu_err_total_up_found;
+        }
+        else
+        {
+            set_all_constant(*model_config->GetNuisanceParameters(), true);
+            std::unique_ptr<RooFitResult> fit_stat;
+            try
+            {
+                fit_stat = run_fit(*pdf, *data, global_observables, poi_set, options);
+            }
+            catch (...)
+            {
+                restore_var_states(full_fit_states);
+                throw;
+            }
+
+            out.minimizer_status_stat = fit_stat->status();
+            out.mu_err_stat_down = positive_error_lo(poi->getErrorLo());
+            out.mu_err_stat_up = positive_error_hi(poi->getErrorHi());
+            out.mu_err_stat_down_found =
+                std::isfinite(out.mu_err_stat_down) && out.mu_err_stat_down > 0.0;
+            out.mu_err_stat_up_found =
+                std::isfinite(out.mu_err_stat_up) && out.mu_err_stat_up > 0.0;
+
+            restore_var_states(full_fit_states);
+        }
+
+        out.mu_err_total_down = positive_error_lo(out.mu_err_total_down);
+        out.mu_err_total_up = positive_error_hi(out.mu_err_total_up);
+        out.mu_err_stat_down = positive_error_lo(out.mu_err_stat_down);
+        out.mu_err_stat_up = positive_error_hi(out.mu_err_stat_up);
+
+        fill_channel_predictions(problem, *model_config, out);
         return out;
     }
 }

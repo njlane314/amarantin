@@ -23,6 +23,7 @@ target_link_libraries(Fit
   PUBLIC
     IO
   PRIVATE
+    amarantin_root_fit_deps
     amarantin_build_options
 )
 

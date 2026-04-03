@@ -60,6 +60,8 @@ namespace fit
     struct Channel
     {
         Spec spec;
+        double stat_rel_threshold = 0.0;
+        std::string stat_constraint = "Poisson";
         std::vector<double> data;
         std::vector<std::string> data_source_keys;
         std::vector<Process> processes;
@@ -68,56 +70,23 @@ namespace fit
         Process *find_process(const std::string &name);
     };
 
-    enum class SourceKind
-    {
-        kGenieMode,
-        kGenieKnobShift,
-        kFluxMode,
-        kReintMode,
-        kDetectorShift,
-        kDetectorTemplate,
-        kDetectorEnvelope,
-        kStatBin,
-        kTotalEnvelope
-    };
-
-    struct ShiftTerm
-    {
-        std::string process_name;
-        SourceKind source = SourceKind::kGenieMode;
-        int index = 0;
-        double coefficient = 1.0;
-    };
-
-    struct Nuisance
-    {
-        std::string name;
-        double start_value = 0.0;
-        double step = 0.1;
-        double lower = -5.0;
-        double upper = 5.0;
-        bool constrained = true;
-        double prior_center = 0.0;
-        double prior_sigma = 1.0;
-        bool fixed = false;
-        std::vector<ShiftTerm> terms;
-    };
-
     struct Problem
     {
-        const Channel *channel = nullptr;
-        std::string signal_process;
+        std::string measurement_name = "measurement";
+        std::vector<Channel> channels;
+        std::string poi_name = "mu";
         double mu_start = 1.0;
         double mu_lower = 0.0;
         double mu_upper = 5.0;
-        std::vector<Nuisance> nuisances;
+        double lumi = 1.0;
+        double lumi_rel_error = 0.0;
+        std::vector<std::string> constant_params;
     };
 
     struct FitOptions
     {
         int max_iterations = 10000;
         int max_function_calls = 100000;
-        int scan_points = 48;
         int strategy = 1;
         int print_level = -1;
         double tolerance = 1e-4;
@@ -125,10 +94,23 @@ namespace fit
         bool run_hesse = true;
     };
 
+    struct ChannelResult
+    {
+        std::string channel_key;
+        std::string branch_expr;
+        std::string selection_expr;
+        std::vector<std::string> observed_source_keys;
+        std::vector<double> observed;
+        std::vector<double> predicted_signal;
+        std::vector<double> predicted_background;
+        std::vector<double> predicted_total;
+    };
+
     struct Result
     {
         bool converged = false;
         int minimizer_status = -1;
+        int minimizer_status_stat = -1;
         double edm = 0.0;
         double objective = 0.0;
         double mu_hat = 1.0;
@@ -148,25 +130,18 @@ namespace fit
         std::vector<double> predicted_signal;
         std::vector<double> predicted_background;
         std::vector<double> predicted_total;
+        std::vector<ChannelResult> channels;
     };
 
-    // Build the default signal-strength problem from the persisted mode,
-    // detector, and statistical payloads on one in-memory fit channel
-    // assembled directly from cached DistributionIO entries.
+    // Build the default signal-strength problem from one or more
+    // in-memory channels assembled directly from cached DistributionIO
+    // entries. Every process tagged kSignal shares the same POI.
     Problem make_independent_problem(const Channel &channel,
-                                     const std::string &signal_process,
                                      double mu_start = 1.0,
                                      double mu_upper = 5.0);
-
-    const char *source_kind_name(SourceKind source);
-
-    std::vector<double> predict_bins(const Problem &problem,
-                                     double mu,
-                                     const std::vector<double> &nuisance_values);
-
-    double objective(const Problem &problem,
-                     double mu,
-                     const std::vector<double> &nuisance_values);
+    Problem make_independent_problem(const std::vector<Channel> &channels,
+                                     double mu_start = 1.0,
+                                     double mu_upper = 5.0);
 
     Result profile_signal_strength(const Problem &problem,
                                    const FitOptions &options = FitOptions{});

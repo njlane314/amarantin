@@ -1,12 +1,12 @@
 amarantin
 =========
 
-Native fit library
-------------------
-The preferred persisted downstream analysis surface is `DistributionIO`.
-`mk_fit` now reads cached `DistributionIO` entries directly and assembles
-one in-memory `fit::Channel` for the fit. No persistent channel bundle is
-required by the native workflow.
+HistFactory fit library
+-----------------------
+The preferred persisted downstream analysis surface is still `DistributionIO`,
+but the fit implementation is now a ROOT `RooStats::HistFactory` measurement
+built directly in memory from cached spectra. No second native minimizer path
+remains in the library.
 
 The small public surface is:
   - `fit::ProcessKind`
@@ -16,6 +16,7 @@ The small public surface is:
   - `fit::Problem`
   - `fit::FitOptions`
   - `fit::Result`
+  - `fit::ChannelResult`
   - `fit::make_independent_problem(...)`
   - `fit::profile_signal_strength(...)`
 
@@ -35,46 +36,40 @@ Rows with kind `data` fill the observed bins automatically. Without manifest
 data rows, pass `--data-bins` or use `--allow-zero-data` when an empty
 observation is intentional.
 
-For programmatic use, `app/mk_fit.cc` remains the reference path behind
-the `mk_fit` CLI for turning cached `DistributionIO::Spectrum` payloads into
-one `fit::Channel`.
+Single-channel manifest rows are:
 
-The fit library expects one unique non-data process name per channel, and
-`signal_process` must name a `kSignal` process explicitly.
+  process-name kind sample-key [cache-key]
 
-The default problem builder now shares family nuisances across processes,
-prefers explicit detector source shifts and explicit GENIE knob-pair source
-shifts from cached `DistributionIO` entries, and only falls back to detector
-templates, detector envelopes, or finally `total_down` / `total_up` when the
-richer payloads are unavailable.
-When detector source labels survive, the default builder shares those detector
-nuisances across processes by source label. When GENIE knob-pair source labels
-survive, it likewise shares those knob nuisances across processes by source
-label. When only `detector_down` / `detector_up` survive, it falls back to
-grouping by `detector_sample_keys` and morphing through down / nominal / up.
+Combined SR/CR-style manifests use one explicit fit-channel token per row:
 
-A native fitter would minimize q(mu) = -2 ln L(mu, theta_hat_mu). Here is a
-toy three-bin scan:
+  fit-channel process-name kind sample-key cache-key
 
-  mu  | q(mu) - qmin
-  0.0 | ********
-  0.1 | *****
-  0.2 | ***
-  0.3 | **
-  0.4 |
-  0.5 |
-  0.6 | < min
-  0.7 |
-  0.8 |
-  0.9 | *
-  1.0 | **
-  1.1 | ****
-  1.2 | ******
-  1.3 | ********
-  1.4 | **********
-  1.5 | *************
-  1.6 | ****************
-  1.7 | *******************
-  1.8 | **********************
-  1.9 | **************************
-  2.0 | ******************************
+Use `-` for the cache-key column when the first cached entry for that sample is
+the intended one.
+
+For programmatic use, `app/mk_fit.cc` remains the reference path behind the
+`mk_fit` CLI for turning cached `DistributionIO::Spectrum` payloads into one or
+more `fit::Channel` objects.
+
+A `fit::Problem` now describes one HistFactory measurement:
+  - each `fit::Channel` becomes one HistFactory channel
+  - every process tagged `kSignal` shares the same POI
+  - `sumw2` drives HistFactory MC-stat nuisances
+  - family modes, detector shifts/templates, GENIE knob pairs, and envelope
+    fallbacks become HistFactory shape systematics
+
+The default builder still prefers richer cached payloads first:
+  - family eigenmodes or sigma summaries
+  - explicit detector source shifts
+  - explicit GENIE knob-pair source shifts
+  - detector templates
+  - detector envelopes
+  - final `total_down` / `total_up` fallback only when no richer payload is
+    present for that process
+
+The combined fit report now records one fitted prediction block per channel when
+the manifest defines more than one fit channel.
+
+There is now a direct combined-channel smoke in `tests/fit_histfactory_smoke.cc`
+that exercises a shared-nuisance SR+CR fit without going through the larger
+shell fixture path.
