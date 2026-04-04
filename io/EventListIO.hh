@@ -19,6 +19,7 @@ public:
     static constexpr const char *event_weight_branch_name() { return "__w__"; }
     static constexpr const char *event_weight_squared_branch_name() { return "__w2__"; }
     static constexpr const char *event_category_branch_name() { return "__event_category__"; }
+    static constexpr const char *measurement_truth_category_branch_name() { return "__measurement_truth_category__"; }
     static constexpr const char *passes_signal_definition_branch_name() { return "__passes_signal_definition__"; }
 
     struct Metadata

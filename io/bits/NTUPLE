@@ -517,8 +517,12 @@ Additional all-lambda truth branches may also be present on newer ntuples:
   g4_all_lambda_pi_end_in_fv
   g4_all_lambda_ppi_contained_in_fv
 
-Downstream `amarantin` signal classification prefers `g4_all_lambda_*` when
-available and falls back to the older `g4_lambda_*` inputs otherwise.
+Downstream `amarantin` measurement-signal classification now uses the
+generator-level exit-state branches `truth_has_fs_lambda0`,
+`truth_has_fs_sigma0`, `truth_fs_lambda0_p`, and `truth_fs_sigma0_p` as the
+operational phase-space definition, and uses `truth_has_g4_lambda0` plus
+`truth_has_g4_lambda0_from_sigma0` to keep detector-secondaries out of the
+signal.
 
 Notes
 -----

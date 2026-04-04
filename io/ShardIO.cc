@@ -18,6 +18,12 @@
 
 namespace
 {
+    enum class ExposureMode
+    {
+        kPot,
+        kPotPerGate
+    };
+
     std::string find_subrun_tree_path(TFile &file,
                                       const std::vector<std::string> &candidates)
     {
@@ -27,6 +33,35 @@ namespace
                 return name;
         }
         return "";
+    }
+
+    ExposureMode find_exposure_mode(TFile &file,
+                                    const std::string &tree_path)
+    {
+        auto *tree = dynamic_cast<TTree *>(file.Get(tree_path.c_str()));
+        if (!tree)
+            throw std::runtime_error("ShardIO: missing SubRun tree while checking exposures: " + tree_path);
+
+        if (tree->GetBranch("pot"))
+            return ExposureMode::kPot;
+        if (tree->GetBranch("pot_per_gate") && tree->GetBranch("n_beam_gates"))
+            return ExposureMode::kPotPerGate;
+
+        throw std::runtime_error(
+            "ShardIO: SubRun tree missing required exposure branches "
+            "(pot or pot_per_gate+n_beam_gates)");
+    }
+
+    const char *exposure_mode_name(ExposureMode mode)
+    {
+        switch (mode)
+        {
+            case ExposureMode::kPot:
+                return "pot";
+            case ExposureMode::kPotPerGate:
+                return "pot_per_gate+n_beam_gates";
+        }
+        return "unknown";
     }
 }
 
@@ -182,6 +217,8 @@ void ShardIO::scan(const std::vector<std::string> &files)
 
     const std::vector<std::string> candidates = {"nuselection/SubRun", "SubRun"};
     std::string tree_path;
+    bool have_exposure_mode = false;
+    ExposureMode exposure_mode = ExposureMode::kPot;
 
     for (const auto &f : files)
     {
@@ -198,13 +235,24 @@ void ShardIO::scan(const std::vector<std::string> &files)
         if (tree_path.empty())
         {
             tree_path = file_tree_path;
-            continue;
         }
-
-        if (file_tree_path != tree_path)
+        else if (file_tree_path != tree_path)
         {
             throw std::runtime_error("ShardIO: mixed SubRun tree layouts in sample list: expected " +
                                      tree_path + " but found " + file_tree_path + " in " + f);
+        }
+
+        const ExposureMode file_exposure_mode = find_exposure_mode(*file, file_tree_path);
+        if (!have_exposure_mode)
+        {
+            exposure_mode = file_exposure_mode;
+            have_exposure_mode = true;
+        }
+        else if (file_exposure_mode != exposure_mode)
+        {
+            throw std::runtime_error("ShardIO: mixed SubRun exposure layouts in sample list: expected " +
+                                     std::string(exposure_mode_name(exposure_mode)) + " but found " +
+                                     exposure_mode_name(file_exposure_mode) + " in " + f);
         }
     }
 
@@ -215,16 +263,38 @@ void ShardIO::scan(const std::vector<std::string> &files)
     for (const auto &f : files)
         chain.Add(f.c_str());
 
-    if (!chain.GetBranch("run") || !chain.GetBranch("subRun") || !chain.GetBranch("pot"))
-        throw std::runtime_error("ShardIO: SubRun tree missing required branches (run, subRun, pot).");
+    if (!chain.GetBranch("run") || !chain.GetBranch("subRun"))
+    {
+        throw std::runtime_error("ShardIO: SubRun tree missing required branches "
+                                 "(run and subRun).");
+    }
 
     Int_t run = 0;
     Int_t subrun = 0;
     Double_t pot = 0.0;
+    Double_t pot_per_gate = 0.0;
+    Long64_t n_beam_gates = 0;
 
     chain.SetBranchAddress("run", &run);
     chain.SetBranchAddress("subRun", &subrun);
-    chain.SetBranchAddress("pot", &pot);
+    if (exposure_mode == ExposureMode::kPot)
+    {
+        if (!chain.GetBranch("pot"))
+        {
+            throw std::runtime_error("ShardIO: SubRun tree is missing pot after selecting the pot exposure layout.");
+        }
+        chain.SetBranchAddress("pot", &pot);
+    }
+    else
+    {
+        if (!chain.GetBranch("pot_per_gate") || !chain.GetBranch("n_beam_gates"))
+        {
+            throw std::runtime_error(
+                "ShardIO: SubRun tree is missing pot_per_gate or n_beam_gates after selecting the fallback exposure layout.");
+        }
+        chain.SetBranchAddress("pot_per_gate", &pot_per_gate);
+        chain.SetBranchAddress("n_beam_gates", &n_beam_gates);
+    }
 
     const Long64_t n = chain.GetEntries();
     entries_ = static_cast<long long>(n);
@@ -234,8 +304,12 @@ void ShardIO::scan(const std::vector<std::string> &files)
     for (Long64_t i = 0; i < n; ++i)
     {
         chain.GetEntry(i);
-        pot_sum_ += static_cast<double>(pot);
-        exposures[std::make_pair(static_cast<int>(run), static_cast<int>(subrun))] += static_cast<double>(pot);
+        const double generated_exposure =
+            (exposure_mode == ExposureMode::kPot)
+                ? static_cast<double>(pot)
+                : static_cast<double>(pot_per_gate) * static_cast<double>(n_beam_gates);
+        pot_sum_ += generated_exposure;
+        exposures[std::make_pair(static_cast<int>(run), static_cast<int>(subrun))] += generated_exposure;
     }
 
     subruns_.reserve(exposures.size());

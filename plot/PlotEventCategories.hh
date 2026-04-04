@@ -65,7 +65,7 @@ namespace plot_utils
                 {12, {12, "numu_cc_pi0gg", "#nu_{#mu}CC #pi^{0}/#gamma#gamma", colour_from_hex("#1832c7"), 1001}},
                 {13, {13, "numu_cc_npnpi", "#nu_{#mu}CC multi-#pi^{#pm}", colour_from_hex("#0c1dae"), 1001}},
                 {14, {14, "nc", "#nu_{x}NC", colour_from_hex("#fbcf38"), 1001}},
-                {15, {15, "signal_lambda", "Signal #Lambda^{0}", colour_from_hex("#48ca31"), 1001}},
+                {15, {15, "measurement_signal", "Measurement Signal", colour_from_hex("#48ca31"), 1001}},
                 {16, {16, "numu_cc_sigma0", "#nu_{#mu}CC #Sigma^{0}", colour_from_hex("#5cfd3f"), 1001}},
                 {17, {17, "numu_cc_k0", "#nu_{#mu}CC K^{0}", colour_from_hex("#7ae582"), 1001}},
                 {19, {19, "nue_cc", "#nu_{e}CC", colour_from_hex("#c110f9"), 1001}},

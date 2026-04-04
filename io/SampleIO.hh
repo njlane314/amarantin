@@ -81,7 +81,8 @@ public:
         if (s == "external" || s == "ext") return Origin::kExternal;
         if (s == "overlay") return Origin::kOverlay;
         if (s == "dirt") return Origin::kDirt;
-        if (s == "signal" || s == "enriched") return Origin::kSignal;
+        if (s == "signal" || s == "strange" || s == "strange_mc" || s == "enriched")
+            return Origin::kSignal;
         return Origin::kUnknown;
     }
 

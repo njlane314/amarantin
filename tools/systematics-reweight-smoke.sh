@@ -2,13 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${1:-${ROOT_DIR}/build}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/amarantin-syst-reweight.XXXXXX")"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 require_library() {
   local stem=$1
-  if [[ ! -e "${ROOT_DIR}/build/lib/lib${stem}.so" && ! -e "${ROOT_DIR}/build/lib/lib${stem}.dylib" ]]; then
-    printf 'missing build/lib/lib%s.{so,dylib}; build the target first\n' "${stem}" >&2
+  if [[ ! -e "${BUILD_DIR}/lib/lib${stem}.so" && ! -e "${BUILD_DIR}/lib/lib${stem}.dylib" ]]; then
+    printf 'missing %s/lib/lib%s.{so,dylib}; build the target first\n' "${BUILD_DIR}" "${stem}" >&2
     exit 1
   fi
 }
@@ -274,14 +275,14 @@ read -r -a ROOT_LIBS <<<"$(root-config --libs)"
   -I"${ROOT_DIR}/syst" \
   "${ROOT_CFLAGS[@]}" \
   "${SOURCE}" \
-  -L"${ROOT_DIR}/build/lib" \
-  -Wl,-rpath,"${ROOT_DIR}/build/lib" \
+  -L"${BUILD_DIR}/lib" \
+  -Wl,-rpath,"${BUILD_DIR}/lib" \
   -lSyst \
   -lIO \
   "${ROOT_LIBS[@]}" \
   -o "${BINARY}"
 
-export DYLD_LIBRARY_PATH="${ROOT_DIR}/build/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
-export LD_LIBRARY_PATH="${ROOT_DIR}/build/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+export DYLD_LIBRARY_PATH="${BUILD_DIR}/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+export LD_LIBRARY_PATH="${BUILD_DIR}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
 "${BINARY}" "${EVENTLIST_PATH}" "${DIST_PATH}" "${OTHER_EVENTLIST_PATH}"

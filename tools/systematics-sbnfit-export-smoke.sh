@@ -2,13 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${1:-${ROOT_DIR}/build}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/amarantin-sbnfit-export.XXXXXX")"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 require_library() {
   local stem=$1
-  if [[ ! -e "${ROOT_DIR}/build/lib/lib${stem}.so" && ! -e "${ROOT_DIR}/build/lib/lib${stem}.dylib" ]]; then
-    printf 'missing build/lib/lib%s.{so,dylib}; build the target first\n' "${stem}" >&2
+  if [[ ! -e "${BUILD_DIR}/lib/lib${stem}.so" && ! -e "${BUILD_DIR}/lib/lib${stem}.dylib" ]]; then
+    printf 'missing %s/lib/lib%s.{so,dylib}; build the target first\n' "${BUILD_DIR}" "${stem}" >&2
     exit 1
   fi
 }
@@ -27,7 +28,7 @@ if ! command -v root-config >/dev/null 2>&1; then
 fi
 
 require_library "IO"
-require_binary "${ROOT_DIR}/build/bin/mk_cov"
+require_binary "${BUILD_DIR}/bin/mk_cov"
 
 SOURCE="${TMP_DIR}/sbnfit_export_smoke.cc"
 BINARY="${TMP_DIR}/sbnfit_export_smoke"
@@ -276,14 +277,14 @@ read -r -a ROOT_LIBS <<<"$(root-config --libs)"
   -I"${ROOT_DIR}/io" \
   "${ROOT_CFLAGS[@]}" \
   "${SOURCE}" \
-  -L"${ROOT_DIR}/build/lib" \
-  -Wl,-rpath,"${ROOT_DIR}/build/lib" \
+  -L"${BUILD_DIR}/lib" \
+  -Wl,-rpath,"${BUILD_DIR}/lib" \
   -lIO \
   "${ROOT_LIBS[@]}" \
   -o "${BINARY}"
 
-export DYLD_LIBRARY_PATH="${ROOT_DIR}/build/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
-export LD_LIBRARY_PATH="${ROOT_DIR}/build/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+export DYLD_LIBRARY_PATH="${BUILD_DIR}/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+export LD_LIBRARY_PATH="${BUILD_DIR}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
 "${BINARY}" write "${DIST_PATH}"
 
@@ -297,12 +298,12 @@ signal signal smoke
 bad bad-genie smoke
 EOF
 
-"${ROOT_DIR}/build/bin/mk_cov" \
+"${BUILD_DIR}/bin/mk_cov" \
   --manifest "${GOOD_MANIFEST}" \
   "${DIST_PATH}" \
   "${GOOD_OUTPUT}"
 
-if "${ROOT_DIR}/build/bin/mk_cov" \
+if "${BUILD_DIR}/bin/mk_cov" \
   --manifest "${BAD_MANIFEST}" \
   "${DIST_PATH}" \
   "${BAD_OUTPUT}" >"${FAIL_LOG}" 2>&1; then

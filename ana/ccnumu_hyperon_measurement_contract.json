@@ -1,0 +1,99 @@
+{
+  "analysis": {
+    "slug": "ccnumu_hyperon",
+    "title": "Semi-Inclusive Charged-Current Muon-Flavour Neutral-Hyperon Analysis"
+  },
+  "observable": {
+    "kind": "event_level_phase_space_cross_section",
+    "interaction": "cc_muon_flavour",
+    "required_neutral_hyperon_multiplicity": 1,
+    "counting_rule": "count_event_once",
+    "true_fiducial_volume_defines_signal": true,
+    "reco_fiducial_volume_defines_selection": true
+  },
+  "parameter_of_interest": {
+    "name": "kappa",
+    "definition": "sigma_phase_space / sigma_phase_space_nominal",
+    "scales_only": [
+      "measurement_signal"
+    ]
+  },
+  "flavour_scope": {
+    "mode": "muon_flavour",
+    "include_nu_mu": true,
+    "include_nubar_mu": true,
+    "reported_observable": "flux_averaged_over_included_beam_compositions"
+  },
+  "phase_space": {
+    "lambda0_min_p_GeV_c": 0.42,
+    "sigma0_min_p_GeV_c": 0.8
+  },
+  "truth_categories": [
+    "measurement_signal",
+    "neutral_hyperon_out_of_phase_space",
+    "other_strange_background",
+    "detector_secondary_hyperon_background",
+    "nonstrange_overlay"
+  ],
+  "ancestry_rules": {
+    "direct_exit_state_lambda0_counts_as_signal": true,
+    "direct_exit_state_sigma0_counts_as_signal": true,
+    "sigma0_to_g4_lambda0_descendants_inherit_signal_ancestry": true,
+    "pure_detector_secondary_lambda0_without_exit_state_lambda0_or_sigma0_ancestor_is_background": true
+  },
+  "logical_samples": {
+    "preferred_keys": [
+      "data",
+      "ext",
+      "dirt",
+      "overlay",
+      "strange"
+    ],
+    "legacy_strange_aliases": [
+      "signal",
+      "enriched"
+    ],
+    "orthogonality_rule": "enforced_event_by_event_from_truth_before_dataset_eventlist_and_snapshot_production"
+  },
+  "selection_and_fit": {
+    "classifier_semantics": {
+      "beam_score": "beam_vs_ext_dirt",
+      "muon_flavour_cc_score": "muon_flavour_cc_vs_other_beam",
+      "signal_score": "measurement_signal_vs_other_muon_flavour_cc"
+    },
+    "fit_prediction": "N_pred = N_ext + N_dirt + N_nonstrange_overlay + N_other_strange_background + kappa * N_measurement_signal",
+    "implementation_rule": "nested_Evis_is_explicit_subchannels_not_ragged_global_tensor",
+    "binning_rule": "start_with_quantile_or_logit_space_binning_then_merge_until_occupancy_mcstat_and_fit_stability_are_satisfied",
+    "require_per_bin_mc_stat_nuisances": true
+  },
+  "systematics": {
+    "nominal_weight_recipe": [
+      "__w_norm__",
+      "weightSplineTimesTune_or_weightSpline_times_weightTune",
+      "ppfx_cv_for_numi_when_present",
+      "RootinoFix_when_present"
+    ],
+    "other_strange_background_requires_dedicated_nuisance": true,
+    "ext_normalisation": "run_or_polarity_exposure_or_trigger_ratio_not_pot"
+  },
+  "training_snapshot": {
+    "required_columns": [
+      "stable_event_uid",
+      "run_period",
+      "polarity",
+      "truth_label",
+      "nominal_weight",
+      "split_label",
+      "cnn_model_tag"
+    ],
+    "split_rule": "deterministic_from_event_identity"
+  },
+  "acceptance_criteria": [
+    "asimov_closure_for_injected_kappa",
+    "pseudoexperiment_pull_mean_and_width_within_predefined_tolerances",
+    "stability_under_run_split_and_rebinning_tests",
+    "no_pathological_nuisance_pulls_or_near_singular_covariance_structure",
+    "acceptable_postfit_agreement_in_all_control_regions",
+    "predefined_result_or_limit_procedure_frozen_before_unblinding"
+  ]
+}

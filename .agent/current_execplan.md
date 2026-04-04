@@ -1,5 +1,105 @@
 # ExecPlan
 
+## ExecPlan Addendum: Freeze Measurement-Signal Semantics For `ccnumu_hyperon`
+
+### 1. Objective
+Make the neutral-hyperon measurement semantics explicit and machine-checkable
+so the repo no longer overloads `signal` to mean both the broad logical
+all-strange stream and the fitted POI component.
+
+### 2. Constraints
+- Keep the installed `Ana` and `IO` targets stable.
+- Keep `signal` parsing for compatibility while allowing a less ambiguous
+  logical-sample alias.
+- Keep `io/` persistence-only.
+- Avoid a full persisted-origin rename in this pass.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- prefer plain data and namespace functions
+- keep module boundaries sharp
+- add abstractions only when they delete complexity
+
+This pass should make one truth contract explicit instead of spreading the
+operational measurement definition across prose anchors and detector-level
+Lambda helpers.
+
+### 4. System map
+- `.agent/analysis/ccnumu_hyperon.md`
+- `ana/ccnumu_hyperon_measurement_contract.json`
+- `ana/SignalDefinition.hh`
+- `ana/SignalDefinition.cc`
+- `ana/EventListBuild.cc`
+- `ana/README`
+- `ana/macro/inspect_categories.C`
+- `io/EventListIO.hh`
+- `io/DatasetIO.cc`
+- `io/SampleIO.hh`
+- `io/bits/DERIVED`
+- `io/bits/NTUPLE`
+- `plot/PlotEventCategories.hh`
+- `tests/CMakeLists.txt`
+- `tests/signal_definition_contract_check.cc`
+- `tests/testroot_pipeline_check.cc`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- separate the broad logical strange stream from the measurement-signal truth
+  label
+- classify measurement truth from exit-state Lambda0 / Sigma0 branches instead
+  of detector-level Lambda candidate topology
+
+#### doc / build cleanup
+- replace prose-only measurement anchors with one repo-local machine-readable
+  contract plus a focused compiled check
+- update analysis memory and derived-surface docs to use
+  `measurement_signal` / `other_strange_background` semantics explicitly
+
+### 6. Milestones
+
+#### Milestone A: Add the machine-readable measurement contract and event-list truth categories
+- status: blocked
+- hypothesis: one JSON contract plus one explicit event-list truth category is
+  simpler and safer than relying on overloaded `signal` language
+- files / symbols touched:
+  - `ana::SignalDefinition::MeasurementTruthContract`
+  - `ana::SignalDefinition::StrangeTruthSummary`
+  - `ana::SignalDefinition::passes_measurement_signal(...)`
+  - `ana::SignalDefinition::classify_measurement_truth(...)`
+  - `signal_definition_contract_check`
+- expected behavior risk: medium
+- verification commands:
+  - `git diff --check -- .agent/analysis/ccnumu_hyperon.md ana/SignalDefinition.hh ana/SignalDefinition.cc ana/EventListBuild.cc ana/README ana/macro/inspect_categories.C io/EventListIO.hh io/DatasetIO.cc io/SampleIO.hh io/bits/DERIVED io/bits/NTUPLE plot/PlotEventCategories.hh tests/CMakeLists.txt tests/signal_definition_contract_check.cc tests/testroot_pipeline_check.cc ana/ccnumu_hyperon_measurement_contract.json`
+  - `cmake --build build --target signal_definition_contract_check testroot_pipeline_check mk_eventlist --parallel`
+  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+  - `source ./.setup.sh && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+- acceptance criteria:
+  - the repo has one machine-readable measurement contract file
+  - the event-list path writes an explicit measurement-truth category
+  - `signal` remains supported as a legacy all-strange alias, but `strange`
+    also parses cleanly
+  - the compiled contract check exercises the JSON contract and truth-category
+    behavior
+- verification results:
+  - focused `git diff --check` passed
+  - the checked-in `build/` tree predates the new target
+  - local configure is blocked here by missing SQLite / nlohmann_json setup
+  - the local machine does not expose the required CVMFS setup scripts
+
+### 7. Public-surface check
+- compatibility impact:
+  - `signal` remains accepted as a logical all-strange alias
+  - `strange` and `strange_mc` are now accepted as less ambiguous aliases
+  - EventListIO gains `__measurement_truth_category__`
+
+### 8. Decision log
+- freeze the observable as muon-flavour CC with a flux-averaged `nu_mu` +
+  `nubar_mu` scope for now
+- keep the disruptive full `signal` -> `strange` rename out of this pass
+- treat the JSON contract as the repo-local operational definition
+
 ## ExecPlan Addendum: Align `ana` Origin Filtering With `test.root`
 
 ### 1. Objective

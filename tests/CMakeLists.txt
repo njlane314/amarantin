@@ -1,6 +1,36 @@
 set(AMARANTIN_TEST_ROOT_FIXTURE "${CMAKE_SOURCE_DIR}/test.root" CACHE FILEPATH
   "Optional path to the test.root fixture used by the end-to-end smoke")
 
+if(TARGET Ana)
+  add_executable(signal_definition_contract_check signal_definition_contract_check.cc)
+
+  target_link_libraries(signal_definition_contract_check
+    PRIVATE
+      Ana
+      IO
+      amarantin_build_options
+  )
+
+  if(nlohmann_json_FOUND)
+    target_link_libraries(signal_definition_contract_check PRIVATE nlohmann_json::nlohmann_json)
+  elseif(NLOHMANN_JSON_INC)
+    target_include_directories(signal_definition_contract_check PRIVATE "${NLOHMANN_JSON_INC}")
+  endif()
+
+  set_target_properties(signal_definition_contract_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+
+  add_test(NAME signal_definition_contract_check
+    COMMAND "${CMAKE_BINARY_DIR}/bin/signal_definition_contract_check"
+      "${CMAKE_SOURCE_DIR}/ana/ccnumu_hyperon_measurement_contract.json"
+  )
+
+  if(TARGET check)
+    add_dependencies(check signal_definition_contract_check)
+  endif()
+endif()
+
 if(NOT TARGET mk_sample OR
    NOT TARGET mk_dataset OR
    NOT TARGET mk_eventlist OR

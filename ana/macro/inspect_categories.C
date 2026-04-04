@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "EventCategory.hh"
+#include "SignalDefinition.hh"
 
 namespace
 {
@@ -33,7 +34,7 @@ namespace
             case event_category::EventCategory::kMuCCPi0OrGamma: return "mu_cc_pi0_or_gamma";
             case event_category::EventCategory::kMuCCNPi: return "mu_cc_npi";
             case event_category::EventCategory::kNC: return "nc";
-            case event_category::EventCategory::kSignalLambda: return "signal_lambda";
+            case event_category::EventCategory::kSignalLambda: return "measurement_signal";
             case event_category::EventCategory::kMuCCSigma0: return "mu_cc_sigma0";
             case event_category::EventCategory::kMuCCK0: return "mu_cc_k0";
             case event_category::EventCategory::kECCC: return "eccc";
@@ -64,15 +65,23 @@ namespace
 
         double weight = 1.0;
         Int_t category = 0;
+        Int_t measurement_truth_category = 0;
         Bool_t passes_signal_definition = kFALSE;
 
         const bool has_weight = tree->GetBranch(EventListIO::event_weight_branch_name()) != nullptr;
+        const bool has_measurement_truth_category =
+            tree->GetBranch(EventListIO::measurement_truth_category_branch_name()) != nullptr;
         const bool has_signal_definition =
             tree->GetBranch(EventListIO::passes_signal_definition_branch_name()) != nullptr;
 
         if (has_weight)
             tree->SetBranchAddress(EventListIO::event_weight_branch_name(), &weight);
         tree->SetBranchAddress(EventListIO::event_category_branch_name(), &category);
+        if (has_measurement_truth_category)
+        {
+            tree->SetBranchAddress(EventListIO::measurement_truth_category_branch_name(),
+                                   &measurement_truth_category);
+        }
         if (has_signal_definition)
         {
             tree->SetBranchAddress(EventListIO::passes_signal_definition_branch_name(),
@@ -80,6 +89,7 @@ namespace
         }
 
         std::map<int, CategorySummary> categories;
+        std::map<int, CategorySummary> measurement_truth_categories;
         const Long64_t entries = tree->GetEntries();
         double weighted_entries = 0.0;
         long long signal_definition_entries = 0;
@@ -93,6 +103,13 @@ namespace
             auto &summary = categories[category];
             ++summary.entries;
             summary.weighted += current_weight;
+
+            if (has_measurement_truth_category)
+            {
+                auto &truth_summary = measurement_truth_categories[measurement_truth_category];
+                ++truth_summary.entries;
+                truth_summary.weighted += current_weight;
+            }
 
             if (has_signal_definition && passes_signal_definition != kFALSE)
             {
@@ -111,6 +128,18 @@ namespace
         {
             std::cout << "passes_signal_definition=" << signal_definition_entries
                       << " weighted_passes_signal_definition=" << format_double(weighted_signal_definition)
+                      << "\n";
+        }
+
+        for (const auto &entry : measurement_truth_categories)
+        {
+            std::cout << "measurement_truth_category=" << entry.first
+                      << " label="
+                      << ana::SignalDefinition::measurement_truth_category_name(
+                             static_cast<ana::SignalDefinition::MeasurementTruthCategory>(
+                                 entry.first))
+                      << " entries=" << entry.second.entries
+                      << " weighted=" << format_double(entry.second.weighted)
                       << "\n";
         }
 

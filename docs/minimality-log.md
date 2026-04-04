@@ -1,6 +1,348 @@
 # Minimality Log
 
 ## Current milestone
+- status: blocked
+- subsystem: `ana/` measurement-signal semantics and truth-contract alignment
+- design rule from `DESIGN.md`: keep the analysis boundary sharp by making one
+  plain-data truth contract explicit instead of spreading the operational
+  signal definition across prose anchors and detector-level helper branches
+
+## What changed
+- added `ana/ccnumu_hyperon_measurement_contract.json` as the repo-local
+  machine-readable measurement contract
+- extended `ana::SignalDefinition` with a plain-data measurement contract plus
+  explicit measurement-truth categories
+- simplified `ana/EventListBuild.cc` so the operational measurement signal is
+  classified from exit-state `Lambda0` / `Sigma0` truth branches instead of
+  `g4_all_lambda_*` / `g4_lambda_*` detector-level candidate plumbing
+- made MC event-list building hard-fail when the truth fields needed for
+  strange-sample orthogonality and ancestry-aware measurement labeling are
+  absent
+- added `__measurement_truth_category__` to EventListIO selected trees
+- accepted `strange` / `strange_mc` as logical all-strange aliases while
+  preserving legacy `signal`
+- updated the analysis memory, derived-surface docs, ntuple notes, and
+  category inspection output around `measurement_signal` semantics
+- added `tests/signal_definition_contract_check.cc` plus a CTest entry that
+  reads the JSON contract directly
+
+## Why this is simpler
+- the broad logical all-strange stream and the POI subset now have different
+  operational names and different persisted labels
+- the measurement signal is defined from the exit-state truth that the user
+  actually cares about, not from detector-secondary Lambda candidate details
+- one JSON contract plus one compiled check is easier to grep and harder to
+  silently drift than prose anchors in multiple notes
+- the event-list output now carries an explicit measurement-truth category, so
+  downstream training and fit code does not need to reconstruct the same split
+  ad hoc
+
+## Verification
+- configure/build commands:
+-  `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+-  `source ./.setup.sh && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+- target-only commands:
+-  `cmake --build build --target signal_definition_contract_check testroot_pipeline_check mk_eventlist --parallel`
+- shell checks:
+-  `git diff --check -- .agent/analysis/ccnumu_hyperon.md ana/SignalDefinition.hh ana/SignalDefinition.cc ana/EventListBuild.cc ana/README ana/macro/inspect_categories.C io/EventListIO.hh io/DatasetIO.cc io/SampleIO.hh io/bits/DERIVED io/bits/NTUPLE plot/PlotEventCategories.hh tests/CMakeLists.txt tests/signal_definition_contract_check.cc tests/testroot_pipeline_check.cc ana/ccnumu_hyperon_measurement_contract.json`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed
+  - `cmake --build build --target signal_definition_contract_check ...` failed
+    because the checked-in `build/` tree predates the new target
+  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release` failed because this
+    machine cannot read `/usr/include/sqlite3.h` and does not currently expose
+    `nlohmann/json.hpp`
+  - `source ./.setup.sh && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+    failed because the required CVMFS setup scripts are unavailable here
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - removed the operational event-list dependence on the larger
+    detector-level Lambda candidate surface for measurement-signal
+    classification
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - modestly positive, but the signal-classification path is flatter because it
+    now classifies from one small truth summary
+
+## Decisions
+- treat the JSON measurement contract as the repo-local operational definition
+- freeze the current observable as muon-flavour CC with a shared flux-averaged
+  `nu_mu` + `nubar_mu` scope
+- keep legacy `signal` parsing for the broad all-strange stream, but prefer
+  `strange` in analysis-facing language
+
+## Remaining hotspots
+- the fit library and manifests still need an explicit `other_strange_background`
+  nuisance implementation; this pass only freezes the analysis/event-list
+  contract
+- full compile/runtime verification still needs a working local dependency
+  environment or container
+
+## Current milestone
+- status: blocked
+- subsystem: `fit/` HistFactory replacement plus combined-channel `mk_fit`
+- design rule from `DESIGN.md`: delete the extra implementation and keep the
+  workflow thin by turning cached plain data directly into one HistFactory
+  measurement
+
+## What changed
+- replaced the custom `fit/SignalStrengthFit.cc` minimizer with one
+  HistFactory-backed `fit::profile_signal_strength(...)` path
+- simplified the installed fit header around `Problem`, `Channel`, and
+  per-channel fitted results instead of the old bespoke nuisance/objective API
+- extended `mk_fit` manifest mode so one invocation can group multiple fit
+  channels, enabling SR+CR fits with a shared POI
+- added fit-only ROOT linkage for RooFit / RooStats / HistFactory instead of
+  broadening every module
+- added `tests/fit_histfactory_smoke.cc` as a direct combined-channel smoke
+- trimmed fit docs so they describe the surviving HistFactory path
+
+## Why this is simpler
+- there is now one fit implementation instead of a custom minimizer beside the
+  ROOT HistFactory path the user actually wants
+- `app/mk_fit.cc` only needs to group cached spectra into channels and format a
+  report; it no longer carries the model semantics itself
+- combined-channel fits are expressed as plain manifest rows, not as a second
+  persisted format or shell wrapper
+- the fit library surface is easier to grep because it centers on
+  `Channel -> Problem -> Result`
+
+## Verification
+- configure/build commands:
+-  `cmake -S . -B build`
+-  `source ./.setup.sh && cmake -S . -B build`
+- target-only commands:
+-  `cmake --build build --target help`
+- shell checks:
+-  `git diff --check -- CMakeLists.txt fit/CMakeLists.txt fit/SignalStrengthFit.hh fit/SignalStrengthFit.cc app/mk_fit.cc fit/README USAGE COMMANDS tests/CMakeLists.txt tests/fit_histfactory_smoke.cc`
+- smoke checks:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B /tmp/amarantin-fit-check -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/amarantin-fit-check --target Fit mk_fit fit_histfactory_smoke --parallel && ctest --test-dir /tmp/amarantin-fit-check --output-on-failure -R fit_histfactory_smoke'`
+- results:
+  - focused `git diff --check` passed
+  - `cmake --build build --target help` showed the checked-in `build/` tree is
+    stale and does not yet expose `Fit`
+  - `cmake -S . -B build` failed locally because this machine is missing the
+    current SQLite / nlohmann_json setup the repo expects
+  - `source ./.setup.sh && cmake -S . -B build` failed because the local
+    machine lacks the required CVMFS setup scripts
+  - Docker verification is blocked here because the Docker daemon is not
+    running
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 1 custom fit-engine implementation path
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - the fit library core shrank by about 159 lines across
+    `fit/SignalStrengthFit.cc` and `fit/SignalStrengthFit.hh`
+  - the overall pass is modestly positive once the new direct smoke and doc
+    updates are included
+
+## Decisions
+- keep `DistributionIO` as the only persisted fit input surface
+- use one shared POI across every process tagged `signal`
+- use a 5-field combined manifest row to avoid ambiguous parsing against the
+  legacy 3/4-field form
+- verify combined SR+CR behavior with one direct compiled smoke instead of
+  adding more shell workflow plumbing
+
+## Remaining hotspots
+- a trustworthy compile / runtime check still needs either the expected local
+  ROOT + dependency environment or a running Docker daemon
+- if downstream users still compile against the removed custom nuisance API,
+  they will need to migrate to the simplified HistFactory-oriented surface
+
+## Current milestone
+- status: done
+- subsystem: `ana` origin-filter alignment for `test.root`
+- design rule from `DESIGN.md`: adapt build-time analysis transforms to the
+  real ntuple surface without widening module boundaries or changing the
+  public `Ana` header surface
+
+## What changed
+- kept the canonical `overlay` / `signal` origin rules at the event-list build
+  boundary, but added a local fallback from legacy `count_strange` to
+  `truth_has_strange_fs`
+- documented that fallback in `io/bits/DERIVED`
+- extended the real `test.root` smoke so it builds `overlay` and `signal`
+  eventlists and checks their split against the fixture's
+  `truth_has_strange_fs` partition
+
+## Why this is simpler
+- `ana` now follows the persisted truth surface already present in the ntuple
+  instead of requiring a redundant legacy branch
+- the compatibility logic stays in one place, `ana::build_event_list(...)`,
+  rather than leaking into app defaults or I/O code
+- the existing fixture smoke now proves the origin split directly, instead of
+  relying on a manual branch audit
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- shell checks:
+-  `bash -n tools/test-root-smoke.sh`
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md ana/EventListBuild.cc io/bits/DERIVED tools/test-root-smoke.sh`
+- smoke checks:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B /tmp/amarantin-ana-check -DCMAKE_BUILD_TYPE=Release -DAMARANTIN_TEST_ROOT_FIXTURE=/work/test.root && cmake --build /tmp/amarantin-ana-check --parallel && ctest --test-dir /tmp/amarantin-ana-check --output-on-failure -R testroot_pipeline_smoke'`
+- results:
+  - `bash -n tools/test-root-smoke.sh` passed
+  - focused `git diff --check` passed
+  - Docker configure/build plus `ctest -R testroot_pipeline_smoke` passed
+    against the real fixture
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - small positive; one fallback path plus one fixture assertion
+
+## Decisions
+- preserve the installed `SignalDefinition.hh` surface
+- keep `count_strange` as the first-choice branch for compatibility and use
+  `truth_has_strange_fs` only when needed
+
+## Remaining hotspots
+- the default CLI tree/selection names still do not match raw `test.root`;
+  this pass only aligns the `ana` library's origin split with the available
+  truth branches
+
+## Current milestone
+- status: done
+- subsystem: analyzer-facing macro expansion
+- design rule from `DESIGN.md`: keep macros thin and make persisted surfaces
+  easier to inspect directly rather than rebuilding workflow logic in macros
+
+## What changed
+- added `inspect_weights` over the persisted event-weight surface
+- added `inspect_cutflow` over the persisted selection-stage branches
+- added `inspect_categories` over the persisted event-category surface
+- added `inspect_systematics` over cached detector / knob / family payloads
+- added `inspect_covariance` over exported covariance matrices
+- added a shell-driven `macro_analysis_smoke` that writes a synthetic
+  `EventListIO` / `DistributionIO` fixture, exports covariance with `mk_cov`,
+  and runs the new macros through `tools/run-macro`
+- extended `tools/test-root-smoke.sh` so the new weight, cutflow, category,
+  and covariance macros also run on real `test.root` outputs
+- removed the stale `ChannelIO.hh` include from `.rootlogon.C`
+- replaced deleted fit-macro examples in `tools/run-macro` with live ones
+
+## Why this is simpler
+- analyzers get direct summaries of the row-wise and bin-wise persisted
+  surfaces without dropping into ad hoc ROOT sessions
+- one smoke can validate the runner and the new macros together
+- the real fixture path now also proves the new eventlist/export macros on
+  actual outputs instead of only on synthetic ones
+- the macro runner no longer advertises commands that do not exist
+- the macro bootstrap no longer depends on a deleted header
+
+## Verification
+- configure/build commands:
+-  `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B /tmp/amarantin-macro-check -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/amarantin-macro-check --parallel && ctest --test-dir /tmp/amarantin-macro-check --output-on-failure'`
+- target-only commands:
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md .rootlogon.C tools/run-macro io/macro/inspect_weights.C ana/macro/inspect_cutflow.C ana/macro/inspect_categories.C plot/macro/inspect_systematics.C plot/macro/inspect_covariance.C tools/macro-analysis-smoke.sh tests/CMakeLists.txt COMMANDS USAGE`
+-  `bash -n tools/run-macro`
+-  `bash -n tools/macro-analysis-smoke.sh`
+- smoke checks:
+- results:
+  - focused `git diff --check` passed
+  - `bash -n tools/run-macro` passed
+  - `bash -n tools/macro-analysis-smoke.sh` passed
+  - Docker `ctest` passed with:
+    - `testroot_pipeline_smoke`
+    - `systematics_rigorous_check`
+    - `systematics_detector_smoke`
+    - `systematics_reweight_smoke`
+    - `systematics_sbnfit_export_smoke`
+    - `macro_analysis_smoke`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - positive; five thin macros plus one shell smoke and small runner/doc cleanup
+
+## Decisions
+- keep the new macros read-only and grep-friendly
+- keep the smoke shell-driven instead of adding a new compiled test target
+- keep the new macros focused on persisted inspection surfaces, not on
+  rebuilding workflow orchestration
+
+## Remaining hotspots
+- the current macro surface still does not cover event-display image internals
+  or fit-report inspection directly
+
+## Current milestone
+- status: done
+- subsystem: broader post-build fixture and selected systematics coverage
+- design rule from `DESIGN.md`: validate the real workflow layers directly,
+  without adding new wrapper abstractions
+
+## What changed
+- expanded the `test.root` smoke so `check` now drives
+  `mk_sample -> mk_dataset -> mk_eventlist -> mk_dist -> mk_fit -> mk_cov`
+- extended the verifier to check the resulting distribution, fit report,
+  covariance export, and one `EfficiencyPlot` render
+- promoted the existing detector, reweight, and stacked-export systematics
+  smokes into CTest and made the shell entrypoints build-dir aware
+- fixed a real ROOT branch-address lifetime bug in `syst/ReweightFill.cc`
+  exposed by the new reweight smoke
+
+## Why this is simpler
+- one post-build entrypoint now exercises the full CLI chain instead of only
+  the front half of the workflow
+- the systematics smokes plug into CTest directly instead of living as
+  disconnected helper scripts
+- the reweight path now binds ROOT branch addresses from stable accumulator
+  storage, which matches the object lifetime the code already assumes
+
+## Verification
+- configure/build commands:
+- target-only commands:
+- shell checks:
+-  `bash -n tools/test-root-smoke.sh`
+-  `bash -n tools/systematics-detector-smoke.sh`
+-  `bash -n tools/systematics-reweight-smoke.sh`
+-  `bash -n tools/systematics-sbnfit-export-smoke.sh`
+-  `git diff --check`
+- smoke checks:
+-  `docker run --rm -v "$PWD":/work -w /work amarantin-dev bash -lc 'cmake -S . -B /tmp/amarantin-check -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/amarantin-check --parallel && ctest --test-dir /tmp/amarantin-check --output-on-failure'`
+- results:
+  - all shell syntax checks passed
+  - `git diff --check` passed
+  - Docker `ctest` passed with:
+    - `testroot_pipeline_smoke`
+    - `systematics_detector_smoke`
+    - `systematics_reweight_smoke`
+    - `systematics_sbnfit_export_smoke`
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - positive; broader verification plus one real bug fix in `syst`
+
+## Decisions
+- keep the fixture-driven smoke in `tools/test-root-smoke.sh`
+- keep the plot check narrow to a successful compute/render path
+- treat the reweight crash as a code defect to fix, not a smoke to drop
+
+## Remaining hotspots
+- broader plotting and systematics coverage still depends on small synthetic
+  harnesses rather than more fixture-backed cases
+
+## Current milestone
 - status: done
 - subsystem: `ana` origin-filter alignment for `test.root`
 - design rule from `DESIGN.md`: adapt build-time analysis transforms to the

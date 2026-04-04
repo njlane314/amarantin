@@ -38,10 +38,11 @@ SampleDef.hh
   apply_sample_defs(...), used by mk_dataset to stamp workflow metadata.
 
 SignalDefinition.hh
-  Defines the canonical hardcoded Lambda signal definition used during
-  event-list construction and persisted in EventListIO metadata. It also owns
-  the canonical analysis-specific sample-selection rule that refines the base
-  EventList selection for origins such as `overlay` and `signal`.
+  Defines the canonical measurement truth contract used during event-list
+  construction and persisted in EventListIO metadata. It also owns the
+  canonical analysis-specific sample-selection rule that refines the base
+  EventList selection for origins such as `overlay` and the broad all-strange
+  sample family (`signal`, with `strange` accepted as the preferred alias).
 
 Snapshot.hh
   Defines snapshot::Spec plus snapshot::sample(...) and
@@ -55,8 +56,8 @@ Cuts.hh
   construction.
 
 EventCategory.hh
-  Selected-event category helpers used after the signal predicate has already
-  been resolved.
+  Selected-event category helpers used after the measurement-signal predicate
+  has already been resolved.
 
 Boundary notes
 --------------

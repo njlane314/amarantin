@@ -323,32 +323,18 @@ namespace
         return count;
     }
 
-    template <class T>
-    T first_or_default(const std::vector<T> *values, T fallback)
-    {
-        if (!values || values->empty())
-            return fallback;
-        return values->front();
-    }
-
-    template <class T>
-    T at_or_default(const std::vector<T> *values, std::size_t index, T fallback)
-    {
-        if (!values || index >= values->size())
-            return fallback;
-        return values->at(index);
-    }
-
-    bool any_nonzero(const std::vector<int> *values)
+    int count_at_or_above(const std::vector<float> *values, float threshold)
     {
         if (!values)
-            return false;
-        for (const int value : *values)
+            return 0;
+
+        int count = 0;
+        for (const float value : *values)
         {
-            if (value != 0)
-                return true;
+            if (std::isfinite(value) && value >= threshold)
+                ++count;
         }
-        return false;
+        return count;
     }
 
     ana::SignalDefinition::TruthInput make_truth_input(bool is_nu_mu_cc,
@@ -356,9 +342,7 @@ namespace
                                                        bool truth_in_fiducial,
                                                        float truth_vtx_x,
                                                        float truth_vtx_y,
-                                                       float truth_vtx_z,
-                                                       float mu_p,
-                                                       float contained_fraction)
+                                                       float truth_vtx_z)
     {
         ana::SignalDefinition::TruthInput truth;
         truth.is_nu_mu_cc = is_nu_mu_cc;
@@ -367,101 +351,36 @@ namespace
         truth.truth_vtx_x = truth_vtx_x;
         truth.truth_vtx_y = truth_vtx_y;
         truth.truth_vtx_z = truth_vtx_z;
-        truth.mu_p = mu_p;
-        truth.contained_fraction = contained_fraction;
         return truth;
     }
 
-    ana::SignalDefinition::LambdaTruthCandidate legacy_lambda_candidate(
-        const std::vector<int> *g4_lambda_pdg,
-        const std::vector<float> *g4_lambda_p_mag,
-        const std::vector<float> *g4_lambda_p_p,
-        const std::vector<float> *g4_lambda_pi_p,
-        const std::vector<float> *g4_lambda_decay_sep,
-        const std::vector<float> *g4_lambda_endx,
-        const std::vector<float> *g4_lambda_endy,
-        const std::vector<float> *g4_lambda_endz)
-    {
-        ana::SignalDefinition::LambdaTruthCandidate cand;
-        cand.valid = g4_lambda_pdg && !g4_lambda_pdg->empty();
-        cand.has_ppi_decay = cand.valid;
-        cand.lambda_pdg = first_or_default(g4_lambda_pdg, 0);
-        cand.lambda_p = first_or_default(g4_lambda_p_mag, std::numeric_limits<float>::quiet_NaN());
-        cand.proton_p = first_or_default(g4_lambda_p_p, std::numeric_limits<float>::quiet_NaN());
-        cand.pion_p = first_or_default(g4_lambda_pi_p, std::numeric_limits<float>::quiet_NaN());
-        cand.decay_sep = first_or_default(g4_lambda_decay_sep, std::numeric_limits<float>::quiet_NaN());
-        cand.decay_x = first_or_default(g4_lambda_endx, std::numeric_limits<float>::quiet_NaN());
-        cand.decay_y = first_or_default(g4_lambda_endy, std::numeric_limits<float>::quiet_NaN());
-        cand.decay_z = first_or_default(g4_lambda_endz, std::numeric_limits<float>::quiet_NaN());
-        return cand;
-    }
-
-    ana::SignalDefinition::LambdaTruthCandidate first_passing_lambda_candidate(
+    ana::SignalDefinition::StrangeTruthSummary make_strange_truth_summary(
         const ana::SignalDefinition &signal_definition,
-        const ana::SignalDefinition::TruthInput &truth,
-        const std::vector<int> *g4_all_lambda_pdg,
-        const std::vector<int> *g4_all_lambda_has_ppi_decay,
-        const std::vector<int> *g4_all_lambda_has_sigma0_ancestor,
-        const std::vector<float> *g4_all_lambda_p_mag,
-        const std::vector<float> *g4_all_lambda_p_p,
-        const std::vector<float> *g4_all_lambda_pi_p,
-        const std::vector<float> *g4_all_lambda_decay_sep,
-        const std::vector<float> *g4_all_lambda_endx,
-        const std::vector<float> *g4_all_lambda_endy,
-        const std::vector<float> *g4_all_lambda_endz,
-        const std::vector<float> *g4_all_lambda_p_endx,
-        const std::vector<float> *g4_all_lambda_p_endy,
-        const std::vector<float> *g4_all_lambda_p_endz,
-        const std::vector<float> *g4_all_lambda_pi_endx,
-        const std::vector<float> *g4_all_lambda_pi_endy,
-        const std::vector<float> *g4_all_lambda_pi_endz)
+        bool truth_has_strange_fs,
+        bool truth_has_fs_lambda0,
+        bool truth_has_fs_sigma0,
+        bool truth_has_g4_lambda0,
+        bool truth_has_g4_lambda0_from_sigma0,
+        const std::vector<float> *truth_fs_lambda0_p,
+        const std::vector<float> *truth_fs_sigma0_p)
     {
-        ana::SignalDefinition::LambdaTruthCandidate best;
-        if (!g4_all_lambda_pdg)
-            return best;
-
-        for (std::size_t i = 0; i < g4_all_lambda_pdg->size(); ++i)
-        {
-            ana::SignalDefinition::LambdaTruthCandidate cand;
-            cand.valid = true;
-            cand.lambda_pdg = at_or_default(g4_all_lambda_pdg, i, 0);
-            cand.has_ppi_decay = at_or_default(g4_all_lambda_has_ppi_decay, i, 0) != 0;
-            cand.has_sigma0_ancestor =
-                at_or_default(g4_all_lambda_has_sigma0_ancestor, i, 0) != 0;
-            cand.lambda_p =
-                at_or_default(g4_all_lambda_p_mag, i, std::numeric_limits<float>::quiet_NaN());
-            cand.proton_p =
-                at_or_default(g4_all_lambda_p_p, i, std::numeric_limits<float>::quiet_NaN());
-            cand.pion_p =
-                at_or_default(g4_all_lambda_pi_p, i, std::numeric_limits<float>::quiet_NaN());
-            cand.decay_sep = at_or_default(g4_all_lambda_decay_sep, i,
-                                           std::numeric_limits<float>::quiet_NaN());
-            cand.decay_x =
-                at_or_default(g4_all_lambda_endx, i, std::numeric_limits<float>::quiet_NaN());
-            cand.decay_y =
-                at_or_default(g4_all_lambda_endy, i, std::numeric_limits<float>::quiet_NaN());
-            cand.decay_z =
-                at_or_default(g4_all_lambda_endz, i, std::numeric_limits<float>::quiet_NaN());
-            cand.proton_end_x = at_or_default(g4_all_lambda_p_endx, i,
-                                              std::numeric_limits<float>::quiet_NaN());
-            cand.proton_end_y = at_or_default(g4_all_lambda_p_endy, i,
-                                              std::numeric_limits<float>::quiet_NaN());
-            cand.proton_end_z = at_or_default(g4_all_lambda_p_endz, i,
-                                              std::numeric_limits<float>::quiet_NaN());
-            cand.pion_end_x = at_or_default(g4_all_lambda_pi_endx, i,
-                                            std::numeric_limits<float>::quiet_NaN());
-            cand.pion_end_y = at_or_default(g4_all_lambda_pi_endy, i,
-                                            std::numeric_limits<float>::quiet_NaN());
-            cand.pion_end_z = at_or_default(g4_all_lambda_pi_endz, i,
-                                            std::numeric_limits<float>::quiet_NaN());
-
-            if (signal_definition.passes(truth, cand))
-            {
-                return cand;
-            }
-        }
-
-        return best;
+        const auto &contract = signal_definition.contract();
+        ana::SignalDefinition::StrangeTruthSummary summary;
+        summary.has_strange_final_state =
+            truth_has_strange_fs || truth_has_fs_lambda0 || truth_has_fs_sigma0;
+        summary.has_exit_lambda0 =
+            truth_has_fs_lambda0 || (truth_fs_lambda0_p && !truth_fs_lambda0_p->empty());
+        summary.has_exit_sigma0 =
+            truth_has_fs_sigma0 || (truth_fs_sigma0_p && !truth_fs_sigma0_p->empty());
+        summary.qualifying_exit_lambda0_count =
+            count_at_or_above(truth_fs_lambda0_p, contract.min_lambda0_p);
+        summary.qualifying_exit_sigma0_count =
+            count_at_or_above(truth_fs_sigma0_p, contract.min_sigma0_p);
+        summary.has_detector_secondary_lambda0 =
+            truth_has_g4_lambda0 && !summary.has_exit_lambda0 && !summary.has_exit_sigma0;
+        summary.has_detector_secondary_lambda0_from_sigma0 =
+            truth_has_g4_lambda0_from_sigma0;
+        return summary;
     }
 
     std::unique_ptr<TTree> copy_selected_tree(const std::string &sample_key,
@@ -544,34 +463,15 @@ namespace
         float truth_vtx_x = std::numeric_limits<float>::quiet_NaN();
         float truth_vtx_y = std::numeric_limits<float>::quiet_NaN();
         float truth_vtx_z = std::numeric_limits<float>::quiet_NaN();
-        float mu_p = std::numeric_limits<float>::quiet_NaN();
-        float contained_fraction = std::numeric_limits<float>::quiet_NaN();
+        bool truth_has_strange_fs = false;
+        bool truth_has_fs_lambda0 = false;
+        bool truth_has_fs_sigma0 = false;
+        bool truth_has_g4_lambda0 = false;
+        bool truth_has_g4_lambda0_from_sigma0 = false;
 
         std::vector<int> *prim_pdg = nullptr;
-        std::vector<int> *g4_lambda_pdg = nullptr;
-        std::vector<float> *g4_lambda_p_mag = nullptr;
-        std::vector<float> *g4_lambda_p_p = nullptr;
-        std::vector<float> *g4_lambda_pi_p = nullptr;
-        std::vector<float> *g4_lambda_decay_sep = nullptr;
-        std::vector<float> *g4_lambda_endx = nullptr;
-        std::vector<float> *g4_lambda_endy = nullptr;
-        std::vector<float> *g4_lambda_endz = nullptr;
-        std::vector<int> *g4_all_lambda_pdg = nullptr;
-        std::vector<int> *g4_all_lambda_has_ppi_decay = nullptr;
-        std::vector<int> *g4_all_lambda_has_sigma0_ancestor = nullptr;
-        std::vector<float> *g4_all_lambda_p_mag = nullptr;
-        std::vector<float> *g4_all_lambda_p_p = nullptr;
-        std::vector<float> *g4_all_lambda_pi_p = nullptr;
-        std::vector<float> *g4_all_lambda_decay_sep = nullptr;
-        std::vector<float> *g4_all_lambda_endx = nullptr;
-        std::vector<float> *g4_all_lambda_endy = nullptr;
-        std::vector<float> *g4_all_lambda_endz = nullptr;
-        std::vector<float> *g4_all_lambda_p_endx = nullptr;
-        std::vector<float> *g4_all_lambda_p_endy = nullptr;
-        std::vector<float> *g4_all_lambda_p_endz = nullptr;
-        std::vector<float> *g4_all_lambda_pi_endx = nullptr;
-        std::vector<float> *g4_all_lambda_pi_endy = nullptr;
-        std::vector<float> *g4_all_lambda_pi_endz = nullptr;
+        std::vector<float> *truth_fs_lambda0_p = nullptr;
+        std::vector<float> *truth_fs_sigma0_p = nullptr;
 
         const bool has_weight_spline = chain.GetBranch("weightSpline") != nullptr;
         const bool has_weight_tune = chain.GetBranch("weightTune") != nullptr;
@@ -579,9 +479,8 @@ namespace
         const bool has_ppfx_cv = chain.GetBranch("ppfx_cv") != nullptr;
         const bool has_rootino_fix = chain.GetBranch("RootinoFix") != nullptr;
         const bool has_run = chain.GetBranch("run") != nullptr;
-        const char *subrun_branch_name = chain.GetBranch("subRun") ? "subRun" :
-                                         (chain.GetBranch("sub") ? "sub" : nullptr);
-        const bool has_subrun = subrun_branch_name != nullptr;
+        const bool has_subrun = chain.GetBranch("subRun") != nullptr;
+        const bool has_sub = chain.GetBranch("sub") != nullptr;
         const bool has_nu_pdg = chain.GetBranch("nu_pdg") != nullptr;
         const bool has_int_ccnc = chain.GetBranch("int_ccnc") != nullptr;
         const bool has_is_nu_mu_cc = chain.GetBranch("is_nu_mu_cc") != nullptr;
@@ -592,48 +491,56 @@ namespace
         const bool has_truth_vtx_x = chain.GetBranch("nu_vtx_x") != nullptr;
         const bool has_truth_vtx_y = chain.GetBranch("nu_vtx_y") != nullptr;
         const bool has_truth_vtx_z = chain.GetBranch("nu_vtx_z") != nullptr;
-        const bool has_mu_p = chain.GetBranch("mu_p") != nullptr;
-        const bool has_contained_fraction = chain.GetBranch("contained_fraction") != nullptr;
+        const bool has_truth_has_strange_fs = chain.GetBranch("truth_has_strange_fs") != nullptr;
+        const bool has_truth_has_fs_lambda0 = chain.GetBranch("truth_has_fs_lambda0") != nullptr;
+        const bool has_truth_has_fs_sigma0 = chain.GetBranch("truth_has_fs_sigma0") != nullptr;
+        const bool has_truth_has_g4_lambda0 = chain.GetBranch("truth_has_g4_lambda0") != nullptr;
+        const bool has_truth_has_g4_lambda0_from_sigma0 =
+            chain.GetBranch("truth_has_g4_lambda0_from_sigma0") != nullptr;
+        const bool has_truth_fs_lambda0_p = chain.GetBranch("truth_fs_lambda0_p") != nullptr;
+        const bool has_truth_fs_sigma0_p = chain.GetBranch("truth_fs_sigma0_p") != nullptr;
         const bool has_prim_pdg = chain.GetBranch("prim_pdg") != nullptr;
-        const bool has_g4_lambda_pdg = chain.GetBranch("g4_lambda_pdg") != nullptr;
-        const bool has_g4_lambda_p_mag = chain.GetBranch("g4_lambda_p_mag") != nullptr;
-        const bool has_g4_lambda_p_p = chain.GetBranch("g4_lambda_p_p") != nullptr;
-        const bool has_g4_lambda_pi_p = chain.GetBranch("g4_lambda_pi_p") != nullptr;
-        const bool has_g4_lambda_decay_sep = chain.GetBranch("g4_lambda_decay_sep") != nullptr;
-        const bool has_g4_lambda_endx = chain.GetBranch("g4_lambda_endx") != nullptr;
-        const bool has_g4_lambda_endy = chain.GetBranch("g4_lambda_endy") != nullptr;
-        const bool has_g4_lambda_endz = chain.GetBranch("g4_lambda_endz") != nullptr;
-        const bool has_g4_all_lambda_pdg = chain.GetBranch("g4_all_lambda_pdg") != nullptr;
-        const bool has_g4_all_lambda_has_ppi_decay =
-            chain.GetBranch("g4_all_lambda_has_ppi_decay") != nullptr;
-        const bool has_g4_all_lambda_has_sigma0_ancestor =
-            chain.GetBranch("g4_all_lambda_has_sigma0_ancestor") != nullptr;
-        const bool has_g4_all_lambda_p_mag = chain.GetBranch("g4_all_lambda_p_mag") != nullptr;
-        const bool has_g4_all_lambda_p_p = chain.GetBranch("g4_all_lambda_p_p") != nullptr;
-        const bool has_g4_all_lambda_pi_p = chain.GetBranch("g4_all_lambda_pi_p") != nullptr;
-        const bool has_g4_all_lambda_decay_sep =
-            chain.GetBranch("g4_all_lambda_decay_sep") != nullptr;
-        const bool has_g4_all_lambda_endx = chain.GetBranch("g4_all_lambda_endx") != nullptr;
-        const bool has_g4_all_lambda_endy = chain.GetBranch("g4_all_lambda_endy") != nullptr;
-        const bool has_g4_all_lambda_endz = chain.GetBranch("g4_all_lambda_endz") != nullptr;
-        const bool has_g4_all_lambda_p_endx =
-            chain.GetBranch("g4_all_lambda_p_endx") != nullptr;
-        const bool has_g4_all_lambda_p_endy =
-            chain.GetBranch("g4_all_lambda_p_endy") != nullptr;
-        const bool has_g4_all_lambda_p_endz =
-            chain.GetBranch("g4_all_lambda_p_endz") != nullptr;
-        const bool has_g4_all_lambda_pi_endx =
-            chain.GetBranch("g4_all_lambda_pi_endx") != nullptr;
-        const bool has_g4_all_lambda_pi_endy =
-            chain.GetBranch("g4_all_lambda_pi_endy") != nullptr;
-        const bool has_g4_all_lambda_pi_endz =
-            chain.GetBranch("g4_all_lambda_pi_endz") != nullptr;
+        const bool has_truth_vertex_surface =
+            has_truth_in_fiducial ||
+            ((has_truth_vtx_sce_x || has_truth_vtx_x) &&
+             (has_truth_vtx_sce_y || has_truth_vtx_y) &&
+             (has_truth_vtx_sce_z || has_truth_vtx_z));
 
-        if (!has_run || !has_subrun)
+        if (!has_run || (!has_subrun && !has_sub))
         {
             throw std::runtime_error("ana::build_event_list: event tree " + event_tree_name +
                                      " for sample " + sample_context(sample_key, sample) +
-                                     " must expose run and subRun/sub branches");
+                                     " must expose run and subRun or sub branches");
+        }
+        if (is_mc_origin(sample))
+        {
+            std::vector<std::string> missing;
+            if (!has_int_ccnc) missing.emplace_back("int_ccnc");
+            if (!has_is_nu_mu_cc) missing.emplace_back("is_nu_mu_cc");
+            if (!has_truth_vertex_surface)
+                missing.emplace_back("nu_vtx_in_fv or truth vertex coordinates");
+            if (!has_truth_has_strange_fs) missing.emplace_back("truth_has_strange_fs");
+            if (!has_truth_has_fs_lambda0) missing.emplace_back("truth_has_fs_lambda0");
+            if (!has_truth_has_fs_sigma0) missing.emplace_back("truth_has_fs_sigma0");
+            if (!has_truth_has_g4_lambda0) missing.emplace_back("truth_has_g4_lambda0");
+            if (!has_truth_has_g4_lambda0_from_sigma0)
+                missing.emplace_back("truth_has_g4_lambda0_from_sigma0");
+            if (!has_truth_fs_lambda0_p) missing.emplace_back("truth_fs_lambda0_p");
+            if (!has_truth_fs_sigma0_p) missing.emplace_back("truth_fs_sigma0_p");
+            if (!missing.empty())
+            {
+                std::string message;
+                for (std::size_t i = 0; i < missing.size(); ++i)
+                {
+                    if (i != 0)
+                        message += ", ";
+                    message += missing[i];
+                }
+                throw std::runtime_error(
+                    "ana::build_event_list: sample " + sample_context(sample_key, sample) +
+                    " is missing the truth fields required to enforce strange-sample orthogonality "
+                    "and measurement-signal ancestry: " + message);
+            }
         }
 
         if (has_weight_spline)
@@ -647,7 +554,7 @@ namespace
         if (has_rootino_fix)
             chain.SetBranchAddress("RootinoFix", &rootino_fix);
         chain.SetBranchAddress("run", &run);
-        chain.SetBranchAddress(subrun_branch_name, &subrun);
+        chain.SetBranchAddress(has_subrun ? "subRun" : "sub", &subrun);
         if (has_nu_pdg)
             chain.SetBranchAddress("nu_pdg", &nu_pdg);
         if (has_int_ccnc)
@@ -668,63 +575,23 @@ namespace
             chain.SetBranchAddress("nu_vtx_sce_z", &truth_vtx_z);
         else if (has_truth_vtx_z)
             chain.SetBranchAddress("nu_vtx_z", &truth_vtx_z);
-        if (has_mu_p)
-            chain.SetBranchAddress("mu_p", &mu_p);
-        if (has_contained_fraction)
-            chain.SetBranchAddress("contained_fraction", &contained_fraction);
+        if (has_truth_has_strange_fs)
+            chain.SetBranchAddress("truth_has_strange_fs", &truth_has_strange_fs);
+        if (has_truth_has_fs_lambda0)
+            chain.SetBranchAddress("truth_has_fs_lambda0", &truth_has_fs_lambda0);
+        if (has_truth_has_fs_sigma0)
+            chain.SetBranchAddress("truth_has_fs_sigma0", &truth_has_fs_sigma0);
+        if (has_truth_has_g4_lambda0)
+            chain.SetBranchAddress("truth_has_g4_lambda0", &truth_has_g4_lambda0);
+        if (has_truth_has_g4_lambda0_from_sigma0)
+            chain.SetBranchAddress("truth_has_g4_lambda0_from_sigma0",
+                                   &truth_has_g4_lambda0_from_sigma0);
+        if (has_truth_fs_lambda0_p)
+            chain.SetBranchAddress("truth_fs_lambda0_p", &truth_fs_lambda0_p);
+        if (has_truth_fs_sigma0_p)
+            chain.SetBranchAddress("truth_fs_sigma0_p", &truth_fs_sigma0_p);
         if (has_prim_pdg)
             chain.SetBranchAddress("prim_pdg", &prim_pdg);
-        if (has_g4_lambda_pdg)
-            chain.SetBranchAddress("g4_lambda_pdg", &g4_lambda_pdg);
-        if (has_g4_lambda_p_mag)
-            chain.SetBranchAddress("g4_lambda_p_mag", &g4_lambda_p_mag);
-        if (has_g4_lambda_p_p)
-            chain.SetBranchAddress("g4_lambda_p_p", &g4_lambda_p_p);
-        if (has_g4_lambda_pi_p)
-            chain.SetBranchAddress("g4_lambda_pi_p", &g4_lambda_pi_p);
-        if (has_g4_lambda_decay_sep)
-            chain.SetBranchAddress("g4_lambda_decay_sep", &g4_lambda_decay_sep);
-        if (has_g4_lambda_endx)
-            chain.SetBranchAddress("g4_lambda_endx", &g4_lambda_endx);
-        if (has_g4_lambda_endy)
-            chain.SetBranchAddress("g4_lambda_endy", &g4_lambda_endy);
-        if (has_g4_lambda_endz)
-            chain.SetBranchAddress("g4_lambda_endz", &g4_lambda_endz);
-        if (has_g4_all_lambda_pdg)
-            chain.SetBranchAddress("g4_all_lambda_pdg", &g4_all_lambda_pdg);
-        if (has_g4_all_lambda_has_ppi_decay)
-            chain.SetBranchAddress("g4_all_lambda_has_ppi_decay",
-                                   &g4_all_lambda_has_ppi_decay);
-        if (has_g4_all_lambda_has_sigma0_ancestor)
-            chain.SetBranchAddress("g4_all_lambda_has_sigma0_ancestor",
-                                   &g4_all_lambda_has_sigma0_ancestor);
-        if (has_g4_all_lambda_p_mag)
-            chain.SetBranchAddress("g4_all_lambda_p_mag", &g4_all_lambda_p_mag);
-        if (has_g4_all_lambda_p_p)
-            chain.SetBranchAddress("g4_all_lambda_p_p", &g4_all_lambda_p_p);
-        if (has_g4_all_lambda_pi_p)
-            chain.SetBranchAddress("g4_all_lambda_pi_p", &g4_all_lambda_pi_p);
-        if (has_g4_all_lambda_decay_sep)
-            chain.SetBranchAddress("g4_all_lambda_decay_sep",
-                                   &g4_all_lambda_decay_sep);
-        if (has_g4_all_lambda_endx)
-            chain.SetBranchAddress("g4_all_lambda_endx", &g4_all_lambda_endx);
-        if (has_g4_all_lambda_endy)
-            chain.SetBranchAddress("g4_all_lambda_endy", &g4_all_lambda_endy);
-        if (has_g4_all_lambda_endz)
-            chain.SetBranchAddress("g4_all_lambda_endz", &g4_all_lambda_endz);
-        if (has_g4_all_lambda_p_endx)
-            chain.SetBranchAddress("g4_all_lambda_p_endx", &g4_all_lambda_p_endx);
-        if (has_g4_all_lambda_p_endy)
-            chain.SetBranchAddress("g4_all_lambda_p_endy", &g4_all_lambda_p_endy);
-        if (has_g4_all_lambda_p_endz)
-            chain.SetBranchAddress("g4_all_lambda_p_endz", &g4_all_lambda_p_endz);
-        if (has_g4_all_lambda_pi_endx)
-            chain.SetBranchAddress("g4_all_lambda_pi_endx", &g4_all_lambda_pi_endx);
-        if (has_g4_all_lambda_pi_endy)
-            chain.SetBranchAddress("g4_all_lambda_pi_endy", &g4_all_lambda_pi_endy);
-        if (has_g4_all_lambda_pi_endz)
-            chain.SetBranchAddress("g4_all_lambda_pi_endz", &g4_all_lambda_pi_endz);
 
         double event_weight_normalisation = 1.0;
         double event_weight_central_value = 1.0;
@@ -735,6 +602,8 @@ namespace
         bool pass_fiducial = false;
         bool pass_muon = false;
         int event_category_code = event_category::to_int(event_category::EventCategory::kUnknown);
+        int measurement_truth_category_code =
+            static_cast<int>(ana::SignalDefinition::MeasurementTruthCategory::kUnknown);
         bool passes_signal_definition = false;
         selected->Branch(EventListIO::event_weight_normalisation_branch_name(),
                          &event_weight_normalisation,
@@ -751,6 +620,9 @@ namespace
         selected->Branch(EventListIO::event_category_branch_name(),
                          &event_category_code,
                          (std::string(EventListIO::event_category_branch_name()) + "/I").c_str());
+        selected->Branch(EventListIO::measurement_truth_category_branch_name(),
+                         &measurement_truth_category_code,
+                         (std::string(EventListIO::measurement_truth_category_branch_name()) + "/I").c_str());
         selected->Branch(EventListIO::passes_signal_definition_branch_name(),
                          &passes_signal_definition,
                          (std::string(EventListIO::passes_signal_definition_branch_name()) + "/O").c_str());
@@ -801,57 +673,41 @@ namespace
                                      truth_in_fiducial,
                                      truth_vtx_x,
                                      truth_vtx_y,
-                                     truth_vtx_z,
-                                     mu_p,
-                                     contained_fraction);
+                                     truth_vtx_z);
                 const bool truth_in_canonical_fiducial =
                     signal_definition.truth_vertex_in_fv(truth);
-                const ana::SignalDefinition::LambdaTruthCandidate lambda_candidate =
-                    has_g4_all_lambda_pdg
-                        ? first_passing_lambda_candidate(
-                              signal_definition,
-                              truth,
-                              g4_all_lambda_pdg,
-                              g4_all_lambda_has_ppi_decay,
-                              g4_all_lambda_has_sigma0_ancestor,
-                              g4_all_lambda_p_mag,
-                              g4_all_lambda_p_p,
-                              g4_all_lambda_pi_p,
-                              g4_all_lambda_decay_sep,
-                              g4_all_lambda_endx,
-                              g4_all_lambda_endy,
-                              g4_all_lambda_endz,
-                              g4_all_lambda_p_endx,
-                              g4_all_lambda_p_endy,
-                              g4_all_lambda_p_endz,
-                              g4_all_lambda_pi_endx,
-                              g4_all_lambda_pi_endy,
-                              g4_all_lambda_pi_endz)
-                        : legacy_lambda_candidate(g4_lambda_pdg,
-                                                  g4_lambda_p_mag,
-                                                  g4_lambda_p_p,
-                                                  g4_lambda_pi_p,
-                                                  g4_lambda_decay_sep,
-                                                  g4_lambda_endx,
-                                                  g4_lambda_endy,
-                                                  g4_lambda_endz);
-                const bool has_sigma0_lambda_ancestor =
-                    has_g4_all_lambda_has_sigma0_ancestor &&
-                    any_nonzero(g4_all_lambda_has_sigma0_ancestor);
+                const ana::SignalDefinition::StrangeTruthSummary strange_truth =
+                    make_strange_truth_summary(signal_definition,
+                                               truth_has_strange_fs,
+                                               truth_has_fs_lambda0,
+                                               truth_has_fs_sigma0,
+                                               truth_has_g4_lambda0,
+                                               truth_has_g4_lambda0_from_sigma0,
+                                               truth_fs_lambda0_p,
+                                               truth_fs_sigma0_p);
+                const bool has_sigma0_lambda_ancestor = truth_has_g4_lambda0_from_sigma0;
 
                 if (is_data_origin(sample))
                 {
                     event_category_code = event_category::to_int(event_category::EventCategory::kDataInclusive);
+                    measurement_truth_category_code =
+                        static_cast<int>(ana::SignalDefinition::MeasurementTruthCategory::kUnknown);
                     passes_signal_definition = false;
                 }
                 else if (is_external_origin(sample))
                 {
                     event_category_code = event_category::to_int(event_category::EventCategory::kExternal);
+                    measurement_truth_category_code =
+                        static_cast<int>(ana::SignalDefinition::MeasurementTruthCategory::kUnknown);
                     passes_signal_definition = false;
                 }
                 else if (is_mc_origin(sample))
                 {
-                    passes_signal_definition = signal_definition.passes(truth, lambda_candidate);
+                    const ana::SignalDefinition::MeasurementTruthCategory measurement_truth_category =
+                        signal_definition.classify_measurement_truth(truth, strange_truth);
+                    measurement_truth_category_code = static_cast<int>(measurement_truth_category);
+                    passes_signal_definition =
+                        signal_definition.passes_measurement_signal(truth, strange_truth);
                     event_category_code = event_category::to_int(
                         event_category::classify(truth_in_canonical_fiducial,
                                                  nu_pdg,
@@ -869,6 +725,8 @@ namespace
                 else
                 {
                     event_category_code = event_category::to_int(event_category::EventCategory::kUnknown);
+                    measurement_truth_category_code =
+                        static_cast<int>(ana::SignalDefinition::MeasurementTruthCategory::kUnknown);
                     passes_signal_definition = false;
                 }
 

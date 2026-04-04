@@ -16,7 +16,7 @@ The usual workflow is:
   5. Build persistent EventListIO files from DatasetIO using event-tree selections
   6. Optionally run mk_dist to create cached DistributionIO requests
   7. Optionally export one cached spectrum as an SBNFit-style covariance matrix
-  8. Optionally run the native xsec fit directly from cached DistributionIO inputs
+  8. Optionally run the HistFactory xsec fit directly from cached DistributionIO inputs
   9. Optionally drive many sample builds through samples-dag.mk
 
 Basic build workflow
@@ -168,9 +168,9 @@ Example:
       build/dists/run1-numi-fhc.root \
       muon_region
 
-The mk_fit program reads cached `DistributionIO` entries directly, builds
-one in-memory fit channel, profiles the signal-strength parameter `mu`, and
-prints or writes a plain-text report.
+The mk_fit program reads cached `DistributionIO` entries directly, builds one
+ROOT `RooStats::HistFactory` measurement in memory, profiles the
+signal-strength parameter `mu`, and prints or writes a plain-text report.
 If every observed bin is zero, the CLI now requires `--allow-zero-data` so an
 empty observation is an explicit choice rather than a missing-input accident.
 
@@ -178,9 +178,15 @@ In manifest mode, rows with kind `data` fill the observed bins automatically.
 Without manifest data rows, pass `--data-bins` or opt into an intentional
 empty observation with `--allow-zero-data`.
 
-The plain-text manifest format is one row per fit input:
+Single-channel manifest rows are:
 
     process-name kind sample-key [cache-key]
+
+Combined SR/CR-style manifests use:
+
+    fit-channel process-name kind sample-key cache-key
+
+Use `-` for an empty cache-key field in the combined form.
 
 The supported kinds are:
 
@@ -188,7 +194,16 @@ The supported kinds are:
     background
     data
 
-The current manifest mode expects unique non-data process names.
+Manifest rules:
+
+  * non-data process names must be unique within each fit channel
+  * cached binning / branch / selection must match within each fit channel
+  * different fit channels may use different cached binning or selections
+  * every row with kind `signal` shares the same fitted POI
+
+In combined manifest mode, the positional `channel-key` becomes the fit /
+measurement key written to the report, while each row's leading `fit-channel`
+token names the actual HistFactory channel.
 
 Basic mk_cov usage
 -------------------------
@@ -253,6 +268,25 @@ The stacked correlation contract is strict:
      name and universe count
   * if that exact family contract is unavailable, `mk_cov` rejects the
      stacked export instead of guessing a block-diagonal merge
+
+Macro inspection helpers
+------------------------
+
+Run one ROOT macro through the shared wrapper:
+
+    bash tools/run-macro inspect_weights build/eventlists/run1.root beam-s0
+    bash tools/run-macro inspect_cutflow build/eventlists/run1.root beam-s0
+    bash tools/run-macro inspect_categories build/eventlists/run1.root beam-s0
+    bash tools/run-macro inspect_systematics output.dists.root beam-s0
+    bash tools/run-macro inspect_covariance build/exports/beam-s0.frac_cov.root
+
+These macros are read-only summaries over persisted surfaces:
+
+  * `inspect_weights` checks `__w_norm__`, `__w_cv__`, `__w__`, and `__w2__`
+  * `inspect_cutflow` prints stage-by-stage selected yields from `EventListIO`
+  * `inspect_categories` prints persisted event-category yields
+  * `inspect_systematics` prints detector / knob / family payload summaries
+  * `inspect_covariance` prints exported matrix dimensions and diagonal summary
 
 Macro inspection helpers
 ------------------------
@@ -462,10 +496,10 @@ Conceptually this builds two systematic lanes and merges them in one
   * the optional GENIE knob lane keeps paired `weightsGenieUp` /
     `weightsGenieDn` shifts separate from the GENIE multisim family
 
-Running a native xsec fit by hand
----------------------------------
+Running a HistFactory xsec fit by hand
+-------------------------------------
 
-Once a cached DistributionIO file already exists, run the native fit
+Once a cached DistributionIO file already exists, run the HistFactory fit
 directly:
 
     build/bin/mk_fit \
@@ -477,7 +511,7 @@ directly:
 Reading the arguments from left to right:
 
   * input cached distribution ROOT file path
-  * channel key inside the in-memory fit assembly
+  * fit / measurement key written into the report
 
 Representative manifest:
 
@@ -497,8 +531,19 @@ Reading one manifest row from left to right:
 Rows with kind `data` are not added as fit processes; they are summed into the
 observed channel bins automatically and recorded as observed-data provenance.
 
-Optional flags let you choose the signal-process name, fit bounds, scan
-density, and whether to compute the stat-only interval.
+To fit SR and CR simultaneously, switch to the 5-field combined manifest form:
+
+    SR signal signal beam-s0 -
+    SR beam_bkg background beam-bkg -
+    SR obs data beam-data -
+    CR beam_bkg background beam-bkg control_cache
+    CR obs data beam-data control_cache
+
+In that form, each row begins with the fit-channel name, and every row tagged
+`signal` shares the same fitted POI.
+
+Optional flags let you choose the legacy signal-process name, fit bounds, and
+whether to compute the stat-only interval.
 
 The plain-text fit report includes:
 

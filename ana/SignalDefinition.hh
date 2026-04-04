@@ -17,6 +17,16 @@ namespace ana
     class SignalDefinition
     {
     public:
+        enum class MeasurementTruthCategory
+        {
+            kUnknown = 0,
+            kMeasurementSignal = 1,
+            kNeutralHyperonOutOfPhaseSpace = 2,
+            kOtherStrangeBackground = 3,
+            kDetectorSecondaryHyperonBackground = 4,
+            kNonstrangeOverlay = 5
+        };
+
         struct FiducialBox
         {
             float active_min_x = 0.0f;
@@ -35,6 +45,17 @@ namespace ana
             float excluded_z_max = 775.0f;
         };
 
+        struct MeasurementTruthContract
+        {
+            bool require_cc_interaction = true;
+            bool require_muon_flavour_cc = true;
+            bool include_antineutrino = true;
+            bool flux_averaged = true;
+            bool require_true_vertex_in_fv = true;
+            float min_lambda0_p = 0.42f;
+            float min_sigma0_p = 0.80f;
+        };
+
         struct TruthInput
         {
             bool is_nu_mu_cc = false;
@@ -45,6 +66,17 @@ namespace ana
             float truth_vtx_z = std::numeric_limits<float>::quiet_NaN();
             float mu_p = std::numeric_limits<float>::quiet_NaN();
             float contained_fraction = std::numeric_limits<float>::quiet_NaN();
+        };
+
+        struct StrangeTruthSummary
+        {
+            bool has_strange_final_state = false;
+            bool has_exit_lambda0 = false;
+            bool has_exit_sigma0 = false;
+            bool has_detector_secondary_lambda0 = false;
+            bool has_detector_secondary_lambda0_from_sigma0 = false;
+            int qualifying_exit_lambda0_count = 0;
+            int qualifying_exit_sigma0_count = 0;
         };
 
         struct LambdaTruthCandidate
@@ -71,13 +103,21 @@ namespace ana
     public:
         static const SignalDefinition &canonical();
         static const FiducialBox &canonical_fiducial_box();
+        static MeasurementTruthContract canonical_contract();
+        static const char *measurement_truth_category_name(MeasurementTruthCategory category);
         static bool in_fiducial(float x,
                                 float y,
                                 float z,
                                 const FiducialBox &box);
 
+        const MeasurementTruthContract &contract() const { return contract_; }
         bool passes(const TruthInput &truth,
                     const LambdaTruthCandidate &candidate) const;
+        bool passes_measurement_signal(const TruthInput &truth,
+                                      const StrangeTruthSummary &summary) const;
+        MeasurementTruthCategory classify_measurement_truth(
+            const TruthInput &truth,
+            const StrangeTruthSummary &summary) const;
         bool truth_vertex_in_fv(const TruthInput &truth) const;
         std::string describe() const;
 
@@ -86,25 +126,7 @@ namespace ana
 
     private:
         FiducialBox truth_vertex_fv_;
-        FiducialBox lambda_decay_fv_;
-        FiducialBox daughter_end_fv_;
-        bool require_cc_interaction_ = true;
-        bool require_numu_cc_ = true;
-        bool require_truth_vertex_in_fv_ = true;
-        bool require_ppi_decay_ = true;
-        bool require_lambda_decay_in_fv_ = false;
-        bool require_ppi_endpoints_in_fv_ = false;
-        bool require_sigma0_ancestor_ = false;
-        int required_lambda_pdg_ = 3122;
-        float min_muon_p_ = 0.10f;
-        float min_lambda_p_ = -1.0f;
-        float max_lambda_p_ = -1.0f;
-        float min_proton_p_ = 0.30f;
-        float max_proton_p_ = -1.0f;
-        float min_pion_p_ = 0.10f;
-        float max_pion_p_ = -1.0f;
-        float min_lambda_decay_sep_ = 0.50f;
-        float min_reco_contained_fraction_ = -1.0f;
+        MeasurementTruthContract contract_;
     };
 
     SampleSelectionRule sample_selection_rule(const DatasetIO::Sample &sample);

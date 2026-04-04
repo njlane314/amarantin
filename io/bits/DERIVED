@@ -213,6 +213,7 @@ Framework-owned event-category columns
 For MC-like, external, and data samples, EventListIO also writes:
 
   __event_category__               int
+  __measurement_truth_category__   int
   __passes_signal_definition__     bool
 
 Meaning:
@@ -224,6 +225,11 @@ Meaning:
   __passes_signal_definition__
     Canonical framework-owned signal-definition flag derived from the copied
     event content.
+
+  __measurement_truth_category__
+    Canonical framework-owned measurement-truth label used to separate the
+    event-level measurement signal from out-of-phase-space strange backgrounds,
+    detector-secondaries, and nonstrange overlay.
 
 Legacy compatibility:
 
@@ -243,7 +249,7 @@ Current event-category codes:
   12  muon-neutrino charged-current, pi0 or gamma activity
   13  muon-neutrino charged-current, more than 1 charged pion
   14  neutral current
-  15  Lambda signal
+  15  measurement signal
   16  muon-neutrino charged-current with sigma0
   17  muon-neutrino charged-current with K0
   19  electron-neutrino charged-current
@@ -256,46 +262,35 @@ Current derivation inputs:
   int_ccnc
   is_nu_mu_cc
   nu_vtx_in_fv
-  contained_fraction
   prim_pdg
-  mu_p
-  g4_all_lambda_pdg
-  g4_all_lambda_has_ppi_decay
-  g4_all_lambda_has_sigma0_ancestor
-  g4_all_lambda_p_mag
-  g4_all_lambda_p_p
-  g4_all_lambda_pi_p
-  g4_all_lambda_decay_sep
-  g4_all_lambda_endx
-  g4_all_lambda_endy
-  g4_all_lambda_endz
-  g4_all_lambda_p_endx
-  g4_all_lambda_p_endy
-  g4_all_lambda_p_endz
-  g4_all_lambda_pi_endx
-  g4_all_lambda_pi_endy
-  g4_all_lambda_pi_endz
-
-Legacy fallback inputs when `g4_all_lambda_*` are absent:
-
-  g4_lambda_pdg
-  g4_lambda_p_mag
-  g4_lambda_p_p
-  g4_lambda_pi_p
-  g4_lambda_decay_sep
-  g4_lambda_endx
-  g4_lambda_endy
-  g4_lambda_endz
+  truth_has_strange_fs
+  truth_has_fs_lambda0
+  truth_has_fs_sigma0
+  truth_has_g4_lambda0
+  truth_has_g4_lambda0_from_sigma0
+  truth_fs_lambda0_p
+  truth_fs_sigma0_p
 
 For data and external samples:
 
   data
     __event_category__ = 99
+    __measurement_truth_category__ = 0
     __passes_signal_definition__ = false
 
   external
     __event_category__ = 1
+    __measurement_truth_category__ = 0
     __passes_signal_definition__ = false
+
+Measurement truth-category codes:
+
+  0  unknown
+  1  measurement_signal
+  2  neutral_hyperon_out_of_phase_space
+  3  other_strange_background
+  4  detector_secondary_hyperon_background
+  5  nonstrange_overlay
 
 Analysis-specific sample filtering
 ----------------------------------
@@ -308,12 +303,35 @@ the selected event tree:
     count_strange == 0
     or, when `count_strange` is absent, truth_has_strange_fs == 0
 
-  signal
+  strange (legacy `signal`)
     count_strange > 0
     or, when `count_strange` is absent, truth_has_strange_fs != 0
 
 This filtering is applied on top of the configured event-list selection
 expression.
+
+Measurement-signal truth contract
+---------------------------------
+
+The event-level measurement signal is not the same thing as the broad logical
+all-strange sample. The current framework contract is:
+
+  measurement_signal
+    true CC muon-flavour interaction in the true fiducial volume with at least
+    one qualifying exit-state Lambda0 or Sigma0
+
+  neutral_hyperon_out_of_phase_space
+    exit-state Lambda0 or Sigma0 present, but not inside the measurement phase
+    space
+
+  detector_secondary_hyperon_background
+    detector-secondary Lambda0 with no exit-state Lambda0 or Sigma0 ancestor
+
+The phase-space thresholds come from
+`ana/ccnumu_hyperon_measurement_contract.json`:
+
+  Lambda0 minimum momentum = 0.42 GeV/c
+  Sigma0 minimum momentum = 0.80 GeV/c
 
 Subrun tree
 -----------

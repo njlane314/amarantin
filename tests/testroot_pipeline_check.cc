@@ -111,6 +111,8 @@ namespace
                        tree_label);
         require_branch(selected, EventListIO::event_weight_squared_branch_name(),
                        tree_label);
+        require_branch(selected, EventListIO::measurement_truth_category_branch_name(),
+                       tree_label);
     }
 
     void require_cut_branches(TTree *selected,

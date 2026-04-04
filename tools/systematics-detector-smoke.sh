@@ -2,13 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${1:-${ROOT_DIR}/build}"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/amarantin-syst-detector.XXXXXX")"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 require_library() {
   local stem=$1
-  if [[ ! -e "${ROOT_DIR}/build/lib/lib${stem}.so" && ! -e "${ROOT_DIR}/build/lib/lib${stem}.dylib" ]]; then
-    printf 'missing build/lib/lib%s.{so,dylib}; build the target first\n' "${stem}" >&2
+  if [[ ! -e "${BUILD_DIR}/lib/lib${stem}.so" && ! -e "${BUILD_DIR}/lib/lib${stem}.dylib" ]]; then
+    printf 'missing %s/lib/lib%s.{so,dylib}; build the target first\n' "${BUILD_DIR}" "${stem}" >&2
     exit 1
   fi
 }
@@ -144,13 +145,13 @@ int main(int argc, char **argv)
         throw std::runtime_error("detector_smoke: unexpected nominal histogram");
     if (result.detector.down.size() != 2 || result.detector.up.size() != 2)
         throw std::runtime_error("detector_smoke: missing detector envelope");
-    if (!approx(result.detector.down[0], 1.0) || !approx(result.detector.up[0], 2.0) ||
-        !approx(result.detector.down[1], 0.0) || !approx(result.detector.up[1], 1.0))
+    if (!approx(result.detector.down[0], 0.0) || !approx(result.detector.up[0], 3.0) ||
+        !approx(result.detector.down[1], 0.0) || !approx(result.detector.up[1], 2.0))
         throw std::runtime_error("detector_smoke: unexpected detector envelope");
     if (result.total_up.size() != 2 || result.total_down.size() != 2)
         throw std::runtime_error("detector_smoke: missing total envelope");
-    if (!approx(result.total_up[0], 2.0) || !approx(result.total_down[0], 1.0) ||
-        !approx(result.total_up[1], 1.0) || !approx(result.total_down[1], 0.0))
+    if (!approx(result.total_up[0], 3.0) || !approx(result.total_down[0], 0.0) ||
+        !approx(result.total_up[1], 2.0) || !approx(result.total_down[1], 0.0))
         throw std::runtime_error("detector_smoke: unexpected total envelope");
 
     std::cout << "systematics_detector_smoke=ok\n";
@@ -167,14 +168,14 @@ read -r -a ROOT_LIBS <<<"$(root-config --libs)"
   -I"${ROOT_DIR}/syst" \
   "${ROOT_CFLAGS[@]}" \
   "${SOURCE}" \
-  -L"${ROOT_DIR}/build/lib" \
-  -Wl,-rpath,"${ROOT_DIR}/build/lib" \
+  -L"${BUILD_DIR}/lib" \
+  -Wl,-rpath,"${BUILD_DIR}/lib" \
   -lSyst \
   -lIO \
   "${ROOT_LIBS[@]}" \
   -o "${BINARY}"
 
-export DYLD_LIBRARY_PATH="${ROOT_DIR}/build/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
-export LD_LIBRARY_PATH="${ROOT_DIR}/build/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+export DYLD_LIBRARY_PATH="${BUILD_DIR}/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+export LD_LIBRARY_PATH="${BUILD_DIR}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
 "${BINARY}" "${EVENTLIST_PATH}"

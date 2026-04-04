@@ -186,7 +186,8 @@ DatasetIO::Sample::Origin DatasetIO::Sample::origin_from(const std::string &s)
     if (o == "external" || o == "ext") return Origin::kExternal;
     if (o == "overlay") return Origin::kOverlay;
     if (o == "dirt") return Origin::kDirt;
-    if (o == "signal" || o == "enriched") return Origin::kSignal;
+    if (o == "signal" || o == "strange" || o == "strange_mc" || o == "enriched")
+        return Origin::kSignal;
     return Origin::kUnknown;
 }
 

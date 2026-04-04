@@ -20,6 +20,13 @@ namespace
            << box.excluded_z_min << "," << box.excluded_z_max << ")";
         return os.str();
     }
+
+    bool has_qualifying_measurement_hyperon(
+        const ana::SignalDefinition::StrangeTruthSummary &summary)
+    {
+        return summary.qualifying_exit_lambda0_count > 0 ||
+               summary.qualifying_exit_sigma0_count > 0;
+    }
 }
 
 namespace ana
@@ -33,6 +40,32 @@ namespace ana
     const SignalDefinition::FiducialBox &SignalDefinition::canonical_fiducial_box()
     {
         return canonical().truth_vertex_fv_;
+    }
+
+    SignalDefinition::MeasurementTruthContract SignalDefinition::canonical_contract()
+    {
+        return canonical().contract_;
+    }
+
+    const char *SignalDefinition::measurement_truth_category_name(
+        MeasurementTruthCategory category)
+    {
+        switch (category)
+        {
+            case MeasurementTruthCategory::kMeasurementSignal:
+                return "measurement_signal";
+            case MeasurementTruthCategory::kNeutralHyperonOutOfPhaseSpace:
+                return "neutral_hyperon_out_of_phase_space";
+            case MeasurementTruthCategory::kOtherStrangeBackground:
+                return "other_strange_background";
+            case MeasurementTruthCategory::kDetectorSecondaryHyperonBackground:
+                return "detector_secondary_hyperon_background";
+            case MeasurementTruthCategory::kNonstrangeOverlay:
+                return "nonstrange_overlay";
+            case MeasurementTruthCategory::kUnknown:
+            default:
+                return "unknown";
+        }
     }
 
     SampleSelectionRule sample_selection_rule(const DatasetIO::Sample &sample)
@@ -94,105 +127,75 @@ namespace ana
     {
         if (!candidate.valid)
             return false;
-        if (require_cc_interaction_ && truth.ccnc != 0)
-            return false;
-        if (require_numu_cc_ && !truth.is_nu_mu_cc)
-            return false;
-        if (require_truth_vertex_in_fv_ && !truth_vertex_in_fv(truth))
-            return false;
-        if (required_lambda_pdg_ != 0 && candidate.lambda_pdg != required_lambda_pdg_)
-            return false;
-        if (require_ppi_decay_ && !candidate.has_ppi_decay)
-            return false;
-        if (require_sigma0_ancestor_ && !candidate.has_sigma0_ancestor)
-            return false;
-        if (min_muon_p_ >= 0.0f &&
-            (!std::isfinite(truth.mu_p) || truth.mu_p < min_muon_p_))
-        {
-            return false;
-        }
         if (!std::isfinite(candidate.lambda_p))
             return false;
-        if (min_lambda_p_ >= 0.0f && candidate.lambda_p < min_lambda_p_)
-            return false;
-        if (max_lambda_p_ >= 0.0f && candidate.lambda_p > max_lambda_p_)
-            return false;
-        if ((min_proton_p_ >= 0.0f || max_proton_p_ >= 0.0f) &&
-            !std::isfinite(candidate.proton_p))
+        StrangeTruthSummary summary;
+        summary.has_strange_final_state = true;
+        if (candidate.has_sigma0_ancestor || candidate.lambda_pdg == 3212)
         {
-            return false;
+            summary.has_exit_sigma0 = true;
+            summary.qualifying_exit_sigma0_count =
+                candidate.lambda_p >= contract_.min_sigma0_p ? 1 : 0;
         }
-        if (min_proton_p_ >= 0.0f && candidate.proton_p < min_proton_p_)
-            return false;
-        if (max_proton_p_ >= 0.0f && candidate.proton_p > max_proton_p_)
-            return false;
-        if ((min_pion_p_ >= 0.0f || max_pion_p_ >= 0.0f) &&
-            !std::isfinite(candidate.pion_p))
+        else
         {
-            return false;
+            summary.has_exit_lambda0 = true;
+            summary.qualifying_exit_lambda0_count =
+                candidate.lambda_p >= contract_.min_lambda0_p ? 1 : 0;
         }
-        if (min_pion_p_ >= 0.0f && candidate.pion_p < min_pion_p_)
+        return passes_measurement_signal(truth, summary);
+    }
+
+    bool SignalDefinition::passes_measurement_signal(
+        const TruthInput &truth,
+        const StrangeTruthSummary &summary) const
+    {
+        if (contract_.require_cc_interaction && truth.ccnc != 0)
             return false;
-        if (max_pion_p_ >= 0.0f && candidate.pion_p > max_pion_p_)
+        if (contract_.require_muon_flavour_cc && !truth.is_nu_mu_cc)
             return false;
-        if (min_lambda_decay_sep_ >= 0.0f &&
-            (!std::isfinite(candidate.decay_sep) ||
-             candidate.decay_sep < min_lambda_decay_sep_))
-        {
+        if (contract_.require_true_vertex_in_fv && !truth_vertex_in_fv(truth))
             return false;
-        }
-        if (require_lambda_decay_in_fv_ &&
-            !in_fiducial(candidate.decay_x,
-                         candidate.decay_y,
-                         candidate.decay_z,
-                         lambda_decay_fv_))
-        {
-            return false;
-        }
-        if (require_ppi_endpoints_in_fv_ &&
-            (!in_fiducial(candidate.proton_end_x,
-                          candidate.proton_end_y,
-                          candidate.proton_end_z,
-                          daughter_end_fv_) ||
-             !in_fiducial(candidate.pion_end_x,
-                          candidate.pion_end_y,
-                          candidate.pion_end_z,
-                          daughter_end_fv_)))
-        {
-            return false;
-        }
-        if (min_reco_contained_fraction_ >= 0.0f &&
-            (!std::isfinite(truth.contained_fraction) ||
-             truth.contained_fraction < min_reco_contained_fraction_))
-        {
-            return false;
-        }
-        return true;
+        return has_qualifying_measurement_hyperon(summary);
+    }
+
+    SignalDefinition::MeasurementTruthCategory
+    SignalDefinition::classify_measurement_truth(
+        const TruthInput &truth,
+        const StrangeTruthSummary &summary) const
+    {
+        if (passes_measurement_signal(truth, summary))
+            return MeasurementTruthCategory::kMeasurementSignal;
+
+        if (summary.has_exit_lambda0 || summary.has_exit_sigma0)
+            return MeasurementTruthCategory::kNeutralHyperonOutOfPhaseSpace;
+
+        if (summary.has_detector_secondary_lambda0)
+            return MeasurementTruthCategory::kDetectorSecondaryHyperonBackground;
+
+        if (summary.has_strange_final_state)
+            return MeasurementTruthCategory::kOtherStrangeBackground;
+
+        return MeasurementTruthCategory::kNonstrangeOverlay;
     }
 
     std::string SignalDefinition::describe() const
     {
         std::ostringstream os;
-        os << "require_cc_interaction=" << (require_cc_interaction_ ? 1 : 0)
-           << ";require_numu_cc=" << (require_numu_cc_ ? 1 : 0)
-           << ";require_truth_vertex_in_fv=" << (require_truth_vertex_in_fv_ ? 1 : 0)
-           << ";require_ppi_decay=" << (require_ppi_decay_ ? 1 : 0)
-           << ";require_lambda_decay_in_fv=" << (require_lambda_decay_in_fv_ ? 1 : 0)
-           << ";require_ppi_endpoints_in_fv=" << (require_ppi_endpoints_in_fv_ ? 1 : 0)
-           << ";require_sigma0_ancestor=" << (require_sigma0_ancestor_ ? 1 : 0)
-           << ";required_lambda_pdg=" << required_lambda_pdg_
-           << ";min_muon_p=" << min_muon_p_
-           << ";min_lambda_p=" << min_lambda_p_
-           << ";max_lambda_p=" << max_lambda_p_
-           << ";min_proton_p=" << min_proton_p_
-           << ";max_proton_p=" << max_proton_p_
-           << ";min_pion_p=" << min_pion_p_
-           << ";max_pion_p=" << max_pion_p_
-           << ";min_lambda_decay_sep=" << min_lambda_decay_sep_
-           << ";min_reco_contained_fraction=" << min_reco_contained_fraction_
-           << ";truth_vertex_fv=" << describe_fiducial_box(truth_vertex_fv_)
-           << ";lambda_decay_fv=" << describe_fiducial_box(lambda_decay_fv_)
-           << ";daughter_end_fv=" << describe_fiducial_box(daughter_end_fv_);
+        os << "observable=event_level_cc_mu_flavour_plus_neutral_hyperon"
+           << ";contract_file=ana/ccnumu_hyperon_measurement_contract.json"
+           << ";poi=kappa=sigma_phase_space/sigma_phase_space_nominal"
+           << ";counting_rule=event_once"
+           << ";flux_averaged=" << (contract_.flux_averaged ? 1 : 0)
+           << ";include_antineutrino=" << (contract_.include_antineutrino ? 1 : 0)
+           << ";require_cc_interaction=" << (contract_.require_cc_interaction ? 1 : 0)
+           << ";require_muon_flavour_cc=" << (contract_.require_muon_flavour_cc ? 1 : 0)
+           << ";require_true_vertex_in_fv=" << (contract_.require_true_vertex_in_fv ? 1 : 0)
+           << ";lambda0_min_p=" << contract_.min_lambda0_p
+           << ";sigma0_min_p=" << contract_.min_sigma0_p
+           << ";signal_truth=exit_state_lambda0_or_sigma0"
+           << ";detector_secondary_without_exit_state_ancestor=background"
+           << ";truth_vertex_fv=" << describe_fiducial_box(truth_vertex_fv_);
         return os.str();
     }
 }
