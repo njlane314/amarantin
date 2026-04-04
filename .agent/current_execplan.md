@@ -1,5 +1,129 @@
 # ExecPlan
 
+## ExecPlan Addendum: Covariance-First Fit Boundary And Cache-Key Alignment
+
+### 1. Objective
+Make the fit/systematics boundary smaller and more faithful by consuming family
+covariance directly in `fit/`, keeping sigma-only fallback diagonal, and
+removing the macro-side detector-key mismatch during cache readback.
+
+### 2. Constraints
+- Keep installed targets and public headers stable by default.
+- Keep `io/` persistence-only.
+- Preserve the documented `cache_systematics.C` invocation shape.
+- Avoid broad `fit/` or `syst/` redesign outside the reviewed defects.
+- Do not make detector-CV compatibility failures a global default without an
+  explicit validation opt-in.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- prefer plain data and namespace functions
+- keep module boundaries sharp
+- add abstractions only when they delete complexity
+
+This pass should tighten one existing boundary rather than add a second fit or
+cache interpretation path.
+
+### 4. System map
+- `fit/SignalStrengthFit.cc`
+- `fit/README`
+- `syst/Systematics.hh`
+- `syst/Systematics.cc`
+- `plot/macro/cache_systematics.C`
+- `tests/fit_rigorous_check.cc`
+- `tests/systematics_rigorous_check.cc`
+- `tools/macro-analysis-smoke.sh`
+- `.agent/analysis/ccnumu_hyperon.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- derive fit family modes from the canonical covariance payload before falling
+  back to sigma summaries
+- make sigma-only fallback diagonal instead of inventing one fully correlated
+  family mode
+- add one explicit detector-CV compatibility validation switch at the builder
+  boundary instead of leaving the fit expansion point implicit
+
+#### wrapper collapse
+- keep macro cache build/readback on one resolved detector-key set instead of
+  rebuilding and reinterpreting it separately
+
+#### stale scaffolding
+- replace the stale fit rigorous check that still targets the removed
+  pre-HistFactory API with coverage for the current installed fit surface
+
+### 6. Milestones
+
+#### Milestone A: Fix the fit and systematics boundary defects
+- status: blocked
+- hypothesis: covariance-first family handling plus one explicit detector-CV
+  validation hook is smaller and less error-prone than continuing to infer fit
+  nuisances from weaker payload remnants
+- files / symbols touched:
+  - `fit::profile_signal_strength(...)` systematics assembly helpers
+  - `syst::SystematicsOptions`
+  - `syst::CacheBuildOptions`
+  - `syst::build_systematics_cache(...)`
+  - `cache_systematics(...)`
+- expected behavior risk: medium
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md .agent/analysis/ccnumu_hyperon.md fit/SignalStrengthFit.cc fit/README syst/Systematics.hh syst/Systematics.cc plot/macro/cache_systematics.C tests/fit_rigorous_check.cc tests/systematics_rigorous_check.cc tools/macro-analysis-smoke.sh`
+  - `cmake --build build --target Fit Syst fit_rigorous_check systematics_rigorous_check --parallel`
+  - `ctest --test-dir build --output-on-failure -R 'fit_rigorous_check|systematics_rigorous_check|macro_analysis_smoke'`
+- acceptance criteria:
+  - a family covariance payload with no stored eigenmodes still becomes fit
+    nuisances
+  - sigma-only family fallback produces one diagonal nuisance per bin
+  - `cache_systematics.C` uses the same resolved detector keys for build and
+    immediate readback
+  - detector-CV compatibility can be validated explicitly without changing the
+    default detector workflow
+  - the fit rigorous check targets the current HistFactory API
+- verification results:
+  - `git diff --check -- ...` passed for the touched files
+  - `bash -n tools/macro-analysis-smoke.sh` passed
+  - `bash -n tools/run-macro` passed
+  - `cmake --build build --target Fit ...` failed because the checked-in
+    `build/` tree predates the current targets
+  - `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release` failed on this host
+    because `FindSQLite3` is pointed at an unreadable `/usr/include/sqlite3.h`
+    and `nlohmann/json.hpp` is not discoverable locally
+  - `source ./.setup.sh && cmake ...` failed because the required CVMFS setup
+    scripts are unavailable on this machine
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed target changes
+  - no macro CLI shape changes
+  - `syst::SystematicsOptions` and `syst::CacheBuildOptions` gain one explicit
+    detector-CV validation flag with a compatibility-preserving default
+- migration note or explicit non-goal:
+  - do not add detector or GENIE-knob covariance fields to `fit::Process` in
+    this pass
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- targets or dependencies removed: 0
+- approximate LOC delta: pending
+
+### 9. Decision log
+- keep this pass focused on the highest-confidence semantic defects from the
+  review
+- defer repeated-scan performance restructuring until after the fit boundary is
+  semantically correct
+- keep detector-CV compatibility validation opt-in for now
+
+### 10. Stop conditions
+- stop once the covariance-first fit path, macro cache-key fix, and focused
+  coverage are in place
+- do not broaden this pass into grouped-cache performance work or wider fit
+  payload redesign
+
 ## ExecPlan Addendum: Freeze Measurement-Signal Semantics For `ccnumu_hyperon`
 
 ### 1. Objective

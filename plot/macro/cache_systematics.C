@@ -79,9 +79,11 @@ void cache_systematics(const char *read_path = nullptr,
         request.xmin = xmin;
         request.xmax = xmax;
         request.selection_expr = (selection_expr && *selection_expr) ? selection_expr : "";
-        request.detector_sample_keys =
-            (detector_samples_csv && *detector_samples_csv) ? split_csv(detector_samples_csv)
-                                                            : std::vector<std::string>{};
+        const std::vector<std::string> resolved_detector_sample_keys =
+            (detector_samples_csv && *detector_samples_csv)
+                ? split_csv(detector_samples_csv)
+                : eventlist.detector_mates(sample_key);
+        request.detector_sample_keys = resolved_detector_sample_keys;
         cache_options.requests.push_back(request);
 
         syst::build_systematics_cache(eventlist, distfile, cache_options);
@@ -97,8 +99,8 @@ void cache_systematics(const char *read_path = nullptr,
         readback_options.enable_memory_cache = false;
         readback_options.persistent_cache = syst::CachePolicy::kLoadOnly;
         readback_options.cache_nbins = cache_options.cache_nbins;
-        readback_options.enable_detector = !request.detector_sample_keys.empty();
-        readback_options.detector_sample_keys = request.detector_sample_keys;
+        readback_options.enable_detector = !resolved_detector_sample_keys.empty();
+        readback_options.detector_sample_keys = resolved_detector_sample_keys;
         readback_options.enable_genie = cache_options.enable_genie;
         readback_options.enable_genie_knobs = cache_options.enable_genie_knobs;
         readback_options.enable_flux = cache_options.enable_flux;

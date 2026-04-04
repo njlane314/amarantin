@@ -2,6 +2,79 @@
 
 ## Current milestone
 - status: blocked
+- subsystem: `fit/` covariance-first family handling plus systematics/macro
+  boundary repair
+- design rule from `DESIGN.md`: keep the downstream fit boundary sharp by
+  consuming the canonical covariance payload directly and by avoiding a second
+  macro-side interpretation of resolved detector keys
+
+## What changed
+- made `fit/SignalStrengthFit.cc` materialise family modes from stored
+  eigenmodes first, then from canonical covariance, and finally from a
+  diagonal sigma-only fallback
+- fixed `plot/macro/cache_systematics.C` so auto-resolved detector siblings are
+  reused for immediate readback instead of dropped after the build request
+- added an explicit `validate_detector_cv_compatibility` switch in `syst/`
+  rather than leaving that check implicit at the fit boundary
+- replaced the stale fit rigorous check with one that targets the surviving
+  HistFactory API and added detector-CV validation coverage in the systematics
+  rigorous check
+- extended `tools/macro-analysis-smoke.sh` so the macro layer now exercises the
+  cache-systematics auto-detector path
+
+## Why this is simpler
+- the fit should interpret one canonical family payload instead of inferring
+  semantics from whichever weaker fields happen to survive
+- the macro cache build/readback path should use one resolved detector-key set
+  instead of deriving it twice
+- the fit regression check now matches the installed public API instead of a
+  removed pre-HistFactory interface
+
+## Verification
+- configure/build commands:
+-  `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+-  `source ./.setup.sh && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`
+- target-only commands:
+-  `cmake --build build --target Fit Syst fit_rigorous_check systematics_rigorous_check --parallel`
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md .agent/analysis/ccnumu_hyperon.md fit/SignalStrengthFit.cc fit/README syst/Systematics.hh syst/Systematics.cc plot/macro/cache_systematics.C tests/fit_rigorous_check.cc tests/systematics_rigorous_check.cc tools/macro-analysis-smoke.sh`
+-  `bash -n tools/macro-analysis-smoke.sh`
+-  `bash -n tools/run-macro`
+- smoke checks:
+- results:
+-  focused `git diff --check` passed
+-  `bash -n tools/macro-analysis-smoke.sh` passed
+-  `bash -n tools/run-macro` passed
+-  `cmake --build build --target Fit ...` failed because the checked-in
+   `build/` tree predates the current targets
+-  `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release` failed on this host
+   because `FindSQLite3` points at an unreadable `/usr/include/sqlite3.h` and
+   `nlohmann/json.hpp` is not discoverable locally
+-  `source ./.setup.sh && cmake ...` failed because the required CVMFS setup
+   scripts are unavailable here
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - modestly positive; the fit logic is flatter at the family boundary, and
+    the fit rigorous check now deletes the dead pre-HistFactory test surface
+
+## Decisions
+- keep detector-CV compatibility validation opt-in in this pass so current
+  detector workflows do not silently hard-fail
+- keep the higher-cost repeated-scan cache-builder work for a later pass
+
+## Remaining hotspots
+- the repeated-scan `build_systematics_cache()` execution model is still the
+  main performance issue, but it is out of scope for this milestone
+- a trustworthy compile/runtime verification still needs a machine with the
+  expected ROOT, SQLite, and JSON dependency setup
+
+## Current milestone
+- status: blocked
 - subsystem: `ana/` measurement-signal semantics and truth-contract alignment
 - design rule from `DESIGN.md`: keep the analysis boundary sharp by making one
   plain-data truth contract explicit instead of spreading the operational

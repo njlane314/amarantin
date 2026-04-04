@@ -73,6 +73,7 @@ namespace syst
         bool enable_eigenmode_compression = true;
         int max_eigenmodes = 8;
         double eigenmode_fraction = 0.99;
+        bool validate_detector_cv_compatibility = false;
     };
 
     struct SystematicsResult
@@ -120,6 +121,7 @@ namespace syst
         bool enable_eigenmode_compression = true;
         int max_eigenmodes = 8;
         double eigenmode_fraction = 0.99;
+        bool validate_detector_cv_compatibility = false;
 
         std::vector<CacheRequest> requests;
 

@@ -541,6 +541,36 @@ namespace
                 "detector lane should stay disabled when enable_detector is false");
     }
 
+    void test_detector_cv_compatibility_validation()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = temp.path / "cv-compatibility.eventlist.root";
+
+        write_rigorous_eventlist(eventlist_path);
+
+        EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 2;
+        spec.xmin = 0.0;
+        spec.xmax = 4.0;
+
+        syst::SystematicsOptions options;
+        options.enable_memory_cache = false;
+        options.enable_detector = true;
+        options.detector_sample_keys = {"beam-sce", "beam-wire"};
+        options.validate_detector_cv_compatibility = true;
+
+        require_throws(
+            [&]()
+            {
+                (void)syst::evaluate(eventlist, "beam", spec, options);
+            },
+            "fit-side recentering of detector shifts would be ill-defined",
+            "detector CV compatibility validation");
+    }
+
     void test_rebinned_persistent_cache_math()
     {
         const TempDir temp = make_temp_dir();
@@ -851,6 +881,7 @@ int main()
     {
         test_compute_sample_math();
         test_detector_disable_gate();
+        test_detector_cv_compatibility_validation();
         test_rebinned_persistent_cache_math();
         test_missing_weight_branch_rejected();
         test_inconsistent_universe_count_rejected();

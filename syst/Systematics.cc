@@ -177,6 +177,23 @@ namespace
         return out;
     }
 
+    bool histogram_compatible(const std::vector<double> &lhs,
+                              const std::vector<double> &rhs,
+                              double rel_tol)
+    {
+        if (lhs.size() != rhs.size())
+            return false;
+
+        double scale = 1.0;
+        double max_diff = 0.0;
+        for (std::size_t i = 0; i < lhs.size(); ++i)
+        {
+            scale = std::max(scale, std::max(std::fabs(lhs[i]), std::fabs(rhs[i])));
+            max_diff = std::max(max_diff, std::fabs(lhs[i] - rhs[i]));
+        }
+        return max_diff <= rel_tol * scale;
+    }
+
     std::vector<std::vector<double>> unpack_source_major_rows(const std::vector<double> &payload,
                                                               int row_count,
                                                               int nbins)
@@ -257,6 +274,16 @@ namespace
                     syst::detail::compute_sample(cv_tree, fine_spec, syst::SystematicsOptions{});
                 const syst::detail::ComputedSample variation_sample =
                     syst::detail::compute_sample(varied_tree, fine_spec, syst::SystematicsOptions{});
+
+                if (options.validate_detector_cv_compatibility &&
+                    source.cv_sample_key != sample_key &&
+                    !histogram_compatible(cv_sample.nominal, entry.nominal, 1e-9))
+                {
+                    throw std::runtime_error(
+                        "syst: detector CV sample " + source.cv_sample_key +
+                        " is not histogram-compatible with nominal " + sample_key +
+                        "; fit-side recentering of detector shifts would be ill-defined");
+                }
 
                 entry.detector_source_labels.push_back(source.source_label);
                 entry.detector_sample_keys.push_back(source.varied_sample_key);
@@ -675,6 +702,8 @@ namespace syst
             sysopt.enable_eigenmode_compression = options.enable_eigenmode_compression;
             sysopt.max_eigenmodes = options.max_eigenmodes;
             sysopt.eigenmode_fraction = options.eigenmode_fraction;
+            sysopt.validate_detector_cv_compatibility =
+                options.validate_detector_cv_compatibility;
 
             (void)evaluate(eventlist,
                            distfile,

@@ -27,6 +27,7 @@
 #include "TH1D.h"
 #include "TIterator.h"
 #include "TMatrixDSym.h"
+#include "TMatrixDSymEigen.h"
 
 namespace
 {
@@ -86,43 +87,101 @@ namespace
                !process.total_up.empty();
     }
 
-    int family_mode_count(const fit::Family &family)
+    struct FamilyModes
     {
-        if (family.eigen_rank > 0 && !family.eigenmodes.empty())
-            return family.eigen_rank;
-        if (!family.sigma.empty())
-            return 1;
-        return 0;
+        int rank = 0;
+        std::vector<double> payload;
+    };
+
+    bool family_has_payload(const fit::Family &family)
+    {
+        return (family.eigen_rank > 0 && !family.eigenmodes.empty()) ||
+               !family.covariance.empty() ||
+               !family.sigma.empty();
     }
 
-    double family_mode_value(const fit::Family &family,
+    FamilyModes materialise_family_modes(const fit::Family &family, int nbins)
+    {
+        if (family.eigen_rank > 0 && !family.eigenmodes.empty())
+            return FamilyModes{family.eigen_rank, family.eigenmodes};
+
+        if (!family.covariance.empty())
+        {
+            if (family.covariance.size() != static_cast<std::size_t>(nbins * nbins))
+            {
+                throw std::runtime_error(
+                    "fit: family covariance size does not match channel bin count");
+            }
+
+            TMatrixDSym covariance(nbins);
+            for (int row = 0; row < nbins; ++row)
+            {
+                for (int col = 0; col < nbins; ++col)
+                {
+                    covariance(row, col) =
+                        family.covariance[static_cast<std::size_t>(row * nbins + col)];
+                }
+            }
+
+            TMatrixDSymEigen solver(covariance);
+            const TVectorD eigenvalues = solver.GetEigenValues();
+            const TMatrixD eigenvectors = solver.GetEigenVectors();
+
+            std::vector<int> selected;
+            for (int idx = nbins - 1; idx >= 0; --idx)
+            {
+                if (eigenvalues(idx) > kShiftTolerance)
+                    selected.push_back(idx);
+            }
+
+            FamilyModes out;
+            out.rank = static_cast<int>(selected.size());
+            out.payload.assign(static_cast<std::size_t>(nbins * out.rank), 0.0);
+            for (int mode = 0; mode < out.rank; ++mode)
+            {
+                const int idx = selected[static_cast<std::size_t>(mode)];
+                const double scale = std::sqrt(eigenvalues(idx));
+                for (int row = 0; row < nbins; ++row)
+                {
+                    out.payload[static_cast<std::size_t>(row * out.rank + mode)] =
+                        eigenvectors(row, idx) * scale;
+                }
+            }
+            return out;
+        }
+
+        FamilyModes out;
+        if (family.sigma.empty())
+            return out;
+
+        if (static_cast<int>(family.sigma.size()) != nbins)
+        {
+            throw std::runtime_error(
+                "fit: family sigma size does not match channel bin count");
+        }
+
+        out.rank = nbins;
+        out.payload.assign(static_cast<std::size_t>(nbins * nbins), 0.0);
+        for (int bin = 0; bin < nbins; ++bin)
+        {
+            out.payload[static_cast<std::size_t>(bin * nbins + bin)] =
+                family.sigma[static_cast<std::size_t>(bin)];
+        }
+        return out;
+    }
+
+    double family_mode_value(const FamilyModes &modes,
                              int mode_index,
                              int bin)
     {
-        if (mode_index < 0)
-            throw std::runtime_error("fit: mode_index must not be negative");
+        if (mode_index < 0 || mode_index >= modes.rank)
+            throw std::runtime_error("fit: family mode_index out of range");
 
-        if (family.eigen_rank > 0 && !family.eigenmodes.empty())
-        {
-            if (mode_index >= family.eigen_rank)
-                throw std::runtime_error("fit: family mode_index out of range");
-            const std::size_t index =
-                static_cast<std::size_t>(bin * family.eigen_rank + mode_index);
-            if (index >= family.eigenmodes.size())
-                throw std::runtime_error("fit: family eigenmode payload is truncated");
-            return family.eigenmodes[index];
-        }
-
-        if (!family.sigma.empty())
-        {
-            if (mode_index != 0)
-                throw std::runtime_error("fit: sigma-only family exposes only one mode");
-            if (static_cast<std::size_t>(bin) >= family.sigma.size())
-                throw std::runtime_error("fit: family sigma payload is truncated");
-            return family.sigma[static_cast<std::size_t>(bin)];
-        }
-
-        throw std::runtime_error("fit: family has no usable fit payload");
+        const std::size_t index =
+            static_cast<std::size_t>(bin * modes.rank + mode_index);
+        if (index >= modes.payload.size())
+            throw std::runtime_error("fit: family mode payload is truncated");
+        return modes.payload[index];
     }
 
     std::string mode_name(const char *label,
@@ -198,9 +257,9 @@ namespace
 
     bool process_has_family_payload(const fit::Process &process)
     {
-        return family_mode_count(process.genie) > 0 ||
-               family_mode_count(process.flux) > 0 ||
-               family_mode_count(process.reint) > 0;
+        return family_has_payload(process.genie) ||
+               family_has_payload(process.flux) ||
+               family_has_payload(process.reint);
     }
 
     bool process_has_detector_payload(const fit::Process &process)
@@ -227,6 +286,7 @@ namespace
                          const std::string &label)
     {
         const bool have_payload = !family.sigma.empty() ||
+                                  !family.covariance.empty() ||
                                   family.eigen_rank > 0 ||
                                   !family.eigenmodes.empty();
 
@@ -554,13 +614,14 @@ namespace
 
         for (const auto &entry : families)
         {
-            const int mode_count = family_mode_count(*entry.second);
+            const FamilyModes modes = materialise_family_modes(*entry.second, nbins);
+            const int mode_count = modes.rank;
             for (int mode = 0; mode < mode_count; ++mode)
             {
                 std::vector<double> shift(static_cast<std::size_t>(nbins), 0.0);
                 for (int bin = 0; bin < nbins; ++bin)
                     shift[static_cast<std::size_t>(bin)] =
-                        family_mode_value(*entry.second, mode, bin);
+                        family_mode_value(modes, mode, bin);
                 add_symmetric_shift_systematic(sample,
                                                channel,
                                                process,

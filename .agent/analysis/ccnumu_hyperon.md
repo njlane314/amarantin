@@ -161,6 +161,10 @@ style.
   - do not let the broad logical `strange` sample masquerade as the fit POI
   - treat `other_strange_background` as an explicit fit component, not generic
     overlay
+  - prefer covariance-first family payloads at the fit boundary; stored
+    eigenmodes are optional derived views, not the only fit-ready contract
+  - sigma-only family fallback is a diagonal approximation and should be
+    surfaced explicitly as lower-fidelity than covariance-backed payloads
 
 ## Systematics
 - include all major uncertainty families
@@ -203,6 +207,8 @@ style.
   - CNN score sim-to-data mismodelling checks
   - run-by-run score-shape stability checks
   - detector-variation span checks against observed run-period differences
+  - validate detector-CV compatibility before any fit path that recenters
+    detector source shifts around the analysis nominal
 
 ## Outputs Needed
 - full chain outputs are required:

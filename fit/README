@@ -57,7 +57,9 @@ A `fit::Problem` now describes one HistFactory measurement:
     fallbacks become HistFactory shape systematics
 
 The default builder still prefers richer cached payloads first:
-  - family eigenmodes or sigma summaries
+  - family eigenmodes
+  - family covariance-derived modes
+  - diagonal sigma-only family fallback
   - explicit detector source shifts
   - explicit GENIE knob-pair source shifts
   - detector templates

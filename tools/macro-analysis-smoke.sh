@@ -44,11 +44,13 @@ SOURCE="${TMP_DIR}/macro_fixture.cc"
 BINARY="${TMP_DIR}/macro_fixture"
 EVENTLIST_PATH="${TMP_DIR}/macro-smoke.eventlist.root"
 DIST_PATH="${TMP_DIR}/macro-smoke.dists.root"
+CACHE_DIST_PATH="${TMP_DIR}/macro-cache.dists.root"
 COV_PATH="${TMP_DIR}/macro-smoke.cov.root"
 WEIGHTS_LOG="${TMP_DIR}/inspect_weights.log"
 CUTFLOW_LOG="${TMP_DIR}/inspect_cutflow.log"
 CATEGORIES_LOG="${TMP_DIR}/inspect_categories.log"
 SYSTEMATICS_LOG="${TMP_DIR}/inspect_systematics.log"
+AUTO_CACHE_LOG="${TMP_DIR}/cache_systematics.log"
 COVARIANCE_LOG="${TMP_DIR}/inspect_covariance.log"
 
 cat >"${SOURCE}" <<'EOF'
@@ -353,6 +355,24 @@ grep -F "genie branch=weightsGenie universes=3 eigen_rank=2 sigma_bins=2 covaria
 grep -F "flux branch=weightsPPFX universes=2 eigen_rank=0 sigma_bins=2 covariance_bins=0 eigenvalues=0 eigenmodes=0 universe_hist_bins=4" "${SYSTEMATICS_LOG}" >/dev/null
 grep -F "reint branch=weightsReint universes=1 eigen_rank=0 sigma_bins=2 covariance_bins=0 eigenvalues=0 eigenmodes=0 universe_hist_bins=2" "${SYSTEMATICS_LOG}" >/dev/null
 grep -F "total_envelope=present" "${SYSTEMATICS_LOG}" >/dev/null
+
+run_macro_capture "${AUTO_CACHE_LOG}" cache_systematics \
+  "${EVENTLIST_PATH}" \
+  beam \
+  topological_score \
+  2 \
+  0 \
+  1 \
+  __pass_muon__ \
+  0 \
+  "" \
+  false \
+  false \
+  false \
+  false \
+  "${CACHE_DIST_PATH}"
+grep -F "cached_nbins=2 loaded_from_persistent_cache=1" "${AUTO_CACHE_LOG}" >/dev/null
+grep -F "dist_path=${CACHE_DIST_PATH}" "${AUTO_CACHE_LOG}" >/dev/null
 
 run_macro_capture "${COVARIANCE_LOG}" inspect_covariance "${COV_PATH}"
 grep -F "matrix=abs_covariance type=double rows=2 cols=2" "${COVARIANCE_LOG}" >/dev/null
