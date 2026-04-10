@@ -275,6 +275,12 @@ void EventListIO::flush()
     file_->Write(nullptr, TObject::kOverwrite);
 }
 
+std::string EventListIO::file_uuid() const
+{
+    require_open_();
+    return std::string(file_->GetUUID().AsString());
+}
+
 std::vector<std::string> EventListIO::sample_keys() const
 {
     require_open_();

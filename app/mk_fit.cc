@@ -65,6 +65,7 @@ namespace
         bool compute_stat_only_interval = true;
         bool run_hesse = true;
         bool allow_zero_data = false;
+        bool asimov = false;
         bool legacy_process_flags_used = false;
     };
 
@@ -95,13 +96,13 @@ namespace
               "[--scan-points <n>] [--strategy <n>] [--print-level <n>] "
               "[--tolerance <value>] [--no-stat-interval] [--no-hesse] "
               "[--selection <expr>] [--data-bins <csv>] [--signal-cache <key>] "
-              "[--background-cache <key>] [--allow-zero-data] "
+              "[--background-cache <key>] [--allow-zero-data] [--asimov] "
               "<input.dists.root> <signal-sample-key> <background-sample-key> "
               "<channel-key>\n"
               "   or: " << kProgramName
            << " [fit flags] [--selection <expr>] "
               "[--data-bins <csv>] [--manifest <fit.manifest>] "
-              "[--allow-zero-data] <input.dists.root> <channel-key>\n";
+              "[--allow-zero-data] [--asimov] <input.dists.root> <channel-key>\n";
     }
 
     [[noreturn]] void print_usage_and_throw()
@@ -616,7 +617,8 @@ namespace
                               const DistributionIO::Metadata &metadata,
                               const std::string &channel_key,
                               const fit::Problem &problem,
-                              const fit::Result &result)
+                              const fit::Result &result,
+                              bool asimov)
     {
         std::ostringstream os;
         os << std::fixed << std::setprecision(6);
@@ -633,6 +635,7 @@ namespace
         os << "eventlist_path: "
            << (metadata.eventlist_path.empty() ? "-" : metadata.eventlist_path)
            << "\n";
+        os << "asimov: " << format_bool(asimov) << "\n";
         os << "channel_key: " << channel_key << "\n";
         const std::vector<std::string> signal_processes = collect_signal_process_names(problem);
         os << "signal_process: "
@@ -860,6 +863,12 @@ namespace
                 options.allow_zero_data = true;
                 continue;
             }
+            if (arg == "--asimov")
+            {
+                options.asimov = true;
+                options.allow_zero_data = true;
+                continue;
+            }
             break;
         }
 
@@ -906,6 +915,22 @@ int main(int argc, char **argv)
                 ? build_manifest_channels(options, dist)
                 : std::vector<fit::Channel>{build_legacy_channel(options, dist)};
 
+        if (options.asimov)
+        {
+            for (auto &channel : channels)
+            {
+                channel.data.assign(static_cast<std::size_t>(channel.spec.nbins), 0.0);
+                for (const auto &process : channel.processes)
+                {
+                    for (std::size_t bin = 0; bin < channel.data.size() &&
+                                               bin < process.nominal.size(); ++bin)
+                    {
+                        channel.data[bin] += process.nominal[bin];
+                    }
+                }
+            }
+        }
+
         if (!options.allow_zero_data && all_zero_channels(channels))
         {
             throw std::runtime_error(
@@ -929,7 +954,8 @@ int main(int argc, char **argv)
 
         const fit::Result result = fit::profile_signal_strength(problem, fit_options);
         const std::string report =
-            format_report(options.dist_path, metadata, options.channel_key, problem, result);
+            format_report(options.dist_path, metadata, options.channel_key, problem, result,
+                          options.asimov);
 
         if (!options.output_path.empty())
         {

@@ -169,6 +169,34 @@ if(TARGET IO)
   endif()
 endif()
 
+if(TARGET IO AND TARGET Ana)
+  add_executable(pipeline_normalization_check pipeline_normalization_check.cc)
+
+  target_link_libraries(pipeline_normalization_check
+    PRIVATE
+      IO
+      Ana
+      SQLite::SQLite3
+      amarantin_build_options
+  )
+
+  set_target_properties(pipeline_normalization_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+
+  add_test(NAME pipeline_normalization_check
+    COMMAND "${CMAKE_BINARY_DIR}/bin/pipeline_normalization_check"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      IO
+      Ana
+      pipeline_normalization_check
+    )
+  endif()
+endif()
+
 if(TARGET Syst)
   add_executable(systematics_rigorous_check systematics_rigorous_check.cc)
 

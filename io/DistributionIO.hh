@@ -14,6 +14,7 @@ public:
     struct Metadata
     {
         std::string eventlist_path;
+        std::string eventlist_uuid;
         int build_version = 1;
     };
 
