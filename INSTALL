@@ -28,14 +28,12 @@ Libraries
   * Ana
   * Syst
   * Plot
-  * Fit
 
 Executables
   * mk_sample
   * mk_dataset
   * mk_eventlist
   * mk_dist
-  * mk_fit
   * mk_cov
 
 Prerequisites
@@ -74,12 +72,10 @@ Build only selected targets
   cmake --build build --target Ana
   cmake --build build --target Syst
   cmake --build build --target Plot
-  cmake --build build --target Fit
   cmake --build build --target mk_sample
   cmake --build build --target mk_dataset
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
-  cmake --build build --target mk_fit
   cmake --build build --target mk_cov
 
 Install
@@ -164,19 +160,16 @@ Typical installed outputs are:
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dataset
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_eventlist
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dist
-  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_fit
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_cov
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libIO.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libAna.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libSyst.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libPlot.<shared-library>
-  ${prefix}/${CMAKE_INSTALL_LIBDIR}/libFit.<shared-library>
   ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/ShardIO.hh
   ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/DistributionIO.hh
   ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/EventListIO.hh
   ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/DatasetIO.hh
   ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/SampleIO.hh
-  ${prefix}/${CMAKE_INSTALL_INCLUDEDIR}/amarantin/SignalStrengthFit.hh
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfig.cmake
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinConfigVersion.cmake
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/cmake/amarantin/amarantinTargets.cmake
@@ -192,8 +185,6 @@ Downstream CMake use
   target_link_libraries(your_target PRIVATE amarantin::Syst)
   # or
   target_link_libraries(your_target PRIVATE amarantin::Plot)
-  # or
-  target_link_libraries(your_target PRIVATE amarantin::Fit)
 
 Verification
 ------------
@@ -203,7 +194,6 @@ After a successful build, the build tree should contain:
   build/bin/mk_dataset
   build/bin/mk_eventlist
   build/bin/mk_dist
-  build/bin/mk_fit
   build/bin/mk_cov
   build/lib/
 
@@ -223,9 +213,16 @@ If `test.root` exists in the source tree when CMake configures the build, or
 if configuration sets
 `-DAMARANTIN_TEST_ROOT_FIXTURE=/path/to/test.root`, that check run also
 exercises the
-`mk_sample -> mk_dataset -> mk_eventlist -> mk_dist -> mk_fit -> mk_cov`
+`mk_sample -> mk_dataset -> mk_eventlist -> mk_dist -> mk_cov`
 fixture pipeline, plus `Snapshot`, row-wise plotting, one `EfficiencyPlot`
 render, and the analyzer inspection macros on those real outputs.
+
+Downstream fit note
+-------------------
+This CMake project no longer builds a native fitter. Use the cached
+`DistributionIO` outputs or `mk_cov` exports from `amarantin` as inputs to the
+sibling `~/programs/collie` checkout when a fit or limit calculation is
+needed.
 
 A focused stacked-export smoke, once the ROOT build is available, is:
 

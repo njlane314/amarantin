@@ -16,7 +16,6 @@ io/              Core I/O library
 ana/             Analysis-side helpers and event-list construction
 syst/            Systematics cache construction
 plot/            Plotting library
-fit/             Signal-strength fitting library
 app/             Command-line tools
 tools/           Helper scripts
 samples-dag.mk   Higher-level sample workflow
@@ -28,7 +27,6 @@ Primary executables
   * build/bin/mk_dataset
   * build/bin/mk_eventlist
   * build/bin/mk_dist
-  * build/bin/mk_fit
   * build/bin/mk_cov
 
 Canonical build path
@@ -74,7 +72,7 @@ Notes:
   If `test.root` exists in the source tree at configure time, or if CMake is
   configured with `-DAMARANTIN_TEST_ROOT_FIXTURE=/path/to/test.root`, the
   checks also run a fixture smoke that feeds it through `mk_sample`,
-  `mk_dataset`, `mk_eventlist`, `mk_dist`, `mk_fit`, and `mk_cov`, then
+  `mk_dataset`, `mk_eventlist`, `mk_dist`, and `mk_cov`, then
   verifies `Snapshot`, row-wise plotting, `EfficiencyPlot`, and the analyzer
   inspection macros on those real outputs.
 
@@ -83,12 +81,10 @@ Build selected targets
   cmake --build build --target Ana
   cmake --build build --target Syst
   cmake --build build --target Plot
-  cmake --build build --target Fit
   cmake --build build --target mk_sample
   cmake --build build --target mk_dataset
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
-  cmake --build build --target mk_fit
   cmake --build build --target mk_cov
 
 Sample workflow
@@ -257,54 +253,16 @@ Stacked export contract:
 Focused smoke for the stacked export contract
   tools/systematics-sbnfit-export-smoke.sh
 
-Fit workflow
-------------
-Run one native xsec fit directly from cached DistributionIO inputs and print
-the fit report
-  cat > muon_region.fit.manifest <<'EOF'
-  signal signal beam-s0
-  beam_bkg background beam-bkg
-  ext background ext
-  dirt background dirt
-  obs data beam-data
-  EOF
-  build/bin/mk_fit \
-    --manifest muon_region.fit.manifest \
-    output.dists.root \
-    muon_region
+Downstream fit boundary
+-----------------------
+`amarantin` no longer ships a native fit executable.
 
-Run one quick two-process fit with explicit observed bins
-  build/bin/mk_fit \
-    --signal-process signal \
-    --data-bins "12,10,9,7,6,5,4,3,2,1" \
-    output.dists.root \
-    beam-s0 \
-    beam-bkg \
-    muon_region
+The repository-owned downstream handoff surfaces are:
+  * cached `DistributionIO` requests built by `mk_dist`
+  * covariance exports built by `mk_cov`
 
-If the fit intentionally carries an all-zero observed spectrum
-  build/bin/mk_fit \
-    --allow-zero-data \
-    output.dists.root \
-    beam-s0 \
-    beam-bkg \
-    muon_region
-
-Run one native xsec fit with explicit signal process and write a text report
-  build/bin/mk_fit \
-    --signal-process signal \
-    --output muon_region.fit.txt \
-    --manifest muon_region.fit.manifest \
-    output.dists.root \
-    muon_region
-
-Notes:
-  `mk_fit` now consumes cached `DistributionIO` entries directly.
-  Manifest rows use the format:
-    `process-name kind sample-key [cache-key]`
-  `data` rows fill the observed bins automatically.
-  Without manifest data rows, pass `--data-bins` or opt into an intentional
-  empty observation with `--allow-zero-data`.
+Use those outputs from the sibling `~/programs/collie` checkout for limit or
+cross-section fits. `collie` owns its own build system and CLI/examples.
 
 Macro runner
 ------------
@@ -362,8 +320,9 @@ Notes
   duplicate sample rows. The older repeated-key merge behavior remains
   available only through the legacy context-string path.
 
-`mk_dist`, `mk_fit`
-  Are the preferred scripted cache / fit entrypoints.
+`mk_dist`, `mk_cov`
+  Are the preferred scripted cache / export entrypoints.
+  Downstream fits are assumed to run from `~/programs/collie`.
   Older helper macros such as `cache_systematics.C` may remain useful for ad
   hoc ROOT sessions, but they are no longer the documented workflow.
 

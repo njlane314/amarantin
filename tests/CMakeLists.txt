@@ -35,13 +35,11 @@ if(NOT TARGET mk_sample OR
    NOT TARGET mk_dataset OR
    NOT TARGET mk_eventlist OR
    NOT TARGET mk_dist OR
-   NOT TARGET mk_fit OR
    NOT TARGET mk_cov OR
    NOT TARGET IO OR
    NOT TARGET Ana OR
    NOT TARGET Plot OR
-   NOT TARGET Syst OR
-   NOT TARGET Fit)
+   NOT TARGET Syst)
   message(STATUS
     "amarantin: skipping test.root fixture smoke; required targets are disabled")
 elseif(NOT EXISTS "${AMARANTIN_TEST_ROOT_FIXTURE}")
@@ -80,39 +78,12 @@ else()
       mk_dataset
       mk_eventlist
       mk_dist
-      mk_fit
       mk_cov
       IO
       Ana
       Plot
       Syst
-      Fit
       testroot_pipeline_check
-    )
-  endif()
-endif()
-
-if(TARGET Fit)
-  add_executable(fit_rigorous_check fit_rigorous_check.cc)
-
-  target_link_libraries(fit_rigorous_check
-    PRIVATE
-      Fit
-      amarantin_build_options
-  )
-
-  set_target_properties(fit_rigorous_check PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-  )
-
-  add_test(NAME fit_rigorous_check
-    COMMAND "${CMAKE_BINARY_DIR}/bin/fit_rigorous_check"
-  )
-
-  if(TARGET check)
-    add_dependencies(check
-      Fit
-      fit_rigorous_check
     )
   endif()
 endif()
@@ -223,7 +194,7 @@ if(TARGET Syst)
   endif()
 endif()
 
-if(TARGET IO AND TARGET Ana AND TARGET Plot AND TARGET Syst AND TARGET Fit AND TARGET mk_cov)
+if(TARGET IO AND TARGET Ana AND TARGET Plot AND TARGET Syst AND TARGET mk_cov)
   add_test(NAME macro_analysis_smoke
     COMMAND "${CMAKE_COMMAND}" -E env
       "AMARANTIN_BUILD_DIR=${CMAKE_BINARY_DIR}"
@@ -240,7 +211,6 @@ if(TARGET IO AND TARGET Ana AND TARGET Plot AND TARGET Syst AND TARGET Fit AND T
       Ana
       Plot
       Syst
-      Fit
       mk_cov
     )
   endif()

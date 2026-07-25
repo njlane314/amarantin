@@ -37,8 +37,8 @@ envelope-first:
 
 - detector output is primarily a binwise min/max envelope
 - total output is primarily a quadrature up/down envelope
-- cached covariance can exist for reweight families, but downstream `fit/`
-  does not yet treat covariance as the primary contract
+- cached covariance can exist for reweight families, but downstream export /
+  fit consumers do not yet treat covariance as the primary contract
 
 `hive` is stronger in one important way: covariance is the canonical object,
 and envelopes are derived later for plotting or summaries.
@@ -258,7 +258,8 @@ That implies:
 - `syst/` should compute and describe the math contract for systematics
 - `syst/` should own covariance construction from event-level inputs
 - `DistributionIO` should persist enough information to rebin and fit later
-- `fit/` should consume covariance or covariance-derived modes directly
+- downstream export / fit consumers should consume covariance or
+  covariance-derived modes directly
 - `plot/` may draw envelopes, but should not define the systematic semantics
 
 Notation
@@ -551,7 +552,7 @@ where `C` maps:
   to
 - one collapsed channel/bin space
 
-This collapse should happen in downstream `fit/` assembly, not in `io/`.
+This collapse should happen in downstream export / fit assembly, not in `io/`.
 
 Eigenmode Compression
 ---------------------
@@ -648,7 +649,7 @@ Acceptance:
 - family covariance is always reconstructible from the persisted canonical
   payload
 
-### Milestone 3: Teach `fit/` to consume covariance-first payloads
+### Milestone 3: Teach downstream fit consumers to consume covariance-first payloads
 
 - build nuisances from covariance-derived modes or explicit source shifts
 - support full-vector collapse `C * V * C^T` where needed
@@ -672,7 +673,8 @@ Acceptance:
 Open Review Questions
 ---------------------
 
-1. Should full covariance assembly across processes live only in `fit/`, or
+1. Should full covariance assembly across processes live only in downstream
+   fit/export code, or
    should `syst/` provide a small helper for building the stacked vector and
    source-shift matrix?
 2. Is exact universe retention required in the default cache policy, or only

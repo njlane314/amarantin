@@ -18,7 +18,8 @@ The core path should stay easy to explain:
 2. assemble logical samples into `DatasetIO`
 3. build selected row-wise content into `EventListIO`
 4. optionally build and update fine bin-wise caches in `DistributionIO`
-5. render or fit from persisted caches plus plain-text assembly manifests
+5. render or hand off external fits from persisted caches plus plain-text
+   assembly manifests
 
 The project should optimize for clear data flow, small public surfaces, and
 grep-friendly implementation, not for maximum abstraction.
@@ -42,10 +43,10 @@ The preferred user-facing workflow is:
 3. `mk_eventlist` turns `DatasetIO` into selected `EventListIO` content
 4. `mk_dist` or thin apps build optional `DistributionIO` caches from
    `EventListIO`
-5. `plot/`, `fit/`, or thin apps assemble named processes, runs, and regions
-   from cached `DistributionIO` inputs using plain-text manifests
-6. `plot/` renders final views and `fit/` profiles one or more assembled
-   region models
+5. `plot/` or thin export apps assemble named processes, runs, and regions
+   from cached `DistributionIO` inputs
+6. `plot/` renders final views and external tools such as
+   `~/programs/collie` own downstream fits
 
 The preferred explanation path should match that execution path. A new reader
 should be able to follow one concrete ladder from file list to final plot
@@ -559,52 +560,18 @@ expose:
 That keeps normalization debugging in the row-wise plot path without changing
 the preferred final-plot path through `DistributionIO`.
 
-### `fit/`
+### External fit boundary
 
-`fit/` should own final region-model assembly helpers and signal-strength
-fitting from stable persisted inputs, especially `DistributionIO` and,
-when useful, a fit-facing persisted `ModelIO`.
+`amarantin` should stop at stable persisted downstream surfaces:
 
-It should stay small:
+- `EventListIO` for row-wise debugging and snapshots
+- `DistributionIO` for cached nominal/systematic bin payloads
+- optional export helpers such as `mk_cov`
 
-- plain data
-- free functions
-- thin orchestration
-
-If adaptive or final-stage rebinning exists, it should live here or in thin
-app code, not in `io/`.
-
-Its long-term scope includes:
-
-- building final region models from one or more persisted cache requests
-- combined or multi-region fits
-- shared nuisance handling across regions when the underlying uncertainty is
-  common
-
-`DistributionIO` remains the core cached spectrum store. `fit/` should be
-able to assemble in-memory fit problems from semantic spectrum queries over
-that store. When a frozen assembled fit input is useful for reproducibility
-or decoupling, that assembled object should persist as `ModelIO`.
-
-`ModelIO` is the fit-facing analogue of a final assembled model snapshot:
-
-- one or more regions
-- observed data bins
-- named processes with nominal and uncertainty payloads
-- the correlation and nuisance information needed by the fit
-
-`ModelIO` should be built downstream from `DistributionIO`; it should not
-replace `DistributionIO` as the core cached store, and it should not trigger
-a second pass over `EventListIO`.
-
-By the time work reaches `fit/`, logical normalization and event weighting
-should already have been resolved upstream and summarized into the persisted
-cache payloads. `fit/` should not reopen shard provenance, inspect
-run / subrun normalization maps, or reconstruct nominal event weights from
-earlier workflow layers.
-
-Fit-side policy should assemble processes, runs, regions, and correlations in
-memory, but persisted storage ownership still belongs to `io/`.
+Downstream fitting is assumed to live outside this repo, currently in the
+sibling `~/programs/collie` checkout. If adaptive or final-stage rebinning is
+needed, prefer thin export/handoff code over reintroducing a repo-local fit
+module.
 
 ### `app/`
 
@@ -624,9 +591,9 @@ decisions behind shell branching.
 
 By default, the repository should preserve a small stable external surface:
 
-- installed libraries: `IO`, `Ana`, `Syst`, `Plot`, `Fit`
+- installed libraries: `IO`, `Ana`, `Syst`, `Plot`
 - command-line tools: `mk_sample`, `mk_dataset`, `mk_eventlist`,
-  `mk_dist`, `mk_fit`
+  `mk_dist`, `mk_cov`
 - plain-text workflow inputs where possible
 - installed public headers that map cleanly onto the real module boundaries
 
@@ -641,8 +608,8 @@ Within that public shape, the intended steady-state native workflow is:
 - `mk_dist`
 - final plot entry points that consume `DistributionIO` through semantic
   spectrum queries
-- fit entry points that consume `DistributionIO` directly or a frozen
-  `ModelIO` snapshot when useful
+- external fit handoff inputs consumed outside this repo, currently by
+  `~/programs/collie`
 
 The repository should converge toward native downstream assembly rather than
 relying on manual macros or hand-entered final-region inputs.
@@ -704,7 +671,7 @@ The codebase should continue converging toward:
 - less cross-module helper leakage
 - flatter workflows that a new reader can follow with a few greps
 - less dependence on manual downstream assembly once stable native cache and
-  fit workflows exist
+  external fit handoff workflows exist
 
 ## Non-Goals
 
@@ -714,7 +681,8 @@ The codebase should continue converging toward:
 - a service / manager / factory heavy architecture
 - a second configuration language when plain text and CLI arguments are enough
 - a place where `io/` absorbs workflow logic
-- a place where `plot/` or `fit/` quietly take over selection building
+- a place where `plot/` or downstream handoff code quietly take over
+  selection building
 - a place where production-shard details leak into the normal downstream
   analysis interface
 

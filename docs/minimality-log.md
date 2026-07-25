@@ -2,6 +2,83 @@
 
 ## Current milestone
 - status: blocked
+- subsystem: native fit-surface retirement in favor of `~/programs/collie`
+- design rule from `DESIGN.md`: keep module boundaries sharp and delete a
+  whole layer when a smaller external boundary is the intended workflow
+
+## What changed
+- removed the native `Fit` library target, its public header, and the
+  `app/mk_fit.cc` CLI
+- dropped fit-only tests and removed the fit leg from the `test.root` fixture
+  smoke plus the macro smoke dependency set
+- removed the stale fit-library load/include from `.rootlogon.C` so interactive
+  ROOT startup matches the retired build surface
+- simplified ROOT linkage by removing the RooFit / RooStats / HistFactory
+  requirement from the top-level build
+- updated the current workflow docs and architecture notes so `amarantin`
+  stops at cached `DistributionIO` plus optional `mk_cov` exports and assumes
+  downstream fits run in `~/programs/collie`
+- updated `.agent/analysis/ccnumu_hyperon.md` so the analysis-facing fit
+  boundary now matches the external `collie` workflow
+
+## Why this is simpler
+- the repo no longer carries a second fitting implementation boundary beside
+  `collie`
+- the installed/build surface is smaller and no longer depends on fit-only
+  ROOT components
+- the fixture and smoke paths now test the real repository-owned handoff
+  surfaces instead of a downstream fitter that is intentionally out of scope
+
+## Verification
+- configure/build commands:
+-  `docker build -t amarantin-dev .`
+-  `docker run --rm -v "$PWD":/work -w /work rootproject/root:6.30.06-ubuntu22.04 bash -lc 'apt-get update && apt-get install -y --no-install-recommends cmake libsqlite3-dev nlohmann-json3-dev pkg-config >/tmp/amarantin-apt.log && cmake -S . -B /tmp/amarantin-collie-boundary -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/amarantin-collie-boundary --target IO Ana Syst Plot mk_sample mk_dataset mk_eventlist mk_dist mk_cov --parallel && ctest --test-dir /tmp/amarantin-collie-boundary --output-on-failure -R "signal_definition_contract_check|pipeline_normalization_check|io_rigorous_check|plot_rigorous_check|systematics_rigorous_check|macro_analysis_smoke|testroot_pipeline_smoke"'`
+- shell checks:
+-  `git diff --check -- .rootlogon.C .agent/current_execplan.md docs/minimality-log.md .agent/analysis/ccnumu_hyperon.md CMakeLists.txt app/CMakeLists.txt tests/CMakeLists.txt tools/test-root-smoke.sh tools/macro-analysis-smoke.sh tools/run-macro COMMANDS INSTALL USAGE VISION.md INVARIANTS.md docs/repo-internals.puml docs/adaptive-binning-plan.md syst/README syst/VISION.md tests/testroot_pipeline_check.cc`
+-  `bash -n tools/test-root-smoke.sh`
+-  `bash -n tools/macro-analysis-smoke.sh`
+-  `bash -n tools/run-macro`
+- results:
+-  focused `git diff --check` passed
+-  `bash -n tools/test-root-smoke.sh` passed
+-  `bash -n tools/macro-analysis-smoke.sh` passed
+-  `bash -n tools/run-macro` passed
+-  repo-wide grep after the edit found no remaining live `mk_fit`,
+   `SignalStrengthFit.hh`, `RooFit`, or `RooStats` references outside the
+   historical logs / plans
+-  `docker build -t amarantin-dev .` failed because the Docker daemon hit a
+   read-only overlay filesystem error while registering layers
+-  `docker run --rm ... rootproject/root:6.30.06-ubuntu22.04 ...` failed for
+   the same Docker overlay filesystem reason before configure/build could
+   start
+-  local `mdfind` / `find` checks did not locate `root-config` or
+   `ROOTConfig.cmake`, so a fresh native ROOT-backed configure was not
+   available on this host
+
+## Reduction ledger
+- files deleted: 7
+- wrappers removed: 1 native fit-library / CLI workflow
+- shell branches removed: 1 fit leg from the fixture smoke
+- docs/build artifacts removed:
+  - current `mk_fit` / `Fit` workflow sections
+  - fit-owned architecture surface from current docs
+- approximate LOC delta:
+  - about `-2912` across the touched slice
+
+## Decisions
+- keep `mk_cov` and cached `DistributionIO` as the final repository-owned
+  handoff surfaces instead of importing `collie` into this build
+- treat compile/runtime verification as still blocked until either Docker is
+  writable again or a local ROOT toolchain is available
+
+## Remaining hotspots
+- the historical planning/log files still mention `fit/` extensively by
+  design; they were not rewritten as part of this retirement pass
+- a trustworthy compile/runtime verification still needs a usable Docker
+  overlay filesystem or a host with `root-config` / `ROOTConfig.cmake`
+
+## Current milestone
+- status: blocked
 - subsystem: `fit/` covariance-first family handling plus systematics/macro
   boundary repair
 - design rule from `DESIGN.md`: keep the downstream fit boundary sharp by

@@ -37,13 +37,13 @@ approved exception.
 - The repository remains a small C++17 / ROOT project with SQLite-backed run
   database support.
 - Installed library targets remain stable by default:
-  `IO`, `Ana`, `Syst`, `Plot`, `Fit`.
+  `IO`, `Ana`, `Syst`, `Plot`.
 - Installed downstream package targets remain under the `amarantin::`
   namespace.
 - Installed public headers remain under
   `${CMAKE_INSTALL_INCLUDEDIR}/amarantin`.
 - Documented executables remain available by default:
-  `mk_sample`, `mk_dataset`, `mk_eventlist`, `mk_dist`, `mk_fit`, `mk_cov`.
+  `mk_sample`, `mk_dataset`, `mk_eventlist`, `mk_dist`, `mk_cov`.
 - External behavior is preserved by default. A break needs an explicit
   migration note in the active ExecPlan and matching doc updates in the same
   milestone.
@@ -61,7 +61,8 @@ approved exception.
   and event-list construction.
 - `syst/` owns systematic calculations and cache construction.
 - `plot/` owns rendering only.
-- `fit/` owns fit-side assembly and signal-strength fitting logic.
+- external fits are out of scope for repo-owned modules and are handed off to
+  downstream consumers such as `~/programs/collie`.
 - `app/` owns CLI parsing and workflow orchestration.
 - `tools/` stays short, direct shell glue. It must not become a hidden home
   for physics policy, persistence rules, or long-lived workflow logic.
@@ -73,7 +74,7 @@ approved exception.
 ## Workflow and data invariants
 
 - The canonical persisted ladder stays explicit:
-  `SampleIO -> DatasetIO -> EventListIO -> DistributionIO -> plot/fit`
+  `SampleIO -> DatasetIO -> EventListIO -> DistributionIO -> plot/external-fit`
 - `SampleIO` owns logical-sample identity, shard provenance, and the chosen
   normalization policy.
 - Sample building must make an explicit normalization decision. Normalization

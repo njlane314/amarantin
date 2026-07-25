@@ -294,7 +294,6 @@ require_binary "${BUILD_DIR}/bin/mk_sample"
 require_binary "${BUILD_DIR}/bin/mk_dataset"
 require_binary "${BUILD_DIR}/bin/mk_eventlist"
 require_binary "${BUILD_DIR}/bin/mk_dist"
-require_binary "${BUILD_DIR}/bin/mk_fit"
 require_binary "${BUILD_DIR}/bin/mk_cov"
 require_binary "${BUILD_DIR}/bin/testroot_pipeline_check"
 require_file "${ROOT_DIR}/tools/run-macro"
@@ -302,7 +301,6 @@ require_file "${ROOT_DIR}/tools/run-macro"
 LIST_PATH="${TMP_DIR}/fixture.list"
 SAMPLE_MANIFEST="${TMP_DIR}/fixture.sample.manifest"
 DATASET_MANIFEST="${TMP_DIR}/fixture.dataset.manifest"
-FIT_MANIFEST="${TMP_DIR}/fixture.fit.manifest"
 SAMPLE_PATH="${TMP_DIR}/fixture.sample.root"
 DATASET_PATH="${TMP_DIR}/fixture.dataset.root"
 EVENTLIST_PATH="${TMP_DIR}/fixture.eventlist.root"
@@ -316,7 +314,6 @@ SIGNAL_DATASET_MANIFEST="${TMP_DIR}/fixture.signal.dataset.manifest"
 SIGNAL_DATASET_PATH="${TMP_DIR}/fixture.signal.dataset.root"
 SIGNAL_EVENTLIST_PATH="${TMP_DIR}/fixture.signal.eventlist.root"
 DIST_PATH="${TMP_DIR}/fixture.dists.root"
-FIT_PATH="${TMP_DIR}/fixture.fit.txt"
 COV_PATH="${TMP_DIR}/fixture.cov.root"
 EFFICIENCY_PLOT_PATH="${TMP_DIR}/fixture.efficiency.png"
 SNAPSHOT_PATH="${TMP_DIR}/fixture.snapshot.root"
@@ -338,10 +335,6 @@ SNAPSHOT_MACRO_LOG="${TMP_DIR}/mk_snapshot.log"
 printf '%s\n' "${FIXTURE_PATH}" > "${LIST_PATH}"
 printf 'beam-s0 %s\n' "${LIST_PATH}" > "${SAMPLE_MANIFEST}"
 printf 'beam %s\n' "${SAMPLE_PATH}" > "${DATASET_MANIFEST}"
-cat > "${FIT_MANIFEST}" <<'EOF'
-signal signal beam
-observed data beam
-EOF
 write_fixture_run_db "${FIXTURE_PATH}" "${RUN_DB_PATH}"
 
 "${BUILD_DIR}/bin/mk_sample" \
@@ -433,12 +426,6 @@ check_truth_has_strange_split \
   topological_score \
   10 0 1
 
-"${BUILD_DIR}/bin/mk_fit" \
-  --manifest "${FIT_MANIFEST}" \
-  --output "${FIT_PATH}" \
-  "${DIST_PATH}" \
-  beam_fit
-
 "${BUILD_DIR}/bin/mk_cov" \
   "${DIST_PATH}" \
   beam \
@@ -451,7 +438,6 @@ check_truth_has_strange_split \
   "${PRESET_EVENTLIST_PATH}" \
   "${DIST_PATH}" \
   "${COV_PATH}" \
-  "${FIT_PATH}" \
   "${EFFICIENCY_PLOT_PATH}" \
   "${SNAPSHOT_PATH}" \
   "${ROWPLOT_PATH}" \

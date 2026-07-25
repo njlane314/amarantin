@@ -16,7 +16,7 @@ The usual workflow is:
   5. Build persistent EventListIO files from DatasetIO using event-tree selections
   6. Optionally run mk_dist to create cached DistributionIO requests
   7. Optionally export one cached spectrum as an SBNFit-style covariance matrix
-  8. Optionally run the HistFactory xsec fit directly from cached DistributionIO inputs
+  8. Optionally hand cached outputs to `~/programs/collie` for downstream fits
   9. Optionally drive many sample builds through samples-dag.mk
 
 Basic build workflow
@@ -148,62 +148,6 @@ For non-data samples it resolves `__w_norm__` from the embedded DatasetIO
 run/subrun normalization table using the event-tree `run` and `subRun`
 branches, resolves `__w_cv__` from the central-value physics weights, and
 persists `__w__ = __w_norm__ * __w_cv__` plus `__w2__`.
-
-Basic mk_fit usage
-------------------
-
-General form:
-
-    build/bin/mk_fit [--signal-process <name>] [--output <path>] [--mu-start <value>] [--mu-lower <value>] [--mu-upper <value>] [--selection <expr>] [--data-bins <csv>] [--signal-cache <key>] [--background-cache <key>] [--allow-zero-data] input.dists.root signal-sample-key background-sample-key channel-key
-
-or:
-
-    build/bin/mk_fit [fit flags] [--selection <expr>] [--data-bins <csv>] [--manifest <fit.manifest>] [--allow-zero-data] input.dists.root channel-key
-
-Example:
-
-    build/bin/mk_fit \
-      --manifest muon_region.fit.manifest \
-      --output build/fits/muon_region.fit.txt \
-      build/dists/run1-numi-fhc.root \
-      muon_region
-
-The mk_fit program reads cached `DistributionIO` entries directly, builds one
-ROOT `RooStats::HistFactory` measurement in memory, profiles the
-signal-strength parameter `mu`, and prints or writes a plain-text report.
-If every observed bin is zero, the CLI now requires `--allow-zero-data` so an
-empty observation is an explicit choice rather than a missing-input accident.
-
-In manifest mode, rows with kind `data` fill the observed bins automatically.
-Without manifest data rows, pass `--data-bins` or opt into an intentional
-empty observation with `--allow-zero-data`.
-
-Single-channel manifest rows are:
-
-    process-name kind sample-key [cache-key]
-
-Combined SR/CR-style manifests use:
-
-    fit-channel process-name kind sample-key cache-key
-
-Use `-` for an empty cache-key field in the combined form.
-
-The supported kinds are:
-
-    signal
-    background
-    data
-
-Manifest rules:
-
-  * non-data process names must be unique within each fit channel
-  * cached binning / branch / selection must match within each fit channel
-  * different fit channels may use different cached binning or selections
-  * every row with kind `signal` shares the same fitted POI
-
-In combined manifest mode, the positional `channel-key` becomes the fit /
-measurement key written to the report, while each row's leading `fit-channel`
-token names the actual HistFactory channel.
 
 Basic mk_cov usage
 -------------------------
@@ -496,65 +440,27 @@ Conceptually this builds two systematic lanes and merges them in one
   * the optional GENIE knob lane keeps paired `weightsGenieUp` /
     `weightsGenieDn` shifts separate from the GENIE multisim family
 
-Running a HistFactory xsec fit by hand
--------------------------------------
+Downstream `collie` handoff
+---------------------------
 
-Once a cached DistributionIO file already exists, run the HistFactory fit
-directly:
+`amarantin` no longer ships a native fit executable.
 
-    build/bin/mk_fit \
-      --manifest muon_region.fit.manifest \
-      --output build/fits/muon_region.fit.txt \
+Once a cached `DistributionIO` file exists, the repository-owned downstream
+handoff surfaces are:
+
+  * the cached `DistributionIO` entries themselves
+  * optional covariance exports written by `mk_cov`
+
+For example, export a covariance view:
+
+    build/bin/mk_cov \
+      --matrix-name frac_covariance \
       build/dists/run1-numi-fhc.root \
-      muon_region
+      beam-s0 \
+      build/exports/beam-s0.frac_cov.root
 
-Reading the arguments from left to right:
-
-  * input cached distribution ROOT file path
-  * fit / measurement key written into the report
-
-Representative manifest:
-
-    signal signal beam-s0
-    beam_bkg background beam-bkg
-    ext background ext
-    dirt background dirt
-    obs data beam-data
-
-Reading one manifest row from left to right:
-
-  * process name inside the fit channel
-  * process kind: signal, background, or data
-  * cached sample key inside DistributionIO
-  * optional explicit cache key; if omitted, mk_fit uses the first cache
-
-Rows with kind `data` are not added as fit processes; they are summed into the
-observed channel bins automatically and recorded as observed-data provenance.
-
-To fit SR and CR simultaneously, switch to the 5-field combined manifest form:
-
-    SR signal signal beam-s0 -
-    SR beam_bkg background beam-bkg -
-    SR obs data beam-data -
-    CR beam_bkg background beam-bkg control_cache
-    CR obs data beam-data control_cache
-
-In that form, each row begins with the fit-channel name, and every row tagged
-`signal` shares the same fitted POI.
-
-Optional flags let you choose the legacy signal-process name, fit bounds, and
-whether to compute the stat-only interval.
-
-The plain-text fit report includes:
-
-  * source `distribution_path` plus distribution build version
-  * source `eventlist_path`
-  * convergence flag
-  * q_min
-  * mu_hat and its total / stat-only intervals
-  * observed-data source keys when they were assembled from manifest data rows
-  * observed, signal, background, and total bin predictions
-  * fitted nuisance values
+Then run the fit or limit workflow from the sibling `~/programs/collie`
+checkout. `collie` owns its own setup, build, and fit-side manifests.
 
 Common metadata values
 ----------------------
@@ -742,28 +648,12 @@ After an EventListIO file exists, produce one cached `DistributionIO` request:
       topological_score \
       50 0 1
 
-Typical fit workflow
---------------------
+Typical downstream fit handoff
+------------------------------
 
-After a DistributionIO cache already exists, fit it directly:
-
-    build/bin/mk_fit \
-      --manifest muon_region.fit.manifest \
-      --output build/fits/muon_region.fit.txt \
-      build/dists/run1-numi-fhc.root \
-      muon_region
-
-Representative manifest:
-
-    signal signal beam-s0
-    beam_bkg background beam-bkg
-    ext background ext
-    dirt background dirt
-    obs data beam-data
-
-This keeps `DistributionIO` as the normal persisted cache surface and writes a
-plain-text fit summary as the final downstream product without a separate
-persistent channel step.
+After a `DistributionIO` cache already exists, either hand that cache directly
+to your `collie`-side preparation step or export one covariance view with
+`mk_cov` first.
 
 Typical debug macro workflow
 ----------------------------
@@ -879,11 +769,11 @@ Then build and run:
       beam-s0 \
       topological_score \
       50 0 1
-    build/bin/mk_fit \
-      --manifest muon_region.fit.manifest \
-      --output build/fits/muon_region.fit.txt \
+    build/bin/mk_cov \
+      --matrix-name frac_covariance \
       build/dists/run1-numi-fhc.root \
-      muon_region
+      beam-s0 \
+      build/exports/beam-s0.frac_cov.root
 
 Troubleshooting
 ---------------

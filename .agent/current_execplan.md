@@ -1,5 +1,139 @@
 # ExecPlan
 
+## ExecPlan Addendum: Retire Native Fit Surfaces In Favor Of `collie`
+
+### 1. Objective
+Remove the in-repo signal-strength fit library and CLI so `amarantin` stops at
+`DistributionIO` plus downstream export helpers, with fitting assumed to live
+in the sibling `~/programs/collie` checkout.
+
+### 2. Constraints
+- Keep `io/` persistence-only.
+- Keep `mk_sample`, `mk_dataset`, `mk_eventlist`, `mk_dist`, and `mk_cov`
+  stable unless a defect is uncovered.
+- Remove native fit-specific installed targets and docs coherently; do not
+  leave a half-dead compatibility shim.
+- Update analysis-facing fit-boundary notes in
+  `.agent/analysis/ccnumu_hyperon.md`.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep module boundaries sharp
+- keep workflows in `app/`
+- add abstractions only when they delete complexity
+
+Retiring the repo-local fitter deletes a whole boundary instead of preserving a
+second fitting story beside `collie`.
+
+### 4. System map
+- `CMakeLists.txt`
+- `app/CMakeLists.txt`
+- `tests/CMakeLists.txt`
+- `tools/test-root-smoke.sh`
+- `tools/macro-analysis-smoke.sh`
+- `tools/run-macro`
+- `.rootlogon.C`
+- `fit/`
+- `COMMANDS`
+- `INSTALL`
+- `USAGE`
+- `VISION.md`
+- `INVARIANTS.md`
+- `docs/repo-internals.puml`
+- `docs/adaptive-binning-plan.md`
+- `syst/README`
+- `syst/VISION.md`
+- `.agent/analysis/ccnumu_hyperon.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- delete the native `Fit` library and `mk_fit` CLI instead of maintaining a
+  second fit implementation boundary
+
+#### boundary sharpening
+- make `DistributionIO` and `mk_cov` the final `amarantin` handoff surface
+- state explicitly that downstream fitting happens in `~/programs/collie`
+
+#### stale scaffolding
+- remove fit-only tests, smoke steps, ROOT link requirements, and docs
+- trim `tools/run-macro` search paths now that no fit macros remain
+
+### 6. Milestones
+
+#### Milestone A: Retire the native fit surface and repoint the workflow to `collie`
+- status: blocked
+- hypothesis: deleting `Fit` and `mk_fit` makes the repo smaller and the
+  downstream story clearer than keeping a second fitting implementation alive
+- files / symbols touched:
+  - top-level and app/test CMake targets
+  - `tools/test-root-smoke.sh`
+  - `tools/macro-analysis-smoke.sh`
+  - `tools/run-macro`
+  - `.rootlogon.C`
+  - `fit/`
+  - current workflow / architecture docs
+- expected behavior risk: medium
+- verification commands:
+  - `git diff --check -- .rootlogon.C .agent/current_execplan.md docs/minimality-log.md .agent/analysis/ccnumu_hyperon.md CMakeLists.txt app/CMakeLists.txt tests/CMakeLists.txt tools/test-root-smoke.sh tools/macro-analysis-smoke.sh tools/run-macro COMMANDS INSTALL USAGE VISION.md INVARIANTS.md docs/repo-internals.puml docs/adaptive-binning-plan.md syst/README syst/VISION.md`
+  - `bash -n tools/test-root-smoke.sh`
+  - `bash -n tools/macro-analysis-smoke.sh`
+  - `bash -n tools/run-macro`
+  - `docker run --rm -v "$PWD":/work -w /work rootproject/root:6.30.06-ubuntu22.04 bash -lc 'apt-get update && apt-get install -y --no-install-recommends cmake libsqlite3-dev nlohmann-json3-dev pkg-config >/tmp/amarantin-apt.log && cmake -S . -B /tmp/amarantin-collie-boundary -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/amarantin-collie-boundary --target IO Ana Syst Plot mk_sample mk_dataset mk_eventlist mk_dist mk_cov --parallel && ctest --test-dir /tmp/amarantin-collie-boundary --output-on-failure -R "signal_definition_contract_check|pipeline_normalization_check|io_rigorous_check|plot_rigorous_check|systematics_rigorous_check|macro_analysis_smoke|testroot_pipeline_smoke"'`
+- acceptance criteria:
+  - the build no longer defines or installs `Fit` or `mk_fit`
+  - fit-only tests and smoke steps are removed
+  - current docs teach `mk_cov` / cached distributions as the handoff to
+    `~/programs/collie`
+  - `.agent/analysis/ccnumu_hyperon.md` reflects the external fit boundary
+- verification results:
+  - `git diff --check -- ...` passed for the touched files
+  - `bash -n tools/test-root-smoke.sh` passed
+  - `bash -n tools/macro-analysis-smoke.sh` passed
+  - `bash -n tools/run-macro` passed
+  - repo-wide grep after the edit found no remaining live `mk_fit`,
+    `SignalStrengthFit.hh`, `RooFit`, or `RooStats` references outside the
+    historical logs / plans
+  - `docker build -t amarantin-dev .` failed here because the Docker daemon
+    cannot register image layers on its current read-only overlay filesystem
+  - `docker run --rm ... rootproject/root:6.30.06-ubuntu22.04 ...` failed for
+    the same Docker overlay filesystem reason before configure/build could
+    start
+  - local `mdfind` / `find` checks did not locate `root-config` or
+    `ROOTConfig.cmake` on this host, so a fresh native ROOT-backed configure
+    was not available outside Docker
+
+### 7. Public-surface check
+- compatibility impact:
+  - removes installed target `Fit`
+  - removes installed header `SignalStrengthFit.hh`
+  - removes executable `mk_fit`
+- migration note or explicit non-goal:
+  - downstream fits now live in `~/programs/collie`; `amarantin` no longer
+    ships a native fitter
+
+### 8. Reduction ledger
+- files deleted: 7
+- wrappers removed: 1 native fit-library / CLI workflow
+- shell branches removed: 1 fit leg from the fixture smoke
+- stale docs removed: fit workflow sections from current user-facing docs
+- targets or dependencies removed:
+  - `Fit`
+  - `mk_fit`
+  - ROOT `RooFitCore`, `RooFit`, `RooStats`, `HistFactory`
+- approximate LOC delta: about `-2912`
+
+### 9. Decision log
+- prefer one explicit external fit boundary over keeping a second repo-local
+  signal-strength fit path
+- keep the export boundary inside `amarantin`; do not import `collie`'s class
+  graph or build system into this repo
+
+### 10. Stop conditions
+- stop once the native fit surface is gone, the remaining workflow builds, and
+  the current docs no longer teach `mk_fit` as part of the normal path
+
 ## ExecPlan Addendum: Covariance-First Fit Boundary And Cache-Key Alignment
 
 ### 1. Objective

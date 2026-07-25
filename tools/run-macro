@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 readonly ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
-readonly -a MACRO_DIRS=("io/macro" "ana/macro" "plot/macro" "fit/macro")
+readonly -a MACRO_DIRS=("io/macro" "ana/macro" "plot/macro")
 cd "${ROOT_DIR}"
 export AMARANTIN_ROOT_DIR="${ROOT_DIR}"
 export AMARANTIN_BUILD_DIR="${AMARANTIN_BUILD_DIR:-build}"
@@ -46,7 +46,6 @@ Available names are discovered from:
   io/macro
   ana/macro
   plot/macro
-  fit/macro
 EOF
 }
 

@@ -82,18 +82,6 @@ namespace
         fail(tree_label + " is missing all of: " + joined);
     }
 
-    int extract_int_field(const std::string &report,
-                          const std::string &key)
-    {
-        const std::string needle = key + ": ";
-        const std::size_t pos = report.find(needle);
-        require(pos != std::string::npos, "fit report is missing field " + key);
-
-        const std::size_t value_start = pos + needle.size();
-        const std::size_t value_end = report.find('\n', value_start);
-        return std::stoi(report.substr(value_start, value_end - value_start));
-    }
-
     void require_selected_tree_core(TTree *selected,
                                     const std::string &tree_label)
     {
@@ -146,10 +134,10 @@ int main(int argc, char **argv)
 {
     try
     {
-        if (argc != 12)
+        if (argc != 11)
         {
             fail("expected <sample.root> <dataset.root> <eventlist.root> "
-                 "<preset-eventlist.root> <dist.root> <cov.root> <fit.txt> <plot.png> <snapshot.root> "
+                 "<preset-eventlist.root> <dist.root> <cov.root> <plot.png> <snapshot.root> "
                  "<rowplot.png> <fixture.root>");
         }
 
@@ -159,11 +147,10 @@ int main(int argc, char **argv)
         const std::string preset_eventlist_path = argv[4] ? argv[4] : "";
         const std::string dist_path = argv[5] ? argv[5] : "";
         const std::string cov_path = argv[6] ? argv[6] : "";
-        const std::string fit_path = argv[7] ? argv[7] : "";
-        const std::string plot_path = argv[8] ? argv[8] : "";
-        const std::string snapshot_path = argv[9] ? argv[9] : "";
-        const std::string rowplot_path = argv[10] ? argv[10] : "";
-        const std::string fixture_path = argv[11] ? argv[11] : "";
+        const std::string plot_path = argv[7] ? argv[7] : "";
+        const std::string snapshot_path = argv[8] ? argv[8] : "";
+        const std::string rowplot_path = argv[9] ? argv[9] : "";
+        const std::string fixture_path = argv[10] ? argv[10] : "";
 
         SampleIO sample;
         sample.read(sample_path);
@@ -306,23 +293,6 @@ int main(int argc, char **argv)
             nominal_sum += value;
         require(nominal_sum > 0.0,
                 "cached nominal histogram should contain events");
-
-        {
-            std::ifstream fit_input(fit_path);
-            require(fit_input.good(), "missing fit report");
-            const std::string fit_report((std::istreambuf_iterator<char>(fit_input)),
-                                         std::istreambuf_iterator<char>());
-            require(fit_report.find("channel_key: beam_fit") != std::string::npos,
-                    "fit report should record beam_fit");
-            require(fit_report.find("converged: true") != std::string::npos,
-                    "fit report should report converged: true");
-            require(fit_report.find("minimizer_status: 0") != std::string::npos,
-                    "fit report should report minimizer_status: 0");
-            require(fit_report.find("observed_source_keys: beam") != std::string::npos,
-                    "fit report should record the beam observed source");
-            require(extract_int_field(fit_report, "nuisance_count") > 0,
-                    "fit report should include non-zero nuisance_count for the systematic cache");
-        }
 
         {
             TFile cov_input(cov_path.c_str(), "READ");

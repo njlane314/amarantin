@@ -161,8 +161,11 @@ style.
   - do not let the broad logical `strange` sample masquerade as the fit POI
   - treat `other_strange_background` as an explicit fit component, not generic
     overlay
-  - prefer covariance-first family payloads at the fit boundary; stored
-    eigenmodes are optional derived views, not the only fit-ready contract
+  - `amarantin` stops at cached `DistributionIO` plus optional `mk_cov`
+    exports; downstream fitting is assumed to run in `~/programs/collie`
+  - prefer covariance-first family payloads at that external fit boundary;
+    stored eigenmodes are optional derived views, not the only fit-ready
+    contract
   - sigma-only family fallback is a diagonal approximation and should be
     surfaced explicitly as lower-fidelity than covariance-backed payloads
 

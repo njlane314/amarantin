@@ -444,7 +444,7 @@ Keep the responsibilities sharp:
   decides how to turn those rows into bin-wise systematic summaries
 - `DistributionIO`
   owns the on-disk cache format for those summaries
-- downstream `plot/` and `fit/`
+- downstream `plot/` and external export / fit consumers
   consume the summaries, but should not recompute the systematics policy here
 
 Public surface
@@ -493,7 +493,7 @@ syst/ should stay focused on:
       ->
   nominal + systematic bin summaries
       ->
-  DistributionIO cache payloads or in-memory fit / plot inputs
+  DistributionIO cache payloads or in-memory export / plot inputs
 
 It should not absorb selection-building logic from ana/ or rendering logic
 from plot/.

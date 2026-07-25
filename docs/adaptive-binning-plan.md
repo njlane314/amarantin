@@ -9,7 +9,8 @@ The intended flow is:
 1. keep `DistributionIO` as the stable fine-binned cache
 2. derive one deterministic coarse binning from expected MC
 3. rebin all processes and uncertainty payloads with the same edge map
-4. consume the coarse result directly in downstream `fit/` or `plot/` code
+4. consume the coarse result directly in downstream export/handoff or `plot/`
+   code
 
 This is explicitly not a plan for "every plot chooses its own bins on the fly".
 
@@ -28,7 +29,8 @@ That implies:
   reproducible, but it should not own the adaptive-binning policy
 - the adaptive-binning algorithm should live in downstream code, not in `io/`
 - there is no `ChannelIO` layer anymore, so adaptive coarse assembly should
-  target plain downstream data in `fit/` or plotting helpers directly
+  target plain downstream data in export/handoff code or plotting helpers
+  directly
 
 ## Current Direction
 
@@ -43,8 +45,8 @@ The first implementation should stay small:
 - derive coarse edges from expected MC only
 - snap coarse edges to fine-bin boundaries
 - rebin nominal, `sumw2`, detector, and family payloads with the same edge map
-- build any final fit model as plain downstream data, likely centered on
-  `fit::Channel`, not on a second persisted IO format
+- build any final export/handoff payload as plain downstream data, not on a
+  second persisted IO format
 
 ## Persistence
 
@@ -56,11 +58,12 @@ Do not add a new channel-bundle persistence format just to hold rebinned views.
 
 ## Algorithm Placement
 
-Put adaptive-binning and coarse-assembly code in `fit/`, not `io/` or `plot/`.
+Put adaptive-binning and coarse-assembly code in thin export/handoff helpers,
+not `io/` or `plot/`.
 
 Reasoning:
 
-- `fit/` already consumes cached systematic payloads
+- downstream handoff code already consumes cached systematic payloads
 - adaptive binning is part of final model assembly, not persistence
 - this keeps `io/` mechanical and avoids reintroducing a `ChannelIO`-style
   compatibility layer
@@ -70,7 +73,7 @@ Reasoning:
 Keep the API as plain data plus free functions.
 
 ```cpp
-namespace fit
+namespace export_handoff
 {
     struct AdaptiveBinningSpec
     {
@@ -97,7 +100,7 @@ Useful follow-on helpers:
 
 - derive adaptive edges from one or more `DistributionIO::Spectrum` values
 - rebin one `DistributionIO::Spectrum` onto a supplied coarse edge map
-- assemble a coarse in-memory `fit::Channel` from rebinned cached entries
+- assemble a coarse in-memory export payload from rebinned cached entries
 
 ## Open Questions
 
@@ -105,4 +108,4 @@ Useful follow-on helpers:
    first pass, or kept as downstream-only configuration until there is a
    concrete reproducibility need?
 2. Should the first delivery live as library code only, or also get a thin CLI
-   once the fit-side assembly settles?
+   once the downstream handoff settles?

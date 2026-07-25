@@ -37,7 +37,6 @@ require_library "IO"
 require_library "Ana"
 require_library "Plot"
 require_library "Syst"
-require_library "Fit"
 require_binary "${BUILD_DIR}/bin/mk_cov"
 
 SOURCE="${TMP_DIR}/macro_fixture.cc"
