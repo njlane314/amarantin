@@ -9,6 +9,14 @@ set_tests_properties(run_macro_wrapper_check PROPERTIES
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+add_test(NAME render_sample_catalog_wrapper_check
+  COMMAND bash "${CMAKE_SOURCE_DIR}/tests/render_sample_catalog_wrapper_check.sh"
+)
+
+set_tests_properties(render_sample_catalog_wrapper_check PROPERTIES
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 if(TARGET Ana)
   add_executable(signal_definition_contract_check signal_definition_contract_check.cc)
 

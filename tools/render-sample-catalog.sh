@@ -1,9 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-catalog_path="${1:-cards/catalog.tsv}"
-datasets_path="${2:-cards/datasets.tsv}"
-out_dir="${3:-cards/generated}"
+readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+readonly ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+
+catalog_arg="${1:-}"
+datasets_arg="${2:-}"
+out_dir_arg="${3:-}"
+
+if [[ -n "${catalog_arg}" ]]; then
+  catalog_path="${catalog_arg}"
+else
+  catalog_path="${ROOT_DIR}/cards/catalog.tsv"
+fi
+
+if [[ -n "${datasets_arg}" ]]; then
+  datasets_path="${datasets_arg}"
+else
+  datasets_path="${ROOT_DIR}/cards/datasets.tsv"
+fi
+
+if [[ -n "${out_dir_arg}" ]]; then
+  out_dir="${out_dir_arg}"
+  out_dir_ref="${out_dir_arg}"
+else
+  out_dir="${ROOT_DIR}/cards/generated"
+  out_dir_ref="cards/generated"
+fi
+
 samples_build_dir="${SAMPLES_BUILD_DIR:-build/samples}"
 default_pat="${SAMPLES_FILE_PATTERN:-nu_selection.root,nu_selection_data.root}"
 
@@ -57,7 +81,7 @@ awk -F '\t' -v default_pat="$default_pat" '
 while IFS=$'\t' read -r dataset_key context base_dir list_dir; do
   [ -n "$dataset_key" ] || continue
 
-  awk -F '\t' -v dataset="$dataset_key" -v out_dir="$out_dir" -v context="$context" '
+  awk -F '\t' -v dataset="$dataset_key" -v out_dir="$out_dir_ref" -v context="$context" '
     function merge_scope(current, candidate, label) {
       if (candidate == "" || candidate == "-")
         return current
