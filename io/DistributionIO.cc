@@ -238,6 +238,25 @@ namespace
         return utils::must_subdir(samples, sample_key, create, "samples");
     }
 
+    TDirectory *existing_subdir_or_null(TDirectory *base,
+                                        const std::string &name,
+                                        const std::string &context)
+    {
+        if (!base)
+            throw std::runtime_error("DistributionIO: null directory while checking " + context);
+
+        if (TDirectory *subdir = base->GetDirectory(name.c_str()))
+            return subdir;
+
+        if (base->Get(name.c_str()))
+        {
+            throw std::runtime_error("DistributionIO: " + context +
+                                     " contains non-directory key " + name);
+        }
+
+        return nullptr;
+    }
+
     TDirectory *dists_dir_for(TFile *file, const std::string &sample_key, bool create)
     {
         TDirectory *sample_dir = sample_dir_for(file, sample_key, create);
@@ -645,15 +664,24 @@ std::vector<std::string> DistributionIO::dist_keys(const std::string &sample_key
 bool DistributionIO::has(const std::string &sample_key, const std::string &cache_key) const
 {
     require_open_();
-    try
-    {
-        (void)dist_dir_for(file_, sample_key, cache_key, false);
-        return true;
-    }
-    catch (...)
-    {
+
+    TDirectory *samples_dir = existing_subdir_or_null(file_, "samples", "file root");
+    if (!samples_dir)
         return false;
-    }
+
+    TDirectory *sample_dir =
+        existing_subdir_or_null(samples_dir, sample_key, "samples");
+    if (!sample_dir)
+        return false;
+
+    TDirectory *dists_dir =
+        existing_subdir_or_null(sample_dir, "dists", "sample " + sample_key);
+    if (!dists_dir)
+        return false;
+
+    return existing_subdir_or_null(dists_dir,
+                                    cache_key,
+                                    "dists for sample " + sample_key) != nullptr;
 }
 
 DistributionIO::Spectrum DistributionIO::read(const std::string &sample_key,

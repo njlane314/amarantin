@@ -451,6 +451,37 @@ namespace
         file.Close();
     }
 
+    void write_malformed_sample_cache_file(const std::filesystem::path &path,
+                                           const EventListIO &eventlist)
+    {
+        {
+            DistributionIO dist(path.string(), DistributionIO::Mode::kUpdate);
+            DistributionIO::Metadata metadata;
+            metadata.eventlist_path = eventlist.path();
+            metadata.eventlist_uuid = eventlist.file_uuid();
+            metadata.eventlist_content_revision = eventlist.content_revision();
+            metadata.build_version = syst::detail::kSystematicsCacheVersion;
+            dist.write_metadata(metadata);
+            dist.flush();
+        }
+
+        TFile file(path.string().c_str(), "UPDATE");
+        if (file.IsZombie())
+            fail("failed to reopen malformed sample-cache file");
+
+        TDirectory *samples = file.mkdir("samples");
+        if (!samples)
+            fail("failed to create malformed sample-cache samples directory");
+        TDirectory *sample_dir = samples->mkdir("beam");
+        if (!sample_dir)
+            fail("failed to create malformed sample-cache beam directory");
+
+        sample_dir->cd();
+        TNamed("dists", "not a cache directory").Write("dists", TObject::kOverwrite);
+        file.Write();
+        file.Close();
+    }
+
     DistributionIO::Spectrum make_cached_spectrum(const syst::HistogramSpec &spec,
                                                   const std::string &sample_key,
                                                   const std::string &cache_key,
@@ -1445,6 +1476,41 @@ namespace
             "missing metadata for a non-empty cache file",
             "malformed samples-key cache");
     }
+
+    void test_malformed_sample_cache_entry_rejected()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path =
+            temp.path / "malformed-sample-cache.eventlist.root";
+        const std::filesystem::path dist_path =
+            temp.path / "malformed-sample-cache.dists.root";
+
+        write_nominal_only_eventlist(eventlist_path,
+                                     {make_plain_row(0.5), make_plain_row(1.5)});
+        EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+        write_malformed_sample_cache_file(dist_path, eventlist);
+        syst::clear_cache();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 2;
+        spec.xmin = 0.0;
+        spec.xmax = 4.0;
+
+        syst::SystematicsOptions options;
+        options.enable_memory_cache = false;
+        options.persistent_cache = syst::CachePolicy::kComputeIfMissing;
+
+        DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kUpdate);
+
+        require_throws(
+            [&]()
+            {
+                (void)syst::evaluate(eventlist, distfile, "beam", spec, options);
+            },
+            "contains non-directory key dists",
+            "malformed sample cache entry");
+    }
 }
 
 int main()
@@ -1471,6 +1537,7 @@ int main()
         test_detector_nominal_mismatch_rejected();
         test_malformed_persistent_cache_rejected();
         test_malformed_samples_key_cache_rejected();
+        test_malformed_sample_cache_entry_rejected();
         std::cout << "systematics_rigorous_check=ok\n";
         return 0;
     }

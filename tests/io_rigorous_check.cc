@@ -138,6 +138,25 @@ namespace
         fail(label + ": expected an exception");
     }
 
+    void write_malformed_distribution_cache_subtree(const std::filesystem::path &path)
+    {
+        TFile file(path.string().c_str(), "RECREATE");
+        if (file.IsZombie())
+            fail("failed to create malformed distribution cache subtree");
+
+        TDirectory *samples = file.mkdir("samples");
+        if (!samples)
+            fail("failed to create malformed distribution samples directory");
+        TDirectory *sample_dir = samples->mkdir("beam");
+        if (!sample_dir)
+            fail("failed to create malformed distribution sample directory");
+
+        sample_dir->cd();
+        TNamed("dists", "not a cache directory").Write("dists", TObject::kOverwrite);
+        file.Write();
+        file.Close();
+    }
+
     TempDir make_temp_dir()
     {
         const std::string templ =
@@ -798,6 +817,23 @@ namespace
             "genie universe histograms size does not match bin-major payload shape",
             "DistributionIO should reject truncated universe payloads");
     }
+
+    void test_distribution_has_rejects_malformed_cache_subtree()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path dist_path = temp.path / "malformed-has.dist.root";
+
+        write_malformed_distribution_cache_subtree(dist_path);
+
+        DistributionIO dist(dist_path.string(), DistributionIO::Mode::kRead);
+        require_throws(
+            [&]()
+            {
+                (void)dist.has("beam", "shape");
+            },
+            "contains non-directory key dists",
+            "DistributionIO malformed has");
+    }
 }
 
 int main()
@@ -809,6 +845,7 @@ int main()
         test_sample_dataset_and_eventlist_roundtrip();
         test_distribution_roundtrip_and_rebinning();
         test_distribution_rejects_bad_payloads();
+        test_distribution_has_rejects_malformed_cache_subtree();
         std::cout << "io_rigorous_check=ok\n";
         return 0;
     }
