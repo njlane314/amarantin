@@ -21,6 +21,29 @@ namespace
         return sample.nominal.empty() ? key : sample.nominal;
     }
 
+    int read_content_revision(TFile *file)
+    {
+        if (!file)
+            return 0;
+        TDirectory *meta_dir = file->GetDirectory("meta");
+        if (!meta_dir)
+            return 0;
+
+        TObject *obj = meta_dir->Get("content_revision");
+        auto *param = dynamic_cast<TParameter<int> *>(obj);
+        if (!param)
+            return 0;
+        return param->GetVal();
+    }
+
+    void bump_content_revision(TFile *file)
+    {
+        TDirectory *meta_dir = utils::must_dir(file, "meta", true);
+        utils::write_param<int>(meta_dir,
+                                "content_revision",
+                                read_content_revision(file) + 1);
+    }
+
     void write_run_subrun_normalisations(TDirectory *sample_dir,
                                          const std::vector<DatasetIO::RunSubrunNormalisation> &entries)
     {
@@ -225,6 +248,7 @@ void EventListIO::write_metadata(const Metadata &metadata)
     utils::write_param<int>(meta_dir, "slice_required_count", metadata.slice_required_count);
     utils::write_param<double>(meta_dir, "slice_min_topology_score", metadata.slice_min_topology_score);
     utils::write_param<int>(meta_dir, "numi_run_boundary", metadata.numi_run_boundary);
+    bump_content_revision(file_);
 }
 
 void EventListIO::write_sample(const std::string &sample_key,
@@ -265,6 +289,7 @@ void EventListIO::write_sample(const std::string &sample_key,
         stored_subrun_tree_name.empty() ? subrun_tree_name.c_str() : stored_subrun_tree_name.c_str();
     subrun_tree->SetName(persisted_name);
     subrun_tree->Write(persisted_name, TObject::kOverwrite);
+    bump_content_revision(file_);
 }
 
 void EventListIO::flush()
@@ -279,6 +304,12 @@ std::string EventListIO::file_uuid() const
 {
     require_open_();
     return std::string(file_->GetUUID().AsString());
+}
+
+int EventListIO::content_revision() const
+{
+    require_open_();
+    return read_content_revision(file_);
 }
 
 std::vector<std::string> EventListIO::sample_keys() const

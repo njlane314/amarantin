@@ -16,6 +16,7 @@ public:
         std::string eventlist_path;
         std::string eventlist_uuid;
         int build_version = 1;
+        int eventlist_content_revision = 0;
     };
 
     struct HistogramSpec

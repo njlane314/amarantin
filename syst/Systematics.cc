@@ -69,7 +69,9 @@ namespace
             const bool uuid_matches =
                 inspection.metadata.eventlist_uuid.empty() ||
                 inspection.metadata.eventlist_uuid == eventlist.file_uuid();
-            if (path_matches && build_matches && uuid_matches)
+            const bool revision_matches =
+                inspection.metadata.eventlist_content_revision == eventlist.content_revision();
+            if (path_matches && build_matches && uuid_matches && revision_matches)
             {
                 inspection.state = PersistentCacheState::kCompatible;
                 return inspection;
@@ -93,13 +95,15 @@ namespace
         if (inspection.metadata_present)
         {
             os << " (found event list " << inspection.metadata.eventlist_path
-               << ", build version " << inspection.metadata.build_version;
+               << ", build version " << inspection.metadata.build_version
+               << ", content revision " << inspection.metadata.eventlist_content_revision;
             if (!inspection.metadata.eventlist_uuid.empty())
             {
                 os << ", UUID " << inspection.metadata.eventlist_uuid;
             }
             os << "; expected event list " << eventlist.path()
-               << ", build version " << syst::detail::kSystematicsCacheVersion;
+               << ", build version " << syst::detail::kSystematicsCacheVersion
+               << ", content revision " << eventlist.content_revision();
             if (!inspection.metadata.eventlist_uuid.empty())
             {
                 os << ", UUID " << eventlist.file_uuid();
@@ -120,6 +124,7 @@ namespace
         DistributionIO::Metadata metadata;
         metadata.eventlist_path = eventlist.path();
         metadata.eventlist_uuid = eventlist.file_uuid();
+        metadata.eventlist_content_revision = eventlist.content_revision();
         metadata.build_version = syst::detail::kSystematicsCacheVersion;
         distfile.write_metadata(metadata);
     }

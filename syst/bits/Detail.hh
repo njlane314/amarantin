@@ -14,7 +14,7 @@ class TTree;
 
 namespace syst::detail
 {
-    constexpr int kSystematicsCacheVersion = 5;
+    constexpr int kSystematicsCacheVersion = 6;
 
     using CacheEntry = DistributionIO::Spectrum;
     using FamilyCache = DistributionIO::UniverseFamily;
@@ -119,6 +119,7 @@ namespace syst::detail
         std::ostringstream os;
         os << eventlist.path() << "|"
            << eventlist.file_uuid() << "|"
+           << eventlist.content_revision() << "|"
            << (distfile ? distfile->path() : std::string()) << "|"
            << (distfile ? distfile->file_uuid() : std::string()) << "|"
            << (distfile ? std::to_string(distfile->content_revision()) : std::string()) << "|"

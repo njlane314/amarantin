@@ -789,6 +789,62 @@ namespace
         syst::clear_cache();
     }
 
+    void test_memory_cache_uses_eventlist_content_revision()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = temp.path / "memory-cache-revision.eventlist.root";
+
+        write_nominal_only_eventlist(eventlist_path,
+                                     {make_plain_row(0.5), make_plain_row(1.5)});
+        syst::clear_cache();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 2;
+        spec.xmin = 0.0;
+        spec.xmax = 4.0;
+
+        syst::SystematicsOptions options;
+        options.enable_memory_cache = true;
+
+        std::string eventlist_uuid;
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            eventlist_uuid = eventlist.file_uuid();
+
+            const syst::SystematicsResult first =
+                syst::evaluate(eventlist, "beam", spec, options);
+            require_close_vector(first.nominal, {2.0, 0.0}, "first memory-cached revision nominal");
+        }
+
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kUpdate);
+            const int revision_before = eventlist.content_revision();
+            write_sample(eventlist,
+                         "beam",
+                         make_sample(DatasetIO::Sample::Variation::kNominal),
+                         make_selected_tree({make_plain_row(2.5),
+                                             make_plain_row(3.5),
+                                             make_plain_row(3.5)},
+                                            TreeOptions{}));
+            eventlist.flush();
+
+            require(eventlist.file_uuid() == eventlist_uuid,
+                    "in-place EventListIO updates should preserve the file UUID");
+            require(eventlist.content_revision() > revision_before,
+                    "in-place EventListIO updates should advance the content revision");
+        }
+
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            const syst::SystematicsResult second =
+                syst::evaluate(eventlist, "beam", spec, options);
+            require_close_vector(second.nominal, {0.0, 3.0}, "rewritten eventlist revision nominal");
+        }
+
+        syst::clear_cache();
+    }
+
     void test_persistent_cache_uuid_provenance()
     {
         const TempDir temp = make_temp_dir();
@@ -818,6 +874,8 @@ namespace
                     "new persistent caches should stamp the source EventListIO UUID");
             require(metadata.eventlist_uuid == eventlist.file_uuid(),
                     "new persistent caches should stamp the current EventListIO UUID");
+            require(metadata.eventlist_content_revision == eventlist.content_revision(),
+                    "new persistent caches should stamp the current EventListIO content revision");
         }
 
         {
@@ -887,6 +945,7 @@ namespace
             DistributionIO::Metadata metadata;
             metadata.eventlist_path = eventlist_path.string();
             metadata.eventlist_uuid = eventlist.file_uuid();
+            metadata.eventlist_content_revision = eventlist.content_revision();
             metadata.build_version = syst::detail::kSystematicsCacheVersion;
             distfile.write_metadata(metadata);
 
@@ -915,6 +974,7 @@ namespace
             DistributionIO::Metadata metadata;
             metadata.eventlist_path = eventlist_path.string();
             metadata.eventlist_uuid = eventlist.file_uuid();
+            metadata.eventlist_content_revision = eventlist.content_revision();
             metadata.build_version = syst::detail::kSystematicsCacheVersion;
             distfile.write_metadata(metadata);
 
@@ -968,6 +1028,7 @@ namespace
             DistributionIO::Metadata metadata;
             metadata.eventlist_path = eventlist_path.string();
             metadata.eventlist_uuid = eventlist.file_uuid();
+            metadata.eventlist_content_revision = eventlist.content_revision();
             metadata.build_version = syst::detail::kSystematicsCacheVersion;
             distfile.write_metadata(metadata);
 
@@ -1014,6 +1075,72 @@ namespace
             require(second.loaded_from_persistent_cache,
                     "rewritten distribution-backed revision evaluation should still load from persistent cache");
             require_close_vector(second.nominal, {0.0, 3.0}, "rewritten distribution-backed revision nominal");
+        }
+
+        syst::clear_cache();
+    }
+
+    void test_persistent_cache_uses_eventlist_content_revision()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = temp.path / "eventlist-revision.eventlist.root";
+        const std::filesystem::path dist_path = temp.path / "eventlist-revision.dists.root";
+
+        write_nominal_only_eventlist(eventlist_path,
+                                     {make_plain_row(0.5), make_plain_row(1.5)});
+        syst::clear_cache();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 2;
+        spec.xmin = 0.0;
+        spec.xmax = 4.0;
+
+        syst::SystematicsOptions options;
+        options.enable_memory_cache = false;
+        options.persistent_cache = syst::CachePolicy::kComputeIfMissing;
+
+        std::string eventlist_uuid;
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kUpdate);
+            (void)syst::evaluate(eventlist, distfile, "beam", spec, options);
+
+            const DistributionIO::Metadata metadata = distfile.metadata();
+            require(metadata.eventlist_content_revision == eventlist.content_revision(),
+                    "persistent caches should stamp the source EventListIO content revision");
+            eventlist_uuid = eventlist.file_uuid();
+        }
+
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kUpdate);
+            const int revision_before = eventlist.content_revision();
+            write_sample(eventlist,
+                         "beam",
+                         make_sample(DatasetIO::Sample::Variation::kNominal),
+                         make_selected_tree({make_plain_row(2.5),
+                                             make_plain_row(3.5),
+                                             make_plain_row(3.5)},
+                                            TreeOptions{}));
+            eventlist.flush();
+
+            require(eventlist.file_uuid() == eventlist_uuid,
+                    "in-place EventListIO updates should preserve the file UUID");
+            require(eventlist.content_revision() > revision_before,
+                    "in-place EventListIO updates should advance the content revision");
+        }
+
+        options.persistent_cache = syst::CachePolicy::kLoadOnly;
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kRead);
+            require_throws(
+                [&]()
+                {
+                    (void)syst::evaluate(eventlist, distfile, "beam", spec, options);
+                },
+                "content revision",
+                "persistent cache eventlist content revision mismatch");
         }
 
         syst::clear_cache();
@@ -1195,9 +1322,11 @@ int main()
         test_detector_cv_compatibility_validation();
         test_rebinned_persistent_cache_math();
         test_memory_cache_uses_eventlist_uuid();
+        test_memory_cache_uses_eventlist_content_revision();
         test_persistent_cache_uuid_provenance();
         test_memory_cache_uses_distribution_uuid();
         test_memory_cache_uses_distribution_content_revision();
+        test_persistent_cache_uses_eventlist_content_revision();
         test_missing_weight_branch_rejected();
         test_inconsistent_universe_count_rejected();
         test_knob_size_mismatch_rejected();

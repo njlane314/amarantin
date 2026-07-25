@@ -576,6 +576,14 @@ DistributionIO::Metadata DistributionIO::metadata() const
     Metadata metadata;
     metadata.eventlist_path = utils::read_named(meta_dir, "eventlist_path");
     metadata.eventlist_uuid = utils::read_named_or(meta_dir, "eventlist_uuid");
+    try
+    {
+        metadata.eventlist_content_revision = utils::read_param<int>(meta_dir, "eventlist_content_revision");
+    }
+    catch (...)
+    {
+        metadata.eventlist_content_revision = 0;
+    }
     metadata.build_version = utils::read_param<int>(meta_dir, "build_version");
     return metadata;
 }
@@ -589,6 +597,7 @@ void DistributionIO::write_metadata(const Metadata &metadata)
     TDirectory *meta_dir = utils::must_dir(file_, "meta", true);
     utils::write_named(meta_dir, "eventlist_path", metadata.eventlist_path);
     utils::write_named(meta_dir, "eventlist_uuid", metadata.eventlist_uuid);
+    utils::write_param<int>(meta_dir, "eventlist_content_revision", metadata.eventlist_content_revision);
     utils::write_param<int>(meta_dir, "build_version", metadata.build_version);
     bump_content_revision(file_);
 }

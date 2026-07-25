@@ -48,6 +48,7 @@ public:
     Metadata metadata() const;
     void write_metadata(const Metadata &metadata);
     std::string file_uuid() const;
+    int content_revision() const;
     void write_sample(const std::string &sample_key,
                       const DatasetIO::Sample &sample,
                       TTree *selected_tree,
