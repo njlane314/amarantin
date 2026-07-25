@@ -260,7 +260,7 @@ EOF
 
 check_snapshot_output() {
   local snapshot_path=$1
-  local macro_path="${TMP_DIR}/check_snapshot.C"
+  local macro_path="${TMP_DIR}/check_snapshot_output.C"
 
   cat > "${macro_path}" <<'EOF'
 #include <stdexcept>
