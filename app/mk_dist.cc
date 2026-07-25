@@ -251,6 +251,8 @@ namespace
                 options.overwrite = false;
                 continue;
             }
+            if (arg.rfind("--", 0) == 0)
+                throw std::runtime_error("mk_dist: unknown option: " + arg);
             break;
         }
 

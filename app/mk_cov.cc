@@ -141,6 +141,8 @@ namespace
                 options.nominal_name = argv[i] ? argv[i] : "";
                 continue;
             }
+            if (arg.rfind("--", 0) == 0)
+                throw std::runtime_error("mk_cov: unknown option: " + arg);
             break;
         }
 
