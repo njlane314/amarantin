@@ -15,6 +15,8 @@
 #include "Systematics.hh"
 #include "bits/Detail.hh"
 
+#include "TFile.h"
+#include "TNamed.h"
 #include "TTree.h"
 
 namespace
@@ -424,6 +426,29 @@ namespace
                      make_selected_tree(rows, TreeOptions{}));
 
         eventlist.flush();
+    }
+
+    void write_malformed_distribution_file(const std::filesystem::path &path)
+    {
+        TFile file(path.string().c_str(), "RECREATE");
+        if (file.IsZombie())
+            fail("failed to create malformed distribution file");
+
+        TNamed("unrelated_payload", "not a DistributionIO cache")
+            .Write("unrelated_payload", TObject::kOverwrite);
+        file.Write();
+        file.Close();
+    }
+
+    void write_malformed_samples_stub_file(const std::filesystem::path &path)
+    {
+        TFile file(path.string().c_str(), "RECREATE");
+        if (file.IsZombie())
+            fail("failed to create malformed samples-stub file");
+
+        TNamed("samples", "not a cache directory").Write("samples", TObject::kOverwrite);
+        file.Write();
+        file.Close();
     }
 
     DistributionIO::Spectrum make_cached_spectrum(const syst::HistogramSpec &spec,
@@ -1352,6 +1377,74 @@ namespace
             "does not match nominal",
             "detector nominal mismatch");
     }
+
+    void test_malformed_persistent_cache_rejected()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = temp.path / "malformed-cache.eventlist.root";
+        const std::filesystem::path dist_path = temp.path / "malformed-cache.dists.root";
+
+        write_nominal_only_eventlist(eventlist_path,
+                                     {make_plain_row(0.5), make_plain_row(1.5)});
+        write_malformed_distribution_file(dist_path);
+        syst::clear_cache();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 2;
+        spec.xmin = 0.0;
+        spec.xmax = 4.0;
+
+        syst::SystematicsOptions options;
+        options.enable_memory_cache = false;
+        options.persistent_cache = syst::CachePolicy::kComputeIfMissing;
+
+        EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+        DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kUpdate);
+
+        require_throws(
+            [&]()
+            {
+                (void)syst::evaluate(eventlist, distfile, "beam", spec, options);
+            },
+            "missing metadata for a non-empty cache file",
+            "malformed persistent cache");
+    }
+
+    void test_malformed_samples_key_cache_rejected()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path =
+            temp.path / "malformed-samples-key.eventlist.root";
+        const std::filesystem::path dist_path =
+            temp.path / "malformed-samples-key.dists.root";
+
+        write_nominal_only_eventlist(eventlist_path,
+                                     {make_plain_row(0.5), make_plain_row(1.5)});
+        write_malformed_samples_stub_file(dist_path);
+        syst::clear_cache();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 2;
+        spec.xmin = 0.0;
+        spec.xmax = 4.0;
+
+        syst::SystematicsOptions options;
+        options.enable_memory_cache = false;
+        options.persistent_cache = syst::CachePolicy::kComputeIfMissing;
+
+        EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+        DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kUpdate);
+
+        require_throws(
+            [&]()
+            {
+                (void)syst::evaluate(eventlist, distfile, "beam", spec, options);
+            },
+            "missing metadata for a non-empty cache file",
+            "malformed samples-key cache");
+    }
 }
 
 int main()
@@ -1376,6 +1469,8 @@ int main()
         test_empty_knob_payload_ignored();
         test_duplicate_detector_labels_rejected();
         test_detector_nominal_mismatch_rejected();
+        test_malformed_persistent_cache_rejected();
+        test_malformed_samples_key_cache_rejected();
         std::cout << "systematics_rigorous_check=ok\n";
         return 0;
     }

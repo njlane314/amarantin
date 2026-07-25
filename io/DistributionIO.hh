@@ -117,6 +117,7 @@ public:
     std::string file_uuid() const;
     int content_revision() const;
     void flush();
+    std::vector<std::string> top_level_keys() const;
 
     std::vector<std::string> sample_keys() const;
     std::vector<std::string> dist_keys(const std::string &sample_key) const;

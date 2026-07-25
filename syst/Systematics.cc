@@ -29,6 +29,23 @@ namespace
         bool metadata_present = false;
     };
 
+    bool has_top_level_key(const std::vector<std::string> &top_level_keys,
+                           const char *key)
+    {
+        return std::find(top_level_keys.begin(), top_level_keys.end(), key) !=
+               top_level_keys.end();
+    }
+
+    bool top_level_keys_are_cache_scaffolding(const std::vector<std::string> &top_level_keys)
+    {
+        return std::all_of(top_level_keys.begin(),
+                           top_level_keys.end(),
+                           [](const std::string &key)
+                           {
+                               return key == "meta" || key == "samples";
+                           });
+    }
+
     std::mutex &memory_cache_mutex()
     {
         static std::mutex mutex;
@@ -45,19 +62,42 @@ namespace
                                                        const DistributionIO &distfile)
     {
         PersistentCacheInspection inspection;
+        const std::vector<std::string> top_level_keys = distfile.top_level_keys();
+        const bool has_samples_key = has_top_level_key(top_level_keys, "samples");
 
-        bool has_entries = false;
+        const auto mark_incompatible = [&]()
+        {
+            inspection.state = PersistentCacheState::kIncompatible;
+            try
+            {
+                inspection.metadata = distfile.metadata();
+                inspection.metadata_present = true;
+            }
+            catch (...)
+            {
+            }
+            return inspection;
+        };
+
+        bool has_cache_entries = false;
         try
         {
-            has_entries = !distfile.sample_keys().empty();
+            has_cache_entries = !distfile.sample_keys().empty();
         }
         catch (...)
         {
-            has_entries = false;
+            if (!has_samples_key &&
+                top_level_keys_are_cache_scaffolding(top_level_keys))
+                return inspection;
+            return mark_incompatible();
         }
 
-        if (!has_entries)
-            return inspection;
+        if (!has_cache_entries)
+        {
+            if (top_level_keys_are_cache_scaffolding(top_level_keys))
+                return inspection;
+            return mark_incompatible();
+        }
 
         try
         {
@@ -81,8 +121,7 @@ namespace
         {
         }
 
-        inspection.state = PersistentCacheState::kIncompatible;
-        return inspection;
+        return mark_incompatible();
     }
 
     [[noreturn]] void throw_incompatible_persistent_cache(const EventListIO &eventlist,

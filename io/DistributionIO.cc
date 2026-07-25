@@ -622,6 +622,12 @@ void DistributionIO::flush()
     file_->Write(nullptr, TObject::kOverwrite);
 }
 
+std::vector<std::string> DistributionIO::top_level_keys() const
+{
+    require_open_();
+    return utils::list_keys(file_);
+}
+
 std::vector<std::string> DistributionIO::sample_keys() const
 {
     require_open_();
