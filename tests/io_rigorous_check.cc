@@ -697,6 +697,23 @@ namespace
                       2.0,
                       "DatasetIO generated exposure (1,2)");
 
+        const std::filesystem::path invalid_dataset_path = temp.path / "invalid.dataset.root";
+        std::filesystem::copy_file(dataset_path,
+                                   invalid_dataset_path,
+                                   std::filesystem::copy_options::overwrite_existing);
+        write_named_object_in_file(invalid_dataset_path,
+                                   "sample/beam/prov",
+                                   "junk",
+                                   "not a provenance directory");
+        require_throws(
+            [&]()
+            {
+                DatasetIO invalid_dataset(invalid_dataset_path.string());
+                (void)invalid_dataset.sample("beam");
+            },
+            "contains non-directory key junk",
+            "DatasetIO::sample should reject malformed provenance siblings");
+
         const std::filesystem::path eventlist_path = temp.path / "beam.eventlist.root";
         {
             EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kWrite);

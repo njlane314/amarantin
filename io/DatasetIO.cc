@@ -405,12 +405,22 @@ DatasetIO::Sample DatasetIO::Sample::read(TDirectory *d)
 
     if (provenance_count >= 0)
     {
+        const std::vector<std::string> actual_keys =
+            utils::list_subdir_keys(prov_root, "sample/prov");
+        if (actual_keys.size() != static_cast<std::size_t>(provenance_count))
+        {
+            throw std::runtime_error(
+                "DatasetIO: sample/prov contains unexpected directory entries");
+        }
+
         s.provenance_list.reserve(static_cast<std::size_t>(provenance_count));
         for (int i = 0; i < provenance_count; ++i)
         {
             char key[32];
             std::snprintf(key, sizeof(key), "p%04d", i);
-            TDirectory *pd = prov_root->GetDirectory(key);
+            TDirectory *pd = utils::existing_subdir_or_null(prov_root,
+                                                            key,
+                                                            "sample/prov");
             if (!pd) throw std::runtime_error("DatasetIO: missing sample/prov/" + std::string(key));
             s.provenance_list.push_back(Provenance::read(pd));
         }
