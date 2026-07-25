@@ -121,6 +121,25 @@ namespace plot_utils
             return branches.idx_w;
         }
 
+        inline std::string resolve_sub_branch(TTree *tree,
+                                              const Branches &branches,
+                                              const std::string &context)
+        {
+            if (!tree)
+                throw std::runtime_error(context + ": missing selected tree");
+
+            if (tree->GetBranch(branches.sub.c_str()) != nullptr)
+                return branches.sub;
+
+            if (branches.sub == "sub" && tree->GetBranch("subRun") != nullptr)
+                return "subRun";
+
+            if (branches.sub == "subRun" && tree->GetBranch("sub") != nullptr)
+                return "sub";
+
+            throw std::runtime_error(context + ": missing subRun/sub branch");
+        }
+
         inline TCanvas *draw_one(const EventListIO &eventlist,
                                  const std::string &sample_key,
                                  Long64_t entry,
@@ -138,9 +157,10 @@ namespace plot_utils
                 throw std::runtime_error("plot_utils::event_display::draw_one: entry out of range");
 
             const std::string context = "plot_utils::event_display::draw_one";
+            const std::string sub_branch = resolve_sub_branch(tree, branches, context);
             TTreeReader reader(tree);
             TTreeReaderValue<int> run_reader(reader, branches.run.c_str());
-            TTreeReaderValue<int> sub_reader(reader, branches.sub.c_str());
+            TTreeReaderValue<int> sub_reader(reader, sub_branch.c_str());
             TTreeReaderValue<int> evt_reader(reader, branches.evt.c_str());
             TTreeReaderValue<std::vector<std::uint32_t>> index_reader(reader,
                                                                       index_branch_for_plane(branches, plane).c_str());

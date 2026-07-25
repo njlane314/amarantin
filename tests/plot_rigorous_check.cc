@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -11,6 +12,7 @@
 
 #include "DistributionIO.hh"
 #include "EfficiencyPlot.hh"
+#include "EventDisplay.hh"
 #include "EventListIO.hh"
 #include "EventListPlotting.hh"
 #include "PlotDescriptors.hh"
@@ -42,6 +44,11 @@ namespace
         double weight = 1.0;
         int legacy_category = 0;
         bool legacy_signal = false;
+        int run = 1;
+        int subrun = 1;
+        int evt = 0;
+        std::vector<std::uint32_t> detector_index_u;
+        std::vector<float> detector_adc_u;
     };
 
     [[noreturn]] void fail(const std::string &message)
@@ -120,16 +127,31 @@ namespace
         double weight = 1.0;
         int legacy_category = 0;
         bool legacy_signal = false;
+        int run = 0;
+        int subRun = 0;
+        int evt = 0;
+        std::vector<std::uint32_t> detector_image_u_index;
+        std::vector<float> detector_image_u_adc;
         tree->Branch("x", &x);
         tree->Branch("__w__", &weight);
         tree->Branch("__analysis_channel__", &legacy_category);
         tree->Branch("__is_signal__", &legacy_signal);
+        tree->Branch("run", &run);
+        tree->Branch("subRun", &subRun);
+        tree->Branch("evt", &evt);
+        tree->Branch("detector_image_u_index", &detector_image_u_index);
+        tree->Branch("detector_image_u_adc", &detector_image_u_adc);
         for (const auto &row : rows)
         {
             x = row.x;
             weight = row.weight;
             legacy_category = row.legacy_category;
             legacy_signal = row.legacy_signal;
+            run = row.run;
+            subRun = row.subrun;
+            evt = row.evt;
+            detector_image_u_index = row.detector_index_u;
+            detector_image_u_adc = row.detector_adc_u;
             tree->Fill();
         }
         return tree;
@@ -194,8 +216,8 @@ namespace
                      "beam",
                      make_sample(DatasetIO::Sample::Origin::kOverlay,
                                  DatasetIO::Sample::Variation::kNominal),
-                     {{0.25, 2.0, 15, true},
-                      {0.75, 1.0, 1, false}});
+                     {{0.25, 2.0, 15, true, 1, 1, 101, {0u, 1u, 2u, 3u}, {1.0f, 2.0f, 3.0f, 4.0f}},
+                      {0.75, 1.0, 1, false, 1, 1, 102, {0u}, {5.0f}}});
 
         write_sample(eventlist,
                      "beam-sce",
@@ -204,13 +226,13 @@ namespace
                                  "beam",
                                  "sce",
                                  "sce"),
-                     {{0.25, 50.0, 15, true}});
+                     {{0.25, 50.0, 15, true, 1, 1, 201, {}, {}}});
 
         write_sample(eventlist,
                      "data",
                      make_sample(DatasetIO::Sample::Origin::kData,
                                  DatasetIO::Sample::Variation::kNominal),
-                     {{0.75, 1.0, 99, false}});
+                     {{0.75, 1.0, 99, false, 1, 1, 301, {}, {}}});
 
         eventlist.flush();
         return path;
@@ -350,6 +372,22 @@ namespace
             "efficiency plot should fail on bad expressions");
     }
 
+    void test_event_display_accepts_subrun_branch()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = write_plot_eventlist(temp.path / "plot.eventlist.root");
+
+        gROOT->SetBatch(kTRUE);
+
+        EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+        TCanvas *canvas =
+            plot_utils::draw_event_display(eventlist, "beam", 0, "U", "detector", 2, 2);
+        require(canvas != nullptr, "event display canvas should be created");
+        require(std::string(canvas->GetName()) == "U_1_1_101",
+                "event display should use the subRun branch value in the canvas id");
+        delete canvas;
+    }
+
     void test_distribution_histogram_shape_validation()
     {
         const DistributionIO::Spectrum spectrum = make_distribution_spectrum();
@@ -382,6 +420,7 @@ int main()
         test_default_sample_selection_skips_detector_variations();
         test_plotter_renders_with_eventlist_aliases();
         test_invalid_plot_inputs_fail_fast();
+        test_event_display_accepts_subrun_branch();
         test_distribution_histogram_shape_validation();
         std::cout << "plot_rigorous_check=ok\n";
         return 0;
