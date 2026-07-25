@@ -96,7 +96,7 @@ literal_matches_kind() {
       [[ "${value}" =~ ^[-+]?[0-9]+$ ]]
       ;;
     float)
-      [[ "${value}" =~ ^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]]
+      [[ "${value}" =~ ^[-+]?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))([eE][-+]?[0-9]+)?$ ]]
       ;;
     *)
       return 1
@@ -113,6 +113,10 @@ prefixed_literal() {
     n:null)
       printf 'nullptr'
       return 0
+      ;;
+    n:*)
+      printf 'tools/run-macro: invalid null literal: %s\n' "${arg}" >&2
+      return 2
       ;;
     s:*)
       printf '"%s"' "$(escape_cpp_string "${arg#s:}")"
@@ -135,7 +139,10 @@ prefixed_literal() {
       ;;
   esac
 
-  literal_matches_kind "${kind}" "${value}" || return 1
+  if ! literal_matches_kind "${kind}" "${value}"; then
+    printf 'tools/run-macro: invalid %s literal: %s\n' "${kind}" "${arg}" >&2
+    return 2
+  fi
   printf '%s' "${value}"
 }
 
@@ -144,6 +151,10 @@ to_cpp_literal() {
 
   if prefixed_literal "${arg}"; then
     return 0
+  fi
+  local prefixed_status=$?
+  if [[ ${prefixed_status} -eq 2 ]]; then
+    return 2
   fi
 
   if literal_matches_kind bool "${arg}" ||
