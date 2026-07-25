@@ -62,9 +62,20 @@
       "signal_score": "measurement_signal_vs_other_muon_flavour_cc"
     },
     "fit_prediction": "N_pred = N_ext + N_dirt + N_nonstrange_overlay + N_other_strange_background + kappa * N_measurement_signal",
+    "downstream_checkout": "~/programs/collie",
+    "downstream_channel_axes": "run_period_x_polarity_x_control_or_signal_region",
     "implementation_rule": "nested_Evis_is_explicit_subchannels_not_ragged_global_tensor",
     "binning_rule": "start_with_quantile_or_logit_space_binning_then_merge_until_occupancy_mcstat_and_fit_stability_are_satisfied",
-    "require_per_bin_mc_stat_nuisances": true
+    "require_per_bin_mc_stat_nuisances": true,
+    "amarantin_handoff_surfaces": [
+      "DistributionIO_caches",
+      "mk_cov_exports"
+    ],
+    "collie_owned_steps": [
+      "fit_side_manifests_and_nuisance_configuration",
+      "profile_or_limit_execution",
+      "fit_reports_and_final_result"
+    ]
   },
   "systematics": {
     "nominal_weight_recipe": [
@@ -89,11 +100,11 @@
     "split_rule": "deterministic_from_event_identity"
   },
   "acceptance_criteria": [
-    "asimov_closure_for_injected_kappa",
-    "pseudoexperiment_pull_mean_and_width_within_predefined_tolerances",
+    "collie_side_asimov_closure_for_injected_kappa",
+    "collie_side_pseudoexperiment_pull_mean_and_width_within_predefined_tolerances",
     "stability_under_run_split_and_rebinning_tests",
     "no_pathological_nuisance_pulls_or_near_singular_covariance_structure",
-    "acceptable_postfit_agreement_in_all_control_regions",
-    "predefined_result_or_limit_procedure_frozen_before_unblinding"
+    "acceptable_collie_postfit_agreement_in_all_control_regions",
+    "predefined_collie_result_or_limit_procedure_frozen_before_unblinding"
   ]
 }

@@ -15,7 +15,7 @@ style.
 - goal:
   - single-parameter cross-section measurement
   - signal-selection study
-  - sideband/background-constrained fit
+  - sideband/background-constrained downstream extraction in `~/programs/collie`
 
 ## Inputs
 - beam:
@@ -101,7 +101,7 @@ style.
 - scaling rule:
   - `kappa` scales only `measurement_signal`
   - out-of-phase-space strange events remain background
-- per-channel per-bin fit model:
+- downstream template model:
   - `N_pred = N_ext + N_dirt + N_nonstrange_overlay +
     N_other_strange_background + kappa * N_measurement_signal`
 
@@ -132,7 +132,7 @@ style.
   - reco FV defines the event selection
   - FV boundary migrations are modeled explicitly
 
-## Selection And Fit Design
+## Selection And Downstream Extraction Design
 - baseline event selection before ML:
   - quality cuts from software / beam trigger gates
   - reco fiducial selection
@@ -140,7 +140,7 @@ style.
   - `beam vs ext/dirt`
   - `muon_flavour_cc vs other beam`
   - `measurement_signal vs other muon_flavour_cc`
-- simultaneous fit channels are:
+- downstream `collie` channel axes are:
   - `run_period x polarity x control_or_signal_region`
 - region semantics:
   - low `beam` score: `ext/dirt` control
@@ -156,13 +156,15 @@ style.
   - start from score-quantile or logit-space bins
   - merge bins until occupancy, MC-stat, and fit-stability criteria are met
   - include per-bin MC statistical nuisances
-- current fit intent:
+- current handoff intent:
   - keep one simultaneous SR/CR model with a shared `kappa`
   - do not let the broad logical `strange` sample masquerade as the fit POI
   - treat `other_strange_background` as an explicit fit component, not generic
     overlay
   - `amarantin` stops at cached `DistributionIO` plus optional `mk_cov`
     exports; downstream fitting is assumed to run in `~/programs/collie`
+  - `~/programs/collie` owns fit-side manifests, nuisance configuration,
+    profile / limit execution, and final result reporting
   - prefer covariance-first family payloads at that external fit boundary;
     stored eigenmodes are optional derived views, not the only fit-ready
     contract
@@ -210,20 +212,21 @@ style.
   - CNN score sim-to-data mismodelling checks
   - run-by-run score-shape stability checks
   - detector-variation span checks against observed run-period differences
-  - validate detector-CV compatibility before any fit path that recenters
-    detector source shifts around the analysis nominal
+  - validate detector-CV compatibility before any downstream fit path that
+    recenters detector source shifts around the analysis nominal
 
 ## Outputs Needed
-- full chain outputs are required:
+- repository-owned outputs are required:
   - logical `SampleIO` files
   - `DatasetIO` files
   - `EventListIO` files
   - training snapshots with the columns needed upstream
   - `DistributionIO` caches for score / energy observables
   - covariance exports
-  - fit manifests
-  - fit reports
   - validation and diagnostic plots
+- downstream `collie`-side outputs are required for the full analysis:
+  - fit-side manifests / configuration
+  - fit reports
   - final `kappa` result or limit output
 
 ## Training Snapshot Contract
@@ -240,12 +243,13 @@ style.
   prevent leakage across reruns
 
 ## Acceptance Criteria
-- Asimov closure for injected `kappa`
-- pseudoexperiment pull mean and width within predefined tolerances
+- `collie`-side Asimov closure for injected `kappa`
+- `collie`-side pseudoexperiment pull mean and width within predefined
+  tolerances
 - stability under run-split and rebinning tests
 - no pathological nuisance pulls or near-singular covariance structure
-- acceptable post-fit agreement in all control regions
-- predefined result / limit procedure frozen before unblinding
+- acceptable downstream post-fit agreement in all control regions
+- predefined `collie` result / limit procedure frozen before unblinding
 
 ## Current Blockers
 - logical samples have not been built yet
@@ -271,7 +275,9 @@ style.
 - produce training snapshots for the upstream training workflows
 - build score / energy caches
 - export covariance products
-- run the fit
+- hand cached `DistributionIO` entries or `mk_cov` exports to
+  `~/programs/collie`
+- run the downstream `collie` fit or limit workflow
 - produce validation and result plots
 
 ## Assumptions And Open Questions
@@ -281,8 +287,8 @@ style.
   - the measured neutral-hyperon signal is a narrower subset inside `strange`
   - upstream inference writes the CNN scores back onto the ntuples before this
     repo consumes them
-  - the simultaneous fit is built from explicit SR/CR channels with nested
-    energy in the signal-like region
+  - the downstream `collie` extraction is built from explicit SR/CR channels
+    with nested energy in the signal-like region
 - still open:
   - final tensor binning after occupancy checks
   - sparsity fallback if `4 x 4 x 6` proves too fine

@@ -15,7 +15,9 @@ small framework-owned set of helper columns. The snapshot helpers in `ana`
 can then produce flat training trees from those selected event lists.
 
 The main bin-wise persistent object is DistributionIO.
-The native fit path does not require a persisted channel object.
+The downstream handoff does not require a repo-local persisted channel object.
+`~/programs/collie` consumes cached `DistributionIO` entries directly or the
+optional covariance views exported by `mk_cov`.
 
 In the current code layout:
 
@@ -34,9 +36,9 @@ In the current code layout:
   syst::build_systematics_cache
     computes and persists rebinnable systematics caches into DistributionIO
 
-  fit::make_independent_problem
-    consumes one in-memory `fit::Channel` assembled from cached
-    `DistributionIO` entries
+  mk_cov
+    exports covariance views from cached `DistributionIO` entries for
+    downstream use in `~/programs/collie`
 
 Framework-owned column naming rule
 ----------------------------------
