@@ -407,6 +407,102 @@ namespace
 
         selected->ResetBranchAddresses();
     }
+
+    void write_missing_cut_inputs_fixture(const std::string &path)
+    {
+        TFile file(path.c_str(), "RECREATE");
+        if (file.IsZombie())
+            fail("failed to create input ROOT file: " + path);
+
+        {
+            file.cd();
+            TTree event_tree("EventSelectionFilter", "");
+            Int_t run = 0;
+            Int_t subRun = 0;
+            Int_t selected = 0;
+            event_tree.Branch("run", &run, "run/I");
+            event_tree.Branch("subRun", &subRun, "subRun/I");
+            event_tree.Branch("selected", &selected, "selected/I");
+
+            run = 1;
+            subRun = 0;
+            selected = 1;
+            event_tree.Fill();
+            event_tree.Write("EventSelectionFilter", TObject::kOverwrite);
+        }
+
+        {
+            file.cd();
+            TTree subrun_tree("SubRun", "");
+            Int_t run = 1;
+            Int_t subRun = 0;
+            Double_t pot = 2.0e12;
+            subrun_tree.Branch("run", &run, "run/I");
+            subrun_tree.Branch("subRun", &subRun, "subRun/I");
+            subrun_tree.Branch("pot", &pot, "pot/D");
+            subrun_tree.Fill();
+            subrun_tree.Write("SubRun", TObject::kOverwrite);
+        }
+
+        file.Write();
+        file.Close();
+    }
+
+    void run_missing_cut_inputs_rejection_check()
+    {
+        const TempDir tmp = make_temp_dir();
+        const std::string root_path = (tmp.path / "missing-cut-inputs.root").string();
+        const std::string list_path = (tmp.path / "missing-cut-inputs.list").string();
+        const std::string db_path = (tmp.path / "run.db").string();
+        const std::string sample_path = (tmp.path / "sample.root").string();
+        const std::string dataset_path = (tmp.path / "dataset.root").string();
+        const std::string evlist_path = (tmp.path / "eventlist.root").string();
+
+        write_missing_cut_inputs_fixture(root_path);
+        write_list_file(list_path, root_path);
+        write_run_db(db_path);
+
+        SampleIO sample;
+        sample.build(
+            "beam",
+            {{/*shard=*/"", /*sample_list_path=*/list_path}},
+            "external",
+            "nominal",
+            "numi",
+            "fhc",
+            db_path);
+        sample.write(sample_path);
+
+        {
+            DatasetIO ds(dataset_path, "pipeline_missing_cut_inputs_check");
+            ds.add_sample("beam", sample.to_dataset_sample());
+        }
+
+        DatasetIO dataset(dataset_path);
+        EventListIO eventlist(evlist_path, EventListIO::Mode::kWrite);
+
+        ana::BuildConfig config;
+        config.event_tree_name = "EventSelectionFilter";
+        config.subrun_tree_name = "SubRun";
+        config.selection_expr = "selected != 0";
+        config.selection_name = "raw";
+
+        bool saw_expected_failure = false;
+        try
+        {
+            ana::build_event_list(dataset, eventlist, config);
+        }
+        catch (const std::exception &error)
+        {
+            const std::string message = error.what();
+            require(message.find("trigger preset") != std::string::npos,
+                    "missing cut inputs should mention the trigger preset");
+            saw_expected_failure = true;
+        }
+
+        require(saw_expected_failure,
+                "build_event_list should reject event trees missing helper-cut inputs");
+    }
 }
 
 int main()
@@ -414,6 +510,7 @@ int main()
     try
     {
         run_normalization_check();
+        run_missing_cut_inputs_rejection_check();
         std::cout << "pipeline_normalization_check=ok\n";
         return 0;
     }

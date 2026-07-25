@@ -125,24 +125,27 @@ namespace
         return names;
     }
 
-    std::unique_ptr<TTreeFormula> make_optional_formula(const char *name,
-                                                        cuts::Preset preset,
-                                                        const DatasetIO::Sample &sample,
-                                                        const std::vector<std::string> &columns,
-                                                        const cuts::Config &config,
-                                                        TChain &chain)
+    std::unique_ptr<TTreeFormula> make_cut_formula(const char *name,
+                                                   cuts::Preset preset,
+                                                   const DatasetIO::Sample &sample,
+                                                   const std::vector<std::string> &available_columns,
+                                                   const cuts::Config &config,
+                                                   TChain &chain)
     {
-        try
-        {
-            const std::string expr = cuts::expression(preset, sample, columns, config);
-            if (expr.empty())
-                return nullptr;
-            return std::unique_ptr<TTreeFormula>(new TTreeFormula(name, expr.c_str(), &chain));
-        }
-        catch (...)
-        {
+        const std::string cut_expression =
+            cuts::expression(preset, sample, available_columns, config);
+        if (cut_expression.empty())
             return nullptr;
+
+        std::unique_ptr<TTreeFormula> formula(
+            new TTreeFormula(name, cut_expression.c_str(), &chain));
+        if (!formula || !formula->GetTree() || formula->GetNdim() <= 0)
+        {
+            throw std::runtime_error(
+                "ana::build_event_list: failed to compile helper cut expression: " +
+                cut_expression);
         }
+        return formula;
     }
 
     bool is_mc_origin(const DatasetIO::Sample &sample)
@@ -418,35 +421,35 @@ namespace
             chain.LoadTree(0);
             first_tree = chain.GetTree();
         }
-        const std::vector<std::string> columns = branch_names(first_tree);
+        const std::vector<std::string> available_columns = branch_names(first_tree);
         std::unique_ptr<TTreeFormula> pass_trigger_formula =
-            make_optional_formula("eventlist_pass_trigger",
-                                  cuts::Preset::kTrigger,
-                                  sample,
-                                  columns,
-                                  cuts_config,
-                                  chain);
+            make_cut_formula("eventlist_pass_trigger",
+                             cuts::Preset::kTrigger,
+                             sample,
+                             available_columns,
+                             cuts_config,
+                             chain);
         std::unique_ptr<TTreeFormula> pass_slice_formula =
-            make_optional_formula("eventlist_pass_slice",
-                                  cuts::Preset::kSlice,
-                                  sample,
-                                  columns,
-                                  cuts_config,
-                                  chain);
+            make_cut_formula("eventlist_pass_slice",
+                             cuts::Preset::kSlice,
+                             sample,
+                             available_columns,
+                             cuts_config,
+                             chain);
         std::unique_ptr<TTreeFormula> pass_fiducial_formula =
-            make_optional_formula("eventlist_pass_fiducial",
-                                  cuts::Preset::kFiducial,
-                                  sample,
-                                  columns,
-                                  cuts_config,
-                                  chain);
+            make_cut_formula("eventlist_pass_fiducial",
+                             cuts::Preset::kFiducial,
+                             sample,
+                             available_columns,
+                             cuts_config,
+                             chain);
         std::unique_ptr<TTreeFormula> pass_muon_formula =
-            make_optional_formula("eventlist_pass_muon",
-                                  cuts::Preset::kMuon,
-                                  sample,
-                                  columns,
-                                  cuts_config,
-                                  chain);
+            make_cut_formula("eventlist_pass_muon",
+                             cuts::Preset::kMuon,
+                             sample,
+                             available_columns,
+                             cuts_config,
+                             chain);
         const auto normalisation_lookup = build_normalisation_lookup(sample_key, sample);
 
         float weight_spline = 1.0f;
