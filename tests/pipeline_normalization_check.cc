@@ -24,6 +24,7 @@
 #include <sqlite3.h>
 
 #include "DatasetIO.hh"
+#include "Cuts.hh"
 #include "EventListBuild.hh"
 #include "EventListIO.hh"
 #include "SampleIO.hh"
@@ -86,13 +87,16 @@ namespace
     }
 
     // Write a synthetic ROOT file with:
-    //   EventSelectionFilter  tree: run/I, subRun/I, selected/I
+    //   EventSelectionFilter  tree: run/I, subRun/I, selected/I, plus cut inputs
     //   SubRun                tree: run/I, subRun/I, pot/D
     //
     // Designed to produce exactly these selected events (selected != 0):
     //   event 0: run=1, subrun=0  -> w_norm = target(1,0)/generated(1,0)
+    //                                passes trigger/slice/fiducial/muon
     //   event 1: run=1, subrun=1  -> w_norm = target(1,1)/generated(1,1)
+    //                                fails fiducial, so muon must fail too
     //   event 2: run=1, subrun=0  -> w_norm = target(1,0)/generated(1,0)
+    //                                fails slice, so fiducial and muon must fail too
     //
     // event 3 (run=1, subrun=1, selected=0) is filtered out by the selection.
     //
@@ -119,20 +123,47 @@ namespace
             Int_t run = 0;
             Int_t subRun = 0;
             Int_t selected = 0;
+            Int_t software_trigger = 0;
+            Int_t num_slices = 0;
+            Float_t topological_score = 0.0f;
+            Int_t in_reco_fiducial = 0;
+            Int_t sel_muon = 0;
             evt.Branch("run", &run, "run/I");
             evt.Branch("subRun", &subRun, "subRun/I");
             evt.Branch("selected", &selected, "selected/I");
+            evt.Branch("software_trigger", &software_trigger, "software_trigger/I");
+            evt.Branch("num_slices", &num_slices, "num_slices/I");
+            evt.Branch("topological_score", &topological_score, "topological_score/F");
+            evt.Branch("in_reco_fiducial", &in_reco_fiducial, "in_reco_fiducial/I");
+            evt.Branch("sel_muon", &sel_muon, "sel_muon/I");
 
-            struct Row { int run; int subrun; int sel; };
+            struct Row
+            {
+                int run;
+                int subrun;
+                int sel;
+                int trigger;
+                int slices;
+                float topo;
+                int fiducial;
+                int muon;
+            };
             const Row rows[] = {
-                {1, 0, 1},  // event 0: passes
-                {1, 1, 1},  // event 1: passes
-                {1, 0, 1},  // event 2: passes
-                {1, 1, 0},  // event 3: filtered (selected==0)
+                {1, 0, 1, 1, 1, 0.20f, 1, 1},  // event 0: passes all stages
+                {1, 1, 1, 1, 1, 0.20f, 0, 1},  // event 1: fiducial false, muon input true
+                {1, 0, 1, 1, 0, 0.20f, 1, 1},  // event 2: slice false, muon input true
+                {1, 1, 0, 1, 1, 0.20f, 1, 1},  // event 3: filtered (selected==0)
             };
             for (const auto &r : rows)
             {
-                run = r.run; subRun = r.subrun; selected = r.sel;
+                run = r.run;
+                subRun = r.subrun;
+                selected = r.sel;
+                software_trigger = r.trigger;
+                num_slices = r.slices;
+                topological_score = r.topo;
+                in_reco_fiducial = r.fiducial;
+                sel_muon = r.muon;
                 evt.Fill();
             }
             evt.Write("EventSelectionFilter", TObject::kOverwrite);
@@ -311,12 +342,20 @@ namespace
         Double_t w = 0.0;
         Int_t run = 0;
         Int_t subRun = 0;
+        Bool_t pass_trigger = kFALSE;
+        Bool_t pass_slice = kFALSE;
+        Bool_t pass_fiducial = kFALSE;
+        Bool_t pass_muon = kFALSE;
         selected->SetBranchAddress(
             EventListIO::event_weight_normalisation_branch_name(), &w_norm);
         selected->SetBranchAddress(
             EventListIO::event_weight_branch_name(), &w);
         selected->SetBranchAddress("run", &run);
         selected->SetBranchAddress("subRun", &subRun);
+        selected->SetBranchAddress(cuts::trigger_branch(), &pass_trigger);
+        selected->SetBranchAddress(cuts::slice_branch(), &pass_slice);
+        selected->SetBranchAddress(cuts::fiducial_branch(), &pass_fiducial);
+        selected->SetBranchAddress(cuts::muon_branch(), &pass_muon);
 
         // Expected weights per event in insertion order:
         //   event 0: (run=1,subrun=0) -> w_norm=2.0
@@ -335,6 +374,30 @@ namespace
             // For external-origin samples __w_cv__ == 1.0 so __w__ == __w_norm__
             require_close(w, kExpected[i],
                           "__w__ for event " + std::to_string(i));
+
+            if (i == 0)
+            {
+                require(pass_trigger != kFALSE, "event 0 should pass trigger");
+                require(pass_slice != kFALSE, "event 0 should pass slice");
+                require(pass_fiducial != kFALSE, "event 0 should pass fiducial");
+                require(pass_muon != kFALSE, "event 0 should pass muon");
+            }
+            else if (i == 1)
+            {
+                require(pass_trigger != kFALSE, "event 1 should pass trigger");
+                require(pass_slice != kFALSE, "event 1 should pass slice");
+                require(pass_fiducial == kFALSE, "event 1 should fail fiducial");
+                require(pass_muon == kFALSE,
+                        "event 1 should fail muon when fiducial is false even if sel_muon is true");
+            }
+            else if (i == 2)
+            {
+                require(pass_trigger != kFALSE, "event 2 should pass trigger");
+                require(pass_slice == kFALSE, "event 2 should fail slice");
+                require(pass_fiducial == kFALSE, "event 2 should fail fiducial after slice fails");
+                require(pass_muon == kFALSE,
+                        "event 2 should fail muon when earlier cumulative cuts fail");
+            }
 
             sum_w_norm += w_norm;
         }

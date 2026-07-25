@@ -192,7 +192,7 @@ namespace cuts
         if (has_column(columns, muon_branch()))
             return muon_branch();
         if (has_column(columns, "sel_muon"))
-            return join_and(trigger_expr, "sel_muon");
+            return join_and(fiducial_expr, "sel_muon");
         if (has_column(columns, "selection_pass"))
             return join_and(fiducial_expr, "(selection_pass > 0)");
 
