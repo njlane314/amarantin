@@ -12,10 +12,41 @@ require_help_handler() {
   fi
 }
 
+require_help_success_exit() {
+  local path=$1
+  if grep -F 'if (std::string(e.what()).empty())' "${path}" >/dev/null; then
+    return
+  fi
+  if grep -F "return (*e.what() == '\\0') ? 0 : 1;" "${path}" >/dev/null; then
+    return
+  fi
+  if grep -F 'return (*e.what() == '\''\0'\'') ? 0 : 1;' "${path}" >/dev/null; then
+    return
+  fi
+  if grep -F "if (*e.what() != '\\0')" "${path}" >/dev/null &&
+     grep -F "return (*e.what() == '\\0') ? 0 : 1;" "${path}" >/dev/null; then
+    return
+  fi
+  if grep -F "if (*e.what() != '\0')" "${path}" >/dev/null &&
+     grep -F "return (*e.what() == '\0') ? 0 : 1;" "${path}" >/dev/null; then
+    return
+  fi
+  {
+    printf 'app_cli_help_source_check: missing empty-help success exit in %s\n' "${path}" >&2
+    exit 1
+  }
+}
+
 require_help_handler "${ROOT_DIR}/app/mk_sample.cc"
 require_help_handler "${ROOT_DIR}/app/mk_dataset.cc"
 require_help_handler "${ROOT_DIR}/app/mk_eventlist.cc"
 require_help_handler "${ROOT_DIR}/app/mk_dist.cc"
 require_help_handler "${ROOT_DIR}/app/mk_cov.cc"
+
+require_help_success_exit "${ROOT_DIR}/app/mk_sample.cc"
+require_help_success_exit "${ROOT_DIR}/app/mk_dataset.cc"
+require_help_success_exit "${ROOT_DIR}/app/mk_eventlist.cc"
+require_help_success_exit "${ROOT_DIR}/app/mk_dist.cc"
+require_help_success_exit "${ROOT_DIR}/app/mk_cov.cc"
 
 printf 'app_cli_help_source_check=ok\n'

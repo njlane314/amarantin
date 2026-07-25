@@ -357,6 +357,8 @@ int main(int argc, char **argv)
     }
     catch (const std::exception &e)
     {
+        if (std::string(e.what()).empty())
+            return 0;
         std::cerr << "mk_dist: " << e.what() << "\n";
         return 1;
     }
