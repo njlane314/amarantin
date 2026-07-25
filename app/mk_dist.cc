@@ -197,21 +197,10 @@ namespace
             request.sample_key = fields[0];
             request.branch_expr = fields[1];
 
-            try { request.nbins = std::stoi(fields[2]); }
-            catch (...) {
-                throw std::runtime_error(
-                    "mk_dist: invalid nbins at line " + std::to_string(line_number) + " in " + path);
-            }
-            try { request.xmin = std::stod(fields[3]); }
-            catch (...) {
-                throw std::runtime_error(
-                    "mk_dist: invalid xmin at line " + std::to_string(line_number) + " in " + path);
-            }
-            try { request.xmax = std::stod(fields[4]); }
-            catch (...) {
-                throw std::runtime_error(
-                    "mk_dist: invalid xmax at line " + std::to_string(line_number) + " in " + path);
-            }
+            const std::string location = "at line " + std::to_string(line_number) + " in " + path;
+            request.nbins = parse_int_or_throw(fields[2], ("nbins " + location).c_str());
+            request.xmin = parse_double_or_throw(fields[3], ("xmin " + location).c_str());
+            request.xmax = parse_double_or_throw(fields[4], ("xmax " + location).c_str());
 
             // Fields 5+ are joined as the selection expression (handles spaces in expressions)
             for (std::size_t i = 5; i < fields.size(); ++i)
@@ -345,9 +334,6 @@ int main(int argc, char **argv)
     {
         const CliOptions options = parse_args(argc, argv);
 
-        EventListIO event_list(options.eventlist_path, EventListIO::Mode::kRead);
-        DistributionIO distfile(options.output_path, DistributionIO::Mode::kUpdate);
-
         syst::CacheBuildOptions cache_options;
         cache_options.overwrite_existing = options.overwrite;
         cache_options.cache_nbins = options.fine_nbins;
@@ -373,6 +359,9 @@ int main(int argc, char **argv)
             request.detector_sample_keys = options.detector_sample_keys;
             cache_options.requests.push_back(request);
         }
+
+        EventListIO event_list(options.eventlist_path, EventListIO::Mode::kRead);
+        DistributionIO distfile(options.output_path, DistributionIO::Mode::kUpdate);
 
         syst::build_systematics_cache(event_list, distfile, cache_options);
 

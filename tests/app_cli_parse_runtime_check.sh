@@ -75,6 +75,16 @@ capture_failure "${dist_log}" \
   "${BUILD_DIR}/bin/mk_dist" --fine-nbins nope out.root in.root beam x 1 0 1
 grep -Fx "mk_dist: invalid integer for --fine-nbins: nope" "${dist_log}" >/dev/null
 
+dist_manifest="${TMP_DIR}/bad.requests.manifest"
+cat > "${dist_manifest}" <<'EOF'
+beam score 10junk 0 1
+EOF
+dist_manifest_log="${TMP_DIR}/mk_dist_manifest.log"
+capture_failure "${dist_manifest_log}" \
+  "${BUILD_DIR}/bin/mk_dist" --manifest "${dist_manifest}" out.root in.root
+grep -Fx "mk_dist: invalid integer for nbins at line 1 in ${dist_manifest}: 10junk" \
+  "${dist_manifest_log}" >/dev/null
+
 cov_log="${TMP_DIR}/mk_cov.log"
 capture_failure "${cov_log}" "${BUILD_DIR}/bin/mk_cov" --matrix-name
 grep -F "usage: mk_cov " "${cov_log}" >/dev/null
