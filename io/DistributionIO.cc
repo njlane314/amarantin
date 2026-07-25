@@ -257,6 +257,20 @@ namespace
         return nullptr;
     }
 
+    std::vector<std::string> list_immediate_subdirs_or_throw(TDirectory *base,
+                                                             const std::string &context)
+    {
+        const std::vector<std::string> key_names = utils::list_keys(base);
+        std::vector<std::string> subdirs;
+        subdirs.reserve(key_names.size());
+        for (const auto &key_name : key_names)
+        {
+            if (existing_subdir_or_null(base, key_name, context))
+                subdirs.push_back(key_name);
+        }
+        return subdirs;
+    }
+
     TDirectory *dists_dir_for(TFile *file, const std::string &sample_key, bool create)
     {
         TDirectory *sample_dir = sample_dir_for(file, sample_key, create);
@@ -651,14 +665,15 @@ std::vector<std::string> DistributionIO::sample_keys() const
 {
     require_open_();
     TDirectory *samples = utils::must_dir(file_, "samples", false);
-    return utils::list_keys(samples);
+    return list_immediate_subdirs_or_throw(samples, "samples");
 }
 
 std::vector<std::string> DistributionIO::dist_keys(const std::string &sample_key) const
 {
     require_open_();
     TDirectory *dists_dir = dists_dir_for(file_, sample_key, false);
-    return utils::list_keys(dists_dir);
+    return list_immediate_subdirs_or_throw(dists_dir,
+                                           "dists for sample " + sample_key);
 }
 
 bool DistributionIO::has(const std::string &sample_key, const std::string &cache_key) const

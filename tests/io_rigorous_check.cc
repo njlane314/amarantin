@@ -231,6 +231,22 @@ namespace
         return current;
     }
 
+    void write_named_object_in_file(const std::filesystem::path &path,
+                                    const std::string &dir_path,
+                                    const std::string &key_name,
+                                    const std::string &title)
+    {
+        TFile file(path.string().c_str(), "UPDATE");
+        if (file.IsZombie())
+            fail("failed to reopen file for named-object injection");
+
+        TDirectory *target_dir = ensure_dir_path(&file, dir_path);
+        target_dir->cd();
+        TNamed(key_name.c_str(), title.c_str()).Write(key_name.c_str(), TObject::kOverwrite);
+        file.Write();
+        file.Close();
+    }
+
     std::pair<std::string, std::string> split_tree_path(const std::string &tree_path)
     {
         const std::string::size_type pos = tree_path.find_last_of('/');
@@ -887,6 +903,33 @@ namespace
             "nominal size does not match histogram bins",
             "DistributionIO corrupted metadata read");
     }
+
+    void test_distribution_keys_reject_malformed_cache_siblings()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path dist_path = temp.path / "malformed-cache-sibling.dist.root";
+
+        {
+            DistributionIO dist(dist_path.string(), DistributionIO::Mode::kUpdate);
+            dist.write_metadata(DistributionIO::Metadata{"beam.eventlist.root", "", 2});
+            dist.write("beam", "shape", make_valid_spectrum());
+            dist.flush();
+        }
+
+        write_named_object_in_file(dist_path,
+                                   "samples/beam/dists",
+                                   "junk",
+                                   "not a cache directory");
+
+        DistributionIO dist(dist_path.string(), DistributionIO::Mode::kRead);
+        require_throws(
+            [&]()
+            {
+                (void)dist.dist_keys("beam");
+            },
+            "contains non-directory key junk",
+            "DistributionIO malformed cache sibling");
+    }
 }
 
 int main()
@@ -900,6 +943,7 @@ int main()
         test_distribution_rejects_bad_payloads();
         test_distribution_has_rejects_malformed_cache_subtree();
         test_distribution_read_rejects_corrupted_metadata();
+        test_distribution_keys_reject_malformed_cache_siblings();
         std::cout << "io_rigorous_check=ok\n";
         return 0;
     }
