@@ -48,6 +48,7 @@ namespace syst::detail
 
         std::map<std::string, std::string> detector_cv_by_role;
         std::vector<std::string> detector_cv_keys;
+        std::string default_detector_cv_key;
         for (const auto &key : siblings)
         {
             const DatasetIO::Sample sample = eventlist.sample(key);
@@ -67,6 +68,17 @@ namespace syst::detail
                         seed_nominal + " role " + sample.role);
                 }
                 detector_cv_by_role[sample.role] = key;
+            }
+            else if (!default_detector_cv_key.empty() &&
+                     default_detector_cv_key != key)
+            {
+                throw std::runtime_error(
+                    "syst: multiple detector CV samples found for nominal " +
+                    seed_nominal + " without an explicit role");
+            }
+            else
+            {
+                default_detector_cv_key = key;
             }
         }
 
@@ -99,6 +111,8 @@ namespace syst::detail
                 if (it != detector_cv_by_role.end())
                     cv_sample_key = it->second;
             }
+            if (cv_sample_key == sample_key && !default_detector_cv_key.empty())
+                cv_sample_key = default_detector_cv_key;
             if (cv_sample_key == sample_key && detector_cv_keys.size() == 1)
                 cv_sample_key = detector_cv_keys.front();
 

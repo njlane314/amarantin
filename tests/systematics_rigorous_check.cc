@@ -391,6 +391,45 @@ namespace
         eventlist.flush();
     }
 
+    void write_roleless_detector_cv_fallback_eventlist(const std::filesystem::path &path)
+    {
+        EventListIO eventlist(path.string(), EventListIO::Mode::kWrite);
+        write_base_metadata(eventlist);
+
+        write_sample(eventlist,
+                     "beam",
+                     make_sample(DatasetIO::Sample::Variation::kNominal),
+                     make_selected_tree({make_plain_row(0.5)},
+                                        TreeOptions{}));
+
+        write_sample(eventlist,
+                     "beam-cv-default",
+                     make_sample(DatasetIO::Sample::Variation::kDetector,
+                                 "beam",
+                                 "cv"),
+                     make_selected_tree({make_plain_row(0.5)},
+                                        TreeOptions{}));
+
+        write_sample(eventlist,
+                     "beam-sce",
+                     make_sample(DatasetIO::Sample::Variation::kDetector,
+                                 "beam",
+                                 "sce"),
+                     make_selected_tree({make_plain_row(1.5)},
+                                        TreeOptions{}));
+
+        write_sample(eventlist,
+                     "beam-cv-wire",
+                     make_sample(DatasetIO::Sample::Variation::kDetector,
+                                 "beam",
+                                 "cv",
+                                 "wire"),
+                     make_selected_tree({make_plain_row(2.5)},
+                                        TreeOptions{}));
+
+        eventlist.flush();
+    }
+
     void write_mismatched_nominal_eventlist(const std::filesystem::path &path)
     {
         EventListIO eventlist(path.string(), EventListIO::Mode::kWrite);
@@ -657,6 +696,28 @@ namespace
             },
             "fit-side recentering of detector shifts would be ill-defined",
             "detector CV compatibility validation");
+    }
+
+    void test_roleless_detector_cv_fallback_matching()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path =
+            temp.path / "roleless-detector-cv.eventlist.root";
+
+        write_roleless_detector_cv_fallback_eventlist(eventlist_path);
+
+        EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+        const std::vector<syst::detail::DetectorSourceMatch> matches =
+            syst::detail::resolve_detector_source_matches(eventlist,
+                                                          "beam",
+                                                          {"beam-sce"});
+
+        require(matches.size() == 1,
+                "roleless detector CV fallback should produce one source match");
+        require(matches.front().cv_sample_key == "beam-cv-default",
+                "roleless detector variation should match the default detector CV sample");
+        require(matches.front().varied_sample_key == "beam-sce",
+                "roleless detector variation should preserve its varied sample key");
     }
 
     void test_rebinned_persistent_cache_math()
@@ -1520,6 +1581,7 @@ int main()
         test_compute_sample_math();
         test_detector_disable_gate();
         test_detector_cv_compatibility_validation();
+        test_roleless_detector_cv_fallback_matching();
         test_rebinned_persistent_cache_math();
         test_memory_cache_uses_eventlist_uuid();
         test_memory_cache_uses_eventlist_content_revision();
