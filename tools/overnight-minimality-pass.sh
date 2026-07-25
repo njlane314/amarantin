@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROMPT_FILE="${1:-$ROOT_DIR/docs/START_PROMPT.md}"
-LOG_DIR="$ROOT_DIR/.codex-run-logs"
+readonly ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly CALLER_DIR="$(pwd)"
+
+prompt_arg="${1:-}"
+if [[ -n "${prompt_arg}" ]]; then
+  if [[ "${prompt_arg}" = /* ]]; then
+    PROMPT_FILE="${prompt_arg}"
+  else
+    PROMPT_FILE="${CALLER_DIR}/${prompt_arg}"
+  fi
+else
+  PROMPT_FILE="${ROOT_DIR}/docs/START_PROMPT.md"
+fi
+
+readonly LOG_DIR="${ROOT_DIR}/.codex-run-logs"
 TIME_BUDGET_SECS="${AMARANTIN_MINIMALITY_TIME_BUDGET_SECS:-3600}"
 INTER_RUN_PAUSE_SECS="${AMARANTIN_MINIMALITY_PAUSE_SECS:-1}"
 
