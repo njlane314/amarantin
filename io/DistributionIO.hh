@@ -113,6 +113,7 @@ public:
 
     Metadata metadata() const;
     void write_metadata(const Metadata &metadata);
+    std::string file_uuid() const;
     void flush();
 
     std::vector<std::string> sample_keys() const;

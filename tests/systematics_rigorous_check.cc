@@ -426,6 +426,24 @@ namespace
         eventlist.flush();
     }
 
+    DistributionIO::Spectrum make_cached_spectrum(const syst::HistogramSpec &spec,
+                                                  const std::string &sample_key,
+                                                  const std::string &cache_key,
+                                                  const std::vector<double> &nominal)
+    {
+        DistributionIO::Spectrum spectrum;
+        spectrum.spec.sample_key = sample_key;
+        spectrum.spec.branch_expr = spec.branch_expr;
+        spectrum.spec.selection_expr = spec.selection_expr;
+        spectrum.spec.nbins = spec.nbins;
+        spectrum.spec.xmin = spec.xmin;
+        spectrum.spec.xmax = spec.xmax;
+        spectrum.spec.cache_key = cache_key;
+        spectrum.nominal = nominal;
+        spectrum.sumw2.assign(nominal.size(), 0.0);
+        return spectrum;
+    }
+
     void test_compute_sample_math()
     {
         syst::HistogramSpec spec;
@@ -841,6 +859,87 @@ namespace
         }
     }
 
+    void test_memory_cache_uses_distribution_uuid()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = temp.path / "dist-memory.eventlist.root";
+        const std::filesystem::path dist_path = temp.path / "dist-memory.dists.root";
+
+        write_nominal_only_eventlist(eventlist_path,
+                                     {make_plain_row(0.5), make_plain_row(1.5)});
+        syst::clear_cache();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 2;
+        spec.xmin = 0.0;
+        spec.xmax = 4.0;
+
+        syst::SystematicsOptions options;
+        options.enable_memory_cache = true;
+        options.persistent_cache = syst::CachePolicy::kLoadOnly;
+
+        std::string dist_uuid_first;
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kWrite);
+
+            DistributionIO::Metadata metadata;
+            metadata.eventlist_path = eventlist_path.string();
+            metadata.eventlist_uuid = eventlist.file_uuid();
+            metadata.build_version = syst::detail::kSystematicsCacheVersion;
+            distfile.write_metadata(metadata);
+
+            const std::string key = syst::cache_key(spec, options);
+            distfile.write("beam",
+                           key,
+                           make_cached_spectrum(spec, "beam", key, {2.0, 0.0}));
+            distfile.flush();
+            dist_uuid_first = distfile.file_uuid();
+        }
+
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kRead);
+            const syst::SystematicsResult first =
+                syst::evaluate(eventlist, distfile, "beam", spec, options);
+            require(first.loaded_from_persistent_cache,
+                    "first distribution-backed evaluation should load from persistent cache");
+            require_close_vector(first.nominal, {2.0, 0.0}, "first distribution-backed nominal");
+        }
+
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kWrite);
+
+            DistributionIO::Metadata metadata;
+            metadata.eventlist_path = eventlist_path.string();
+            metadata.eventlist_uuid = eventlist.file_uuid();
+            metadata.build_version = syst::detail::kSystematicsCacheVersion;
+            distfile.write_metadata(metadata);
+
+            const std::string key = syst::cache_key(spec, options);
+            distfile.write("beam",
+                           key,
+                           make_cached_spectrum(spec, "beam", key, {0.0, 3.0}));
+            distfile.flush();
+            require(distfile.file_uuid() != dist_uuid_first,
+                    "rewriting a DistributionIO file in place should change its UUID");
+        }
+
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kRead);
+            const syst::SystematicsResult second =
+                syst::evaluate(eventlist, distfile, "beam", spec, options);
+            require(second.loaded_from_persistent_cache,
+                    "rewritten distribution-backed evaluation should still load from persistent cache");
+            require_close_vector(second.nominal, {0.0, 3.0}, "rewritten distribution-backed nominal");
+        }
+
+        syst::clear_cache();
+    }
+
     void test_missing_weight_branch_rejected()
     {
         std::unique_ptr<TTree> tree(make_selected_tree({make_plain_row(0.5)},
@@ -1018,6 +1117,7 @@ int main()
         test_rebinned_persistent_cache_math();
         test_memory_cache_uses_eventlist_uuid();
         test_persistent_cache_uuid_provenance();
+        test_memory_cache_uses_distribution_uuid();
         test_missing_weight_branch_rejected();
         test_inconsistent_universe_count_rejected();
         test_knob_size_mismatch_rejected();

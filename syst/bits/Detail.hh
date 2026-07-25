@@ -120,6 +120,7 @@ namespace syst::detail
         os << eventlist.path() << "|"
            << eventlist.file_uuid() << "|"
            << (distfile ? distfile->path() : std::string()) << "|"
+           << (distfile ? distfile->file_uuid() : std::string()) << "|"
            << sample_key << "|"
            << syst::cache_key(spec, options) << "|"
            << spec.nbins << "|"

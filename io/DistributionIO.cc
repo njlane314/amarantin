@@ -569,6 +569,12 @@ void DistributionIO::write_metadata(const Metadata &metadata)
     utils::write_param<int>(meta_dir, "build_version", metadata.build_version);
 }
 
+std::string DistributionIO::file_uuid() const
+{
+    require_open_();
+    return std::string(file_->GetUUID().AsString());
+}
+
 void DistributionIO::flush()
 {
     require_open_();
