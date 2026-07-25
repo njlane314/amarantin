@@ -530,7 +530,7 @@ DatasetIO::Sample DatasetIO::get_sample_(const std::string &key) const
 std::vector<std::string> DatasetIO::sample_keys() const
 {
     require_open_();
-    return utils::list_keys(samples_root_(false));
+    return utils::list_subdir_keys(samples_root_(false), "sample");
 }
 
 DatasetIO::Sample DatasetIO::sample(const std::string &key) const

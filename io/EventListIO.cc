@@ -316,7 +316,7 @@ std::vector<std::string> EventListIO::sample_keys() const
 {
     require_open_();
     TDirectory *samples = utils::must_dir(file_, "samples", false);
-    return utils::list_keys(samples);
+    return utils::list_subdir_keys(samples, "samples");
 }
 
 DatasetIO::Sample EventListIO::sample(const std::string &sample_key) const

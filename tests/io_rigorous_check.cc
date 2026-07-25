@@ -247,6 +247,28 @@ namespace
         file.Close();
     }
 
+    void write_samples_file_with_named_sibling(const std::filesystem::path &path,
+                                               const std::string &samples_dir_name,
+                                               const std::string &sample_key,
+                                               const std::string &junk_key)
+    {
+        TFile file(path.string().c_str(), "RECREATE");
+        if (file.IsZombie())
+            fail("failed to create samples file with named sibling");
+
+        TDirectory *samples = file.mkdir(samples_dir_name.c_str());
+        if (!samples)
+            fail("failed to create samples directory");
+        if (!samples->mkdir(sample_key.c_str()))
+            fail("failed to create sample directory");
+
+        samples->cd();
+        TNamed(junk_key.c_str(), "not a sample directory")
+            .Write(junk_key.c_str(), TObject::kOverwrite);
+        file.Write();
+        file.Close();
+    }
+
     std::pair<std::string, std::string> split_tree_path(const std::string &tree_path)
     {
         const std::string::size_type pos = tree_path.find_last_of('/');
@@ -757,6 +779,40 @@ namespace
                 "EventListIO should store subrun trees by leaf name");
     }
 
+    void test_dataset_keys_reject_malformed_sample_siblings()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path dataset_path = temp.path / "malformed-dataset.root";
+
+        write_samples_file_with_named_sibling(dataset_path, "sample", "beam", "junk");
+
+        DatasetIO dataset(dataset_path.string());
+        require_throws(
+            [&]()
+            {
+                (void)dataset.sample_keys();
+            },
+            "contains non-directory key junk",
+            "DatasetIO malformed sample sibling");
+    }
+
+    void test_eventlist_keys_reject_malformed_sample_siblings()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = temp.path / "malformed-eventlist.root";
+
+        write_samples_file_with_named_sibling(eventlist_path, "samples", "beam", "junk");
+
+        EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+        require_throws(
+            [&]()
+            {
+                (void)eventlist.sample_keys();
+            },
+            "contains non-directory key junk",
+            "EventListIO malformed sample sibling");
+    }
+
     void test_distribution_roundtrip_and_rebinning()
     {
         const TempDir temp = make_temp_dir();
@@ -939,6 +995,8 @@ int main()
         test_shard_scan_tracks_files_and_exposure();
         test_shard_scan_rejects_mixed_layouts();
         test_sample_dataset_and_eventlist_roundtrip();
+        test_dataset_keys_reject_malformed_sample_siblings();
+        test_eventlist_keys_reject_malformed_sample_siblings();
         test_distribution_roundtrip_and_rebinning();
         test_distribution_rejects_bad_payloads();
         test_distribution_has_rejects_malformed_cache_subtree();

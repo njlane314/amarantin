@@ -35,6 +35,39 @@ namespace utils
         return out;
     }
 
+    inline TDirectory *existing_subdir_or_null(TDirectory *base,
+                                               const std::string &name,
+                                               const std::string &context)
+    {
+        if (!base)
+            throw std::runtime_error("RootUtils: null base directory");
+
+        if (TDirectory *subdir = base->GetDirectory(name.c_str()))
+            return subdir;
+
+        if (base->Get(name.c_str()))
+        {
+            throw std::runtime_error("RootUtils: " + context +
+                                     " contains non-directory key " + name);
+        }
+
+        return nullptr;
+    }
+
+    inline std::vector<std::string> list_subdir_keys(TDirectory *base,
+                                                     const std::string &context)
+    {
+        std::vector<std::string> out;
+        const std::vector<std::string> keys = list_keys(base);
+        out.reserve(keys.size());
+        for (const auto &key : keys)
+        {
+            if (existing_subdir_or_null(base, key, context))
+                out.push_back(key);
+        }
+        return out;
+    }
+
     inline TDirectory *must_dir(TDirectory *base, const char *name, bool create)
     {
         if (!base) throw std::runtime_error("RootUtils: null base directory");
