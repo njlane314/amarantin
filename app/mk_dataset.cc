@@ -138,18 +138,21 @@ namespace
             if (trimmed.empty())
                 continue;
 
-            if (trimmed.find('=') != std::string::npos)
+            const std::vector<std::string> fields = split_fields(trimmed);
+            if (fields.size() == 1)
             {
-                if (!allow_equals)
+                if (fields[0].find('=') != std::string::npos)
                 {
-                    throw std::runtime_error("mk_dataset: native manifest rows must be 'sample sample.root' "
-                                             "at line " + std::to_string(line_number) + " in " + path);
+                    if (!allow_equals)
+                    {
+                        throw std::runtime_error("mk_dataset: native manifest rows must be 'sample sample.root' "
+                                                 "at line " + std::to_string(line_number) + " in " + path);
+                    }
+                    out.push_back(parse_sample_arg(fields[0]));
+                    continue;
                 }
-                out.push_back(parse_sample_arg(trimmed));
-                continue;
             }
 
-            const std::vector<std::string> fields = split_fields(trimmed);
             if (fields.size() != 2)
             {
                 throw std::runtime_error("mk_dataset: expected 2 fields in manifest at line " +
