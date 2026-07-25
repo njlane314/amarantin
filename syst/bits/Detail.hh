@@ -118,6 +118,7 @@ namespace syst::detail
     {
         std::ostringstream os;
         os << eventlist.path() << "|"
+           << eventlist.file_uuid() << "|"
            << (distfile ? distfile->path() : std::string()) << "|"
            << sample_key << "|"
            << syst::cache_key(spec, options) << "|"

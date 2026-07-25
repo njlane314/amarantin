@@ -412,6 +412,20 @@ namespace
         eventlist.flush();
     }
 
+    void write_nominal_only_eventlist(const std::filesystem::path &path,
+                                      const std::vector<EventRow> &rows)
+    {
+        EventListIO eventlist(path.string(), EventListIO::Mode::kWrite);
+        write_base_metadata(eventlist);
+
+        write_sample(eventlist,
+                     "beam",
+                     make_sample(DatasetIO::Sample::Variation::kNominal),
+                     make_selected_tree(rows, TreeOptions{}));
+
+        eventlist.flush();
+    }
+
     void test_compute_sample_math()
     {
         syst::HistogramSpec spec;
@@ -712,6 +726,51 @@ namespace
         }
     }
 
+    void test_memory_cache_uses_eventlist_uuid()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = temp.path / "memory-cache.eventlist.root";
+
+        write_nominal_only_eventlist(eventlist_path,
+                                     {make_plain_row(0.5), make_plain_row(1.5)});
+        syst::clear_cache();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 2;
+        spec.xmin = 0.0;
+        spec.xmax = 4.0;
+
+        syst::SystematicsOptions options;
+        options.enable_memory_cache = true;
+
+        std::string first_uuid;
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            first_uuid = eventlist.file_uuid();
+
+            const syst::SystematicsResult first =
+                syst::evaluate(eventlist, "beam", spec, options);
+            require_close_vector(first.nominal, {2.0, 0.0}, "first memory-cached nominal");
+        }
+
+        write_nominal_only_eventlist(eventlist_path,
+                                     {make_plain_row(2.5), make_plain_row(3.5), make_plain_row(3.5)});
+
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            const std::string second_uuid = eventlist.file_uuid();
+            require(second_uuid != first_uuid,
+                    "rewriting an EventListIO file in place should change its UUID");
+
+            const syst::SystematicsResult second =
+                syst::evaluate(eventlist, "beam", spec, options);
+            require_close_vector(second.nominal, {0.0, 3.0}, "rewritten eventlist nominal");
+        }
+
+        syst::clear_cache();
+    }
+
     void test_persistent_cache_uuid_provenance()
     {
         const TempDir temp = make_temp_dir();
@@ -957,6 +1016,7 @@ int main()
         test_detector_disable_gate();
         test_detector_cv_compatibility_validation();
         test_rebinned_persistent_cache_math();
+        test_memory_cache_uses_eventlist_uuid();
         test_persistent_cache_uuid_provenance();
         test_missing_weight_branch_rejected();
         test_inconsistent_universe_count_rejected();
