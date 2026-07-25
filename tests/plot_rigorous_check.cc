@@ -388,6 +388,30 @@ namespace
         delete canvas;
     }
 
+    void test_event_display_rejects_invalid_plane_and_mode()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = write_plot_eventlist(temp.path / "plot.eventlist.root");
+
+        gROOT->SetBatch(kTRUE);
+
+        EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+        require_throws(
+            [&]()
+            {
+                (void)plot_utils::draw_event_display(eventlist, "beam", 0, "X", "detector", 2, 2);
+            },
+            "plane must be one of U, V, or W",
+            "event display should reject invalid planes");
+        require_throws(
+            [&]()
+            {
+                (void)plot_utils::draw_event_display(eventlist, "beam", 0, "U", "bogus", 2, 2);
+            },
+            "mode must be detector or semantic",
+            "event display should reject invalid modes");
+    }
+
     void test_distribution_histogram_shape_validation()
     {
         const DistributionIO::Spectrum spectrum = make_distribution_spectrum();
@@ -421,6 +445,7 @@ int main()
         test_plotter_renders_with_eventlist_aliases();
         test_invalid_plot_inputs_fail_fast();
         test_event_display_accepts_subrun_branch();
+        test_event_display_rejects_invalid_plane_and_mode();
         test_distribution_histogram_shape_validation();
         std::cout << "plot_rigorous_check=ok\n";
         return 0;

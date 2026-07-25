@@ -97,6 +97,15 @@ namespace plot_utils
             std::string sem_w = "semantic_image_w_label";
         };
 
+        inline void require_plane(const std::string &plane,
+                                  const std::string &context)
+        {
+            if (plane == "U" || plane == "V" || plane == "W")
+                return;
+
+            throw std::runtime_error(context + ": plane must be one of U, V, or W");
+        }
+
         inline const std::string &branch_for_plane(const Branches &branches,
                                                    const std::string &plane,
                                                    EventDisplay::Mode mode)
@@ -105,12 +114,14 @@ namespace plot_utils
             {
                 if (plane == "U") return branches.det_u;
                 if (plane == "V") return branches.det_v;
-                return branches.det_w;
+                if (plane == "W") return branches.det_w;
+                throw std::runtime_error("plot_utils::event_display::branch_for_plane: invalid plane");
             }
 
             if (plane == "U") return branches.sem_u;
             if (plane == "V") return branches.sem_v;
-            return branches.sem_w;
+            if (plane == "W") return branches.sem_w;
+            throw std::runtime_error("plot_utils::event_display::branch_for_plane: invalid plane");
         }
 
         inline const std::string &index_branch_for_plane(const Branches &branches,
@@ -118,7 +129,8 @@ namespace plot_utils
         {
             if (plane == "U") return branches.idx_u;
             if (plane == "V") return branches.idx_v;
-            return branches.idx_w;
+            if (plane == "W") return branches.idx_w;
+            throw std::runtime_error("plot_utils::event_display::index_branch_for_plane: invalid plane");
         }
 
         inline std::string resolve_sub_branch(TTree *tree,
@@ -157,6 +169,7 @@ namespace plot_utils
                 throw std::runtime_error("plot_utils::event_display::draw_one: entry out of range");
 
             const std::string context = "plot_utils::event_display::draw_one";
+            require_plane(plane, context);
             const std::string sub_branch = resolve_sub_branch(tree, branches, context);
             TTreeReader reader(tree);
             TTreeReaderValue<int> run_reader(reader, branches.run.c_str());
@@ -235,10 +248,11 @@ namespace plot_utils
             throw std::runtime_error("plot_utils::draw_event_display: plane is required");
 
         const std::string mode_text = (mode_name && *mode_name) ? std::string(mode_name) : std::string("detector");
-        const EventDisplay::Mode mode =
-            (mode_text == "semantic")
-                ? EventDisplay::Mode::kSemantic
-                : EventDisplay::Mode::kDetector;
+        EventDisplay::Mode mode = EventDisplay::Mode::kDetector;
+        if (mode_text == "semantic")
+            mode = EventDisplay::Mode::kSemantic;
+        else if (mode_text != "detector")
+            throw std::runtime_error("plot_utils::draw_event_display: mode must be detector or semantic");
 
         return event_display::draw_one(eventlist,
                                        sample_key,
