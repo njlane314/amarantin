@@ -144,6 +144,50 @@ EOF
   root -n -l -b -q "${macro_path}(\"${sample_path}\")"
 }
 
+write_multi_cache_distribution_file() {
+  local dist_path=$1
+  local macro_path="${TMP_DIR}/write_multi_cache_distribution.C"
+
+  cat > "${macro_path}" <<EOF
+#include <string>
+#include <vector>
+
+#include "${ROOT_DIR}/io/DistributionIO.hh"
+
+R__LOAD_LIBRARY(${BUILD_DIR}/lib/libIO.so)
+
+namespace {
+DistributionIO::Spectrum make_spectrum(const std::string &cache_key,
+                                       double offset)
+{
+  DistributionIO::Spectrum spectrum;
+  spectrum.spec.sample_key = "beam";
+  spectrum.spec.branch_expr = "score";
+  spectrum.spec.selection_expr = "1";
+  spectrum.spec.cache_key = cache_key;
+  spectrum.spec.nbins = 2;
+  spectrum.spec.xmin = 0.0;
+  spectrum.spec.xmax = 2.0;
+  spectrum.nominal = {1.0 + offset, 2.0 + offset};
+  spectrum.sumw2 = {1.0 + offset, 4.0 + offset};
+  spectrum.total_down = {0.8 + offset, 1.8 + offset};
+  spectrum.total_up = {1.2 + offset, 2.2 + offset};
+  return spectrum;
+}
+}
+
+void write_multi_cache_distribution(const char *path)
+{
+  DistributionIO dist(path, DistributionIO::Mode::kUpdate);
+  dist.write("beam", "alpha", make_spectrum("alpha", 0.0));
+  dist.write("beam", "beta", make_spectrum("beta", 10.0));
+  dist.flush();
+}
+EOF
+
+  root -n -l -b -q "${macro_path}(\"${dist_path}\")"
+}
+
 require_command root
 require_binary "${BUILD_DIR}/bin/mk_sample"
 require_binary "${BUILD_DIR}/bin/mk_dataset"
@@ -234,5 +278,13 @@ capture_failure "${cov_manifest_log}" \
 grep -F "usage: mk_cov " "${cov_manifest_log}" >/dev/null
 grep -Fx "mk_cov: --cache-key is not supported with --manifest" \
   "${cov_manifest_log}" >/dev/null
+
+multi_cache_dist="${TMP_DIR}/multi-cache.dists.root"
+multi_cache_cov_log="${TMP_DIR}/mk_cov_multi_cache.log"
+write_multi_cache_distribution_file "${multi_cache_dist}"
+capture_failure "${multi_cache_cov_log}" \
+  "${BUILD_DIR}/bin/mk_cov" "${multi_cache_dist}" beam "${TMP_DIR}/multi-cache.cov.root"
+grep -Fx "mk_cov: sample has multiple cached distributions; pass --cache-key" \
+  "${multi_cache_cov_log}" >/dev/null
 
 printf 'app_cli_parse_runtime_check=ok\n'

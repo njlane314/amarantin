@@ -207,6 +207,11 @@ namespace
         const std::vector<std::string> keys = dist.dist_keys(sample_key);
         if (keys.empty())
             throw std::runtime_error("mk_cov: no cached distributions found for sample");
+        if (keys.size() > 1)
+        {
+            throw std::runtime_error(
+                "mk_cov: sample has multiple cached distributions; pass --cache-key");
+        }
         return keys.front();
     }
 
