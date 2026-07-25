@@ -6,10 +6,11 @@ readonly ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 
 run_missing_value_check() {
   local flag=$1
+  shift
   local output=
   local status=0
 
-  if output=$(bash "${ROOT_DIR}/tools/mklist.sh" "${flag}" 2>&1); then
+  if output=$(bash "${ROOT_DIR}/tools/mklist.sh" "${flag}" "$@" 2>&1); then
     printf 'mklist_argument_check: %s unexpectedly succeeded\n' "${flag}" >&2
     exit 1
   else
@@ -34,5 +35,8 @@ run_missing_value_check --pat
 run_missing_value_check --out
 run_missing_value_check --list
 run_missing_value_check --samdef
+run_missing_value_check --dir --out foo.list
+run_missing_value_check --list --samdef beam
+run_missing_value_check --samdef --out foo.list
 
 printf 'mklist_argument_check=ok\n'

@@ -18,7 +18,7 @@ EOF
 
 require_option_value() {
     local flag="$1"
-    if [[ $# -lt 2 ]]; then
+    if [[ $# -lt 2 || "$2" == --* ]]; then
         echo "mklist: missing value for ${flag}" >&2
         usage
         exit 2
