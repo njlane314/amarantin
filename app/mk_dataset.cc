@@ -52,6 +52,25 @@ namespace
         throw std::runtime_error("mk_dataset: invalid arguments");
     }
 
+    [[noreturn]] void print_usage_and_throw_missing_value(const char *option,
+                                                          const char *description)
+    {
+        print_usage(std::cerr);
+        throw std::runtime_error("mk_dataset: " + std::string(option) +
+                                 " requires " + description);
+    }
+
+    void print_command_error(const std::string &message)
+    {
+        static const std::string prefix = "mk_dataset: ";
+        if (message.rfind(prefix, 0) == 0)
+        {
+            std::cerr << message << "\n";
+            return;
+        }
+        std::cerr << prefix << message << "\n";
+    }
+
     bool looks_like_option_token(const char *arg)
     {
         if (!arg)
@@ -402,42 +421,42 @@ namespace
             if (arg == "--defs")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--defs", "a path");
                 options.defs_path = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--campaign")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--campaign", "a name");
                 options.campaign = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--manifest")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--manifest", "a path");
                 options.manifest_path = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--run")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--run", "a run");
                 options.run = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--beam")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--beam", "a beam");
                 options.beam = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--polarity")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--polarity", "a polarity");
                 options.polarity = argv[i] ? argv[i] : "";
                 continue;
             }
@@ -597,7 +616,7 @@ int main(int argc, char **argv)
     {
         if (std::string(e.what()).empty())
             return 0;
-        std::cerr << "mk_dataset: " << e.what() << "\n";
+        print_command_error(e.what());
         return 1;
     }
 }

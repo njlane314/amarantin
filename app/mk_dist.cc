@@ -104,6 +104,59 @@ namespace
         throw std::runtime_error("mk_dist: invalid arguments");
     }
 
+    [[noreturn]] void print_usage_and_throw_missing_value(const char *option,
+                                                          const char *description)
+    {
+        print_usage(std::cerr);
+        throw std::runtime_error("mk_dist: " + std::string(option) +
+                                 " requires " + description);
+    }
+
+    void print_command_error(const std::string &message)
+    {
+        static const std::string prefix = "mk_dist: ";
+        if (message.rfind(prefix, 0) == 0)
+        {
+            std::cerr << message << "\n";
+            return;
+        }
+        std::cerr << prefix << message << "\n";
+    }
+
+    int parse_int_or_throw(const std::string &value, const char *label)
+    {
+        try
+        {
+            std::size_t pos = 0;
+            const int out = std::stoi(value, &pos);
+            if (pos != value.size())
+                throw std::invalid_argument("trailing characters");
+            return out;
+        }
+        catch (...)
+        {
+            throw std::runtime_error("mk_dist: invalid integer for " + std::string(label) +
+                                     ": " + value);
+        }
+    }
+
+    double parse_double_or_throw(const std::string &value, const char *label)
+    {
+        try
+        {
+            std::size_t pos = 0;
+            const double out = std::stod(value, &pos);
+            if (pos != value.size())
+                throw std::invalid_argument("trailing characters");
+            return out;
+        }
+        catch (...)
+        {
+            throw std::runtime_error("mk_dist: invalid number for " + std::string(label) +
+                                     ": " + value);
+        }
+    }
+
     bool looks_like_option_token(const char *arg)
     {
         if (!arg)
@@ -203,27 +256,31 @@ namespace
             }
             if (arg == "--manifest")
             {
-                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i]))
+                    print_usage_and_throw_missing_value("--manifest", "a path");
                 options.manifest_path = argv[i] ? argv[i] : "";
                 options.use_manifest = true;
                 continue;
             }
             if (arg == "--selection")
             {
-                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i]))
+                    print_usage_and_throw_missing_value("--selection", "an expression");
                 options.selection_expr = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--detvars")
             {
-                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i]))
+                    print_usage_and_throw_missing_value("--detvars", "a csv list");
                 options.detector_sample_keys = split_csv(argv[i] ? argv[i] : "");
                 continue;
             }
             if (arg == "--fine-nbins")
             {
-                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
-                options.fine_nbins = std::stoi(argv[i] ? argv[i] : "");
+                if (++i >= argc || looks_like_option_token(argv[i]))
+                    print_usage_and_throw_missing_value("--fine-nbins", "an integer");
+                options.fine_nbins = parse_int_or_throw(argv[i] ? argv[i] : "", "--fine-nbins");
                 continue;
             }
             if (arg == "--genie")
@@ -272,9 +329,9 @@ namespace
             options.eventlist_path = argv[i + 1] ? argv[i + 1] : "";
             options.sample_key = argv[i + 2] ? argv[i + 2] : "";
             options.branch_expr = argv[i + 3] ? argv[i + 3] : "";
-            options.nbins = std::stoi(argv[i + 4] ? argv[i + 4] : "");
-            options.xmin = std::stod(argv[i + 5] ? argv[i + 5] : "");
-            options.xmax = std::stod(argv[i + 6] ? argv[i + 6] : "");
+            options.nbins = parse_int_or_throw(argv[i + 4] ? argv[i + 4] : "", "<nbins>");
+            options.xmin = parse_double_or_throw(argv[i + 5] ? argv[i + 5] : "", "<xmin>");
+            options.xmax = parse_double_or_throw(argv[i + 6] ? argv[i + 6] : "", "<xmax>");
         }
         return options;
     }
@@ -336,7 +393,7 @@ int main(int argc, char **argv)
     {
         if (std::string(e.what()).empty())
             return 0;
-        std::cerr << "mk_dist: " << e.what() << "\n";
+        print_command_error(e.what());
         return 1;
     }
 }

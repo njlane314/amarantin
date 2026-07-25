@@ -92,6 +92,14 @@ namespace
         throw std::runtime_error("mk_cov: invalid arguments");
     }
 
+    [[noreturn]] void print_usage_and_throw_missing_value(const char *option,
+                                                          const char *description)
+    {
+        print_usage(std::cerr);
+        throw std::runtime_error("mk_cov: " + std::string(option) +
+                                 " requires " + description);
+    }
+
     bool looks_like_option_token(const char *arg)
     {
         if (!arg)
@@ -116,28 +124,28 @@ namespace
             if (arg == "--cache-key")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--cache-key", "a key");
                 options.cache_key = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--manifest")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--manifest", "a path");
                 options.manifest_path = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--matrix-name")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--matrix-name", "a name");
                 options.matrix_name = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--nominal-name")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
-                    print_usage_and_throw();
+                    print_usage_and_throw_missing_value("--nominal-name", "a name");
                 options.nominal_name = argv[i] ? argv[i] : "";
                 continue;
             }

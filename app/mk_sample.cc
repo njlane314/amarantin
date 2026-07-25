@@ -37,6 +37,17 @@ namespace
         throw std::runtime_error("mk_sample: invalid arguments");
     }
 
+    void print_command_error(const std::string &message)
+    {
+        static const std::string prefix = "mk_sample: ";
+        if (message.rfind(prefix, 0) == 0)
+        {
+            std::cerr << message << "\n";
+            return;
+        }
+        std::cerr << prefix << message << "\n";
+    }
+
     bool looks_like_option_token(const char *arg)
     {
         if (!arg)
@@ -281,7 +292,7 @@ int main(int argc, char **argv)
     {
         if (std::string(e.what()).empty())
             return 0;
-        std::cerr << "mk_sample: " << e.what() << "\n";
+        print_command_error(e.what());
         return 1;
     }
 }

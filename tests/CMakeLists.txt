@@ -49,6 +49,32 @@ set_tests_properties(app_cli_option_value_source_check PROPERTIES
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+if(TARGET mk_sample AND
+   TARGET mk_dataset AND
+   TARGET mk_eventlist AND
+   TARGET mk_dist AND
+   TARGET mk_cov)
+  add_test(NAME app_cli_parse_runtime_check
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "AMARANTIN_BUILD_DIR=${CMAKE_BINARY_DIR}"
+      bash "${CMAKE_SOURCE_DIR}/tests/app_cli_parse_runtime_check.sh"
+  )
+
+  set_tests_properties(app_cli_parse_runtime_check PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      mk_sample
+      mk_dataset
+      mk_eventlist
+      mk_dist
+      mk_cov
+    )
+  endif()
+endif()
+
 add_test(NAME app_cli_unknown_option_source_check
   COMMAND bash "${CMAKE_SOURCE_DIR}/tests/app_cli_unknown_option_source_check.sh"
 )

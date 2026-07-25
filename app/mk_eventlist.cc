@@ -33,6 +33,25 @@ namespace
         throw std::runtime_error("mk_eventlist: invalid arguments");
     }
 
+    [[noreturn]] void print_usage_and_throw_missing_value(const char *option,
+                                                          const char *description)
+    {
+        print_usage(std::cerr);
+        throw std::runtime_error("mk_eventlist: " + std::string(option) +
+                                 " requires " + description);
+    }
+
+    void print_command_error(const std::string &message)
+    {
+        static const std::string prefix = "mk_eventlist: ";
+        if (message.rfind(prefix, 0) == 0)
+        {
+            std::cerr << message << "\n";
+            return;
+        }
+        std::cerr << prefix << message << "\n";
+    }
+
     bool looks_like_option_token(const char *arg)
     {
         if (!arg)
@@ -43,9 +62,6 @@ namespace
 
     CliOptions parse_args(int argc, char **argv)
     {
-        if (argc < 3)
-            print_usage_and_throw();
-
         CliOptions options;
 
         int i = 1;
@@ -59,14 +75,16 @@ namespace
             }
             if (arg == "--preset")
             {
-                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i]))
+                    print_usage_and_throw_missing_value("--preset", "a name");
                 options.selection_name = argv[i] ? argv[i] : "";
                 options.explicit_selection = false;
                 continue;
             }
             if (arg == "--selection")
             {
-                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i]))
+                    print_usage_and_throw_missing_value("--selection", "an expression");
                 options.selection_expr = argv[i] ? argv[i] : "";
                 options.selection_name = "raw";
                 options.explicit_selection = true;
@@ -74,13 +92,15 @@ namespace
             }
             if (arg == "--event-tree")
             {
-                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i]))
+                    print_usage_and_throw_missing_value("--event-tree", "a name");
                 options.event_tree_name = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--subrun-tree")
             {
-                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i]))
+                    print_usage_and_throw_missing_value("--subrun-tree", "a name");
                 options.subrun_tree_name = argv[i] ? argv[i] : "";
                 continue;
             }
@@ -129,7 +149,7 @@ int main(int argc, char **argv)
     {
         if (std::string(e.what()).empty())
             return 0;
-        std::cerr << "mk_eventlist: " << e.what() << "\n";
+        print_command_error(e.what());
         return 1;
     }
 }
