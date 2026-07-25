@@ -656,6 +656,10 @@ namespace
             const DistributionIO::Metadata metadata = distfile.metadata();
             require(metadata.eventlist_path == eventlist_path.string(),
                     "distribution metadata should track the eventlist path");
+            require(!metadata.eventlist_uuid.empty(),
+                    "distribution metadata should track the eventlist UUID");
+            require(metadata.eventlist_uuid == eventlist.file_uuid(),
+                    "distribution metadata should match the source EventListIO UUID");
 
             const std::string key = syst::cache_key(spec, options);
             require(distfile.has("beam", key), "persistent cache entry should exist");
@@ -705,6 +709,76 @@ namespace
             require_close_vector(cached.reint->sigma, first.reint->sigma, "cached reint sigma");
             require_close_vector(cached.total_up, first.total_up, "cached total up");
             require_close_vector(cached.total_down, first.total_down, "cached total down");
+        }
+    }
+
+    void test_persistent_cache_uuid_provenance()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path eventlist_path = temp.path / "uuid-provenance.eventlist.root";
+        const std::filesystem::path dist_path = temp.path / "uuid-provenance.dists.root";
+
+        write_rigorous_eventlist(eventlist_path);
+        syst::clear_cache();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 2;
+        spec.xmin = 0.0;
+        spec.xmax = 4.0;
+
+        syst::SystematicsOptions options;
+        options.enable_memory_cache = false;
+        options.persistent_cache = syst::CachePolicy::kComputeIfMissing;
+
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kUpdate);
+            (void)syst::evaluate(eventlist, distfile, "beam", spec, options);
+
+            const DistributionIO::Metadata metadata = distfile.metadata();
+            require(!metadata.eventlist_uuid.empty(),
+                    "new persistent caches should stamp the source EventListIO UUID");
+            require(metadata.eventlist_uuid == eventlist.file_uuid(),
+                    "new persistent caches should stamp the current EventListIO UUID");
+        }
+
+        {
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kUpdate);
+            DistributionIO::Metadata metadata = distfile.metadata();
+            metadata.eventlist_uuid.clear();
+            distfile.write_metadata(metadata);
+            distfile.flush();
+        }
+
+        options.persistent_cache = syst::CachePolicy::kLoadOnly;
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kRead);
+            const syst::SystematicsResult cached =
+                syst::evaluate(eventlist, distfile, "beam", spec, options);
+            require(cached.loaded_from_persistent_cache,
+                    "legacy persistent caches without UUID metadata should still load");
+        }
+
+        {
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kUpdate);
+            DistributionIO::Metadata metadata = distfile.metadata();
+            metadata.eventlist_uuid = "different-eventlist-uuid";
+            distfile.write_metadata(metadata);
+            distfile.flush();
+        }
+
+        {
+            EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
+            DistributionIO distfile(dist_path.string(), DistributionIO::Mode::kRead);
+            require_throws(
+                [&]()
+                {
+                    (void)syst::evaluate(eventlist, distfile, "beam", spec, options);
+                },
+                "UUID",
+                "persistent cache UUID mismatch");
         }
     }
 
@@ -883,6 +957,7 @@ int main()
         test_detector_disable_gate();
         test_detector_cv_compatibility_validation();
         test_rebinned_persistent_cache_math();
+        test_persistent_cache_uuid_provenance();
         test_missing_weight_branch_rejected();
         test_inconsistent_universe_count_rejected();
         test_knob_size_mismatch_rejected();

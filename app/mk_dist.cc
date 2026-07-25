@@ -289,26 +289,6 @@ int main(int argc, char **argv)
         EventListIO event_list(options.eventlist_path, EventListIO::Mode::kRead);
         DistributionIO distfile(options.output_path, DistributionIO::Mode::kUpdate);
 
-        // Validate cache provenance: if the dist file was previously built from
-        // a different EventListIO, fail rather than silently mixing incompatible
-        // caches.
-        const std::string current_uuid = event_list.file_uuid();
-        {
-            std::string stored_uuid;
-            try
-            {
-                stored_uuid = distfile.metadata().eventlist_uuid;
-            }
-            catch (...) {}
-
-            if (!stored_uuid.empty() && stored_uuid != current_uuid)
-            {
-                throw std::runtime_error(
-                    "mk_dist: distribution cache was built from a different EventListIO file "
-                    "(UUID mismatch); delete the output file and rebuild from scratch");
-            }
-        }
-
         syst::CacheBuildOptions cache_options;
         cache_options.overwrite_existing = options.overwrite;
         cache_options.cache_nbins = options.fine_nbins;
@@ -336,19 +316,6 @@ int main(int argc, char **argv)
         }
 
         syst::build_systematics_cache(event_list, distfile, cache_options);
-
-        // Stamp the EventListIO UUID into the distribution metadata so that
-        // subsequent update invocations can detect stale caches.
-        try
-        {
-            DistributionIO::Metadata meta = distfile.metadata();
-            if (meta.eventlist_uuid.empty())
-            {
-                meta.eventlist_uuid = current_uuid;
-                distfile.write_metadata(meta);
-            }
-        }
-        catch (...) {}
 
         if (options.use_manifest)
         {

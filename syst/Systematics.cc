@@ -63,8 +63,13 @@ namespace
         {
             inspection.metadata = distfile.metadata();
             inspection.metadata_present = true;
-            if (inspection.metadata.eventlist_path == eventlist.path() &&
-                inspection.metadata.build_version == syst::detail::kSystematicsCacheVersion)
+            const bool path_matches = inspection.metadata.eventlist_path == eventlist.path();
+            const bool build_matches =
+                inspection.metadata.build_version == syst::detail::kSystematicsCacheVersion;
+            const bool uuid_matches =
+                inspection.metadata.eventlist_uuid.empty() ||
+                inspection.metadata.eventlist_uuid == eventlist.file_uuid();
+            if (path_matches && build_matches && uuid_matches)
             {
                 inspection.state = PersistentCacheState::kCompatible;
                 return inspection;
@@ -88,8 +93,18 @@ namespace
         if (inspection.metadata_present)
         {
             os << " (found event list " << inspection.metadata.eventlist_path
-               << ", build version " << inspection.metadata.build_version
-               << "; expected build version " << syst::detail::kSystematicsCacheVersion << ")";
+               << ", build version " << inspection.metadata.build_version;
+            if (!inspection.metadata.eventlist_uuid.empty())
+            {
+                os << ", UUID " << inspection.metadata.eventlist_uuid;
+            }
+            os << "; expected event list " << eventlist.path()
+               << ", build version " << syst::detail::kSystematicsCacheVersion;
+            if (!inspection.metadata.eventlist_uuid.empty())
+            {
+                os << ", UUID " << eventlist.file_uuid();
+            }
+            os << ")";
         }
         else
         {
@@ -104,8 +119,24 @@ namespace
     {
         DistributionIO::Metadata metadata;
         metadata.eventlist_path = eventlist.path();
+        metadata.eventlist_uuid = eventlist.file_uuid();
         metadata.build_version = syst::detail::kSystematicsCacheVersion;
         distfile.write_metadata(metadata);
+    }
+
+    void refresh_persistent_cache_metadata_if_needed(const EventListIO &eventlist,
+                                                     DistributionIO &distfile,
+                                                     const PersistentCacheInspection &inspection)
+    {
+        if (inspection.state != PersistentCacheState::kCompatible ||
+            !inspection.metadata_present ||
+            !inspection.metadata.eventlist_uuid.empty())
+        {
+            return;
+        }
+
+        write_persistent_cache_metadata(eventlist, distfile);
+        distfile.flush();
     }
 
     std::vector<double> combine_total_up(const std::vector<double> &nominal,
@@ -575,6 +606,10 @@ namespace syst
         {
             throw_incompatible_persistent_cache(eventlist, distfile, cache_inspection);
         }
+        if (use_persistent_cache && can_write_persistent_cache)
+        {
+            refresh_persistent_cache_metadata_if_needed(eventlist, distfile, cache_inspection);
+        }
 
         if (use_persistent_cache &&
             cache_inspection.state == PersistentCacheState::kCompatible &&
@@ -663,6 +698,8 @@ namespace syst
             throw_incompatible_persistent_cache(eventlist, distfile, cache_inspection);
         if (cache_inspection.state == PersistentCacheState::kEmpty)
             write_persistent_cache_metadata(eventlist, distfile);
+        else
+            refresh_persistent_cache_metadata_if_needed(eventlist, distfile, cache_inspection);
 
         for (const auto &request : options.requests)
         {
