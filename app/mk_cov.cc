@@ -548,11 +548,21 @@ namespace
             for (int col = 0; col < nbins; ++col)
             {
                 const double col_nominal = nominal[static_cast<std::size_t>(col)];
+                const double absolute_value =
+                    absolute[static_cast<std::size_t>(row * nbins + col)];
                 if (row_nominal == 0.0 || col_nominal == 0.0)
+                {
+                    if (absolute_value != 0.0)
+                    {
+                        throw std::runtime_error(
+                            "mk_cov: zero nominal bin prevents fractional covariance export at bins " +
+                            std::to_string(row) + " and " + std::to_string(col));
+                    }
                     continue;
+                }
 
                 out[static_cast<std::size_t>(row * nbins + col)] =
-                    static_cast<float>(absolute[static_cast<std::size_t>(row * nbins + col)] /
+                    static_cast<float>(absolute_value /
                                        (row_nominal * col_nominal));
             }
         }

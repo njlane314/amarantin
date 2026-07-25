@@ -307,3 +307,30 @@ if(TARGET IO AND TARGET Ana AND TARGET Plot AND TARGET Syst AND TARGET mk_cov)
     )
   endif()
 endif()
+
+if(TARGET IO AND TARGET mk_cov)
+  add_executable(mk_cov_rigorous_check mk_cov_rigorous_check.cc)
+
+  target_link_libraries(mk_cov_rigorous_check
+    PRIVATE
+      IO
+      amarantin_build_options
+  )
+
+  set_target_properties(mk_cov_rigorous_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+
+  add_test(NAME mk_cov_rigorous_check
+    COMMAND "${CMAKE_BINARY_DIR}/bin/mk_cov_rigorous_check"
+      "${CMAKE_BINARY_DIR}/bin/mk_cov"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      IO
+      mk_cov
+      mk_cov_rigorous_check
+    )
+  endif()
+endif()
