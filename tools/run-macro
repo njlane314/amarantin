@@ -3,8 +3,8 @@ set -euo pipefail
 
 readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 readonly ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+readonly ROOTLOGON_PATH="${ROOT_DIR}/.rootlogon.C"
 readonly -a MACRO_DIRS=("io/macro" "ana/macro" "plot/macro")
-cd "${ROOT_DIR}"
 export AMARANTIN_ROOT_DIR="${ROOT_DIR}"
 export AMARANTIN_BUILD_DIR="${AMARANTIN_BUILD_DIR:-build}"
 
@@ -59,7 +59,7 @@ shift
 
 macro_path=
 for macro_dir in "${MACRO_DIRS[@]}"; do
-  candidate="${macro_dir}/${macro_name}.C"
+  candidate="${ROOT_DIR}/${macro_dir}/${macro_name}.C"
   if [[ -f "${candidate}" ]]; then
     macro_path=${candidate}
     break
@@ -181,4 +181,4 @@ build_invocation() {
 }
 
 invocation=$(build_invocation "${macro_path}" "${macro_name}" "$@")
-exec root -l -q "${invocation}"
+exec root -l -q "${ROOTLOGON_PATH}" "${invocation}"

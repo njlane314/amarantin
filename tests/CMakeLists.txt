@@ -1,6 +1,14 @@
 set(AMARANTIN_TEST_ROOT_FIXTURE "${CMAKE_SOURCE_DIR}/test.root" CACHE FILEPATH
   "Optional path to the test.root fixture used by the end-to-end smoke")
 
+add_test(NAME run_macro_wrapper_check
+  COMMAND bash "${CMAKE_SOURCE_DIR}/tests/run_macro_wrapper_check.sh"
+)
+
+set_tests_properties(run_macro_wrapper_check PROPERTIES
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 if(TARGET Ana)
   add_executable(signal_definition_contract_check signal_definition_contract_check.cc)
 
