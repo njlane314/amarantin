@@ -2,7 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${1:-${ROOT_DIR}/build}"
+BUILD_DIR_INPUT="${1:-${ROOT_DIR}/build}"
+if [[ "${BUILD_DIR_INPUT}" = /* ]]; then
+  BUILD_DIR="${BUILD_DIR_INPUT}"
+else
+  BUILD_DIR="${ROOT_DIR}/${BUILD_DIR_INPUT}"
+fi
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/amarantin-sbnfit-export.XXXXXX")"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
