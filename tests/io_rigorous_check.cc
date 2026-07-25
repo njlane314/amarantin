@@ -21,6 +21,7 @@
 #include "TFile.h"
 #include "TNamed.h"
 #include "TObject.h"
+#include "TParameter.h"
 #include "TTree.h"
 
 namespace
@@ -153,6 +154,35 @@ namespace
 
         sample_dir->cd();
         TNamed("dists", "not a cache directory").Write("dists", TObject::kOverwrite);
+        file.Write();
+        file.Close();
+    }
+
+    void corrupt_distribution_nbins_metadata(const std::filesystem::path &path,
+                                             int corrupted_nbins)
+    {
+        TFile file(path.string().c_str(), "UPDATE");
+        if (file.IsZombie())
+            fail("failed to reopen distribution file for metadata corruption");
+
+        TDirectory *samples = file.GetDirectory("samples");
+        if (!samples)
+            fail("missing samples directory for metadata corruption");
+        TDirectory *sample_dir = samples->GetDirectory("beam");
+        if (!sample_dir)
+            fail("missing beam directory for metadata corruption");
+        TDirectory *dists_dir = sample_dir->GetDirectory("dists");
+        if (!dists_dir)
+            fail("missing dists directory for metadata corruption");
+        TDirectory *cache_dir = dists_dir->GetDirectory("shape");
+        if (!cache_dir)
+            fail("missing shape cache directory for metadata corruption");
+        TDirectory *meta_dir = cache_dir->GetDirectory("meta");
+        if (!meta_dir)
+            fail("missing cache metadata directory for metadata corruption");
+
+        meta_dir->cd();
+        TParameter<int>("nbins", corrupted_nbins).Write("nbins", TObject::kOverwrite);
         file.Write();
         file.Close();
     }
@@ -834,6 +864,29 @@ namespace
             "contains non-directory key dists",
             "DistributionIO malformed has");
     }
+
+    void test_distribution_read_rejects_corrupted_metadata()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path dist_path = temp.path / "corrupted-read.dist.root";
+
+        {
+            DistributionIO dist(dist_path.string(), DistributionIO::Mode::kUpdate);
+            dist.write_metadata(DistributionIO::Metadata{"beam.eventlist.root", "", 2});
+            dist.write("beam", "shape", make_valid_spectrum());
+            dist.flush();
+        }
+        corrupt_distribution_nbins_metadata(dist_path, 5);
+
+        DistributionIO dist(dist_path.string(), DistributionIO::Mode::kRead);
+        require_throws(
+            [&]()
+            {
+                (void)dist.read("beam", "shape");
+            },
+            "nominal size does not match histogram bins",
+            "DistributionIO corrupted metadata read");
+    }
 }
 
 int main()
@@ -846,6 +899,7 @@ int main()
         test_distribution_roundtrip_and_rebinning();
         test_distribution_rejects_bad_payloads();
         test_distribution_has_rejects_malformed_cache_subtree();
+        test_distribution_read_rejects_corrupted_metadata();
         std::cout << "io_rigorous_check=ok\n";
         return 0;
     }

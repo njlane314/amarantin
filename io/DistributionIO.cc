@@ -861,6 +861,7 @@ DistributionIO::Spectrum DistributionIO::read(const std::string &sample_key,
     spectrum.reint.eigenmodes = reint_eigenmodes ? *reint_eigenmodes : std::vector<double>{};
     spectrum.reint.universe_histograms = reint_universe_histograms ? *reint_universe_histograms : std::vector<double>{};
 
+    validate_spectrum_for_write(sample_key, cache_key, spectrum);
     return spectrum;
 }
 
