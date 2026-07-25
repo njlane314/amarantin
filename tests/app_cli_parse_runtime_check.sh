@@ -108,4 +108,15 @@ capture_failure "${cov_log}" "${BUILD_DIR}/bin/mk_cov" --matrix-name
 grep -F "usage: mk_cov " "${cov_log}" >/dev/null
 grep -Fx "mk_cov: --matrix-name requires a name" "${cov_log}" >/dev/null
 
+cov_manifest="${TMP_DIR}/export.manifest"
+cat > "${cov_manifest}" <<'EOF'
+beam beam
+EOF
+cov_manifest_log="${TMP_DIR}/mk_cov_manifest.log"
+capture_failure "${cov_manifest_log}" \
+  "${BUILD_DIR}/bin/mk_cov" --manifest "${cov_manifest}" --cache-key abc in.root out.root
+grep -F "usage: mk_cov " "${cov_manifest_log}" >/dev/null
+grep -Fx "mk_cov: --cache-key is not supported with --manifest" \
+  "${cov_manifest_log}" >/dev/null
+
 printf 'app_cli_parse_runtime_check=ok\n'

@@ -102,6 +102,12 @@ namespace
                                  " requires " + description);
     }
 
+    [[noreturn]] void print_usage_and_throw_manifest_cache_key_conflict()
+    {
+        print_usage(std::cerr);
+        throw std::runtime_error("mk_cov: --cache-key is not supported with --manifest");
+    }
+
     bool looks_like_option_token(const char *arg)
     {
         if (!arg)
@@ -113,6 +119,8 @@ namespace
     CliOptions parse_args(int argc, char **argv)
     {
         CliOptions options;
+        bool saw_manifest = false;
+        bool saw_cache_key = false;
 
         int i = 1;
         for (; i < argc; ++i)
@@ -127,14 +135,20 @@ namespace
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw_missing_value("--cache-key", "a key");
+                if (saw_manifest)
+                    print_usage_and_throw_manifest_cache_key_conflict();
                 options.cache_key = argv[i] ? argv[i] : "";
+                saw_cache_key = true;
                 continue;
             }
             if (arg == "--manifest")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw_missing_value("--manifest", "a path");
+                if (saw_cache_key)
+                    print_usage_and_throw_manifest_cache_key_conflict();
                 options.manifest_path = argv[i] ? argv[i] : "";
+                saw_manifest = true;
                 continue;
             }
             if (arg == "--matrix-name")
