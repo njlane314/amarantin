@@ -44,6 +44,11 @@ namespace
         for (; i < argc; ++i)
         {
             const std::string arg = argv[i] ? argv[i] : "";
+            if (arg == "-h" || arg == "--help")
+            {
+                print_usage(std::cout);
+                throw std::runtime_error("");
+            }
             if (arg == "--preset")
             {
                 if (++i >= argc) print_usage_and_throw();
