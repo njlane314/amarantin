@@ -343,7 +343,7 @@ grep -F "sample=beam origin=overlay variation=nominal entries=3 weighted_entries
 grep -F "passes_signal_definition=1 weighted_passes_signal_definition=0.500000" "${CATEGORIES_LOG}" >/dev/null
 grep -F "category=10 label=mu_cc_0pi_ge1p entries=1 weighted=2.000000" "${CATEGORIES_LOG}" >/dev/null
 grep -F "category=14 label=nc entries=1 weighted=-0.250000" "${CATEGORIES_LOG}" >/dev/null
-grep -F "category=15 label=signal_lambda entries=1 weighted=0.500000" "${CATEGORIES_LOG}" >/dev/null
+grep -F "category=15 label=measurement_signal entries=1 weighted=0.500000" "${CATEGORIES_LOG}" >/dev/null
 
 run_macro_capture "${SYSTEMATICS_LOG}" inspect_systematics "${DIST_PATH}" beam muon_region
 
