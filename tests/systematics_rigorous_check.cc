@@ -1166,6 +1166,47 @@ namespace
             "missing central-weight branch");
     }
 
+    void test_invalid_observable_expression_rejected()
+    {
+        std::unique_ptr<TTree> tree(make_selected_tree({make_plain_row(0.5)},
+                                                       TreeOptions{true, false, false, false, false, false, false}));
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "missing_branch";
+        spec.nbins = 1;
+        spec.xmin = 0.0;
+        spec.xmax = 1.0;
+
+        require_throws(
+            [&]()
+            {
+                (void)syst::detail::compute_sample(tree.get(), spec, syst::SystematicsOptions{});
+            },
+            "failed to compile observable expression",
+            "invalid observable expression");
+    }
+
+    void test_invalid_selection_expression_rejected()
+    {
+        std::unique_ptr<TTree> tree(make_selected_tree({make_plain_row(0.5)},
+                                                       TreeOptions{true, true, false, false, false, false, false}));
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 1;
+        spec.xmin = 0.0;
+        spec.xmax = 1.0;
+        spec.selection_expr = "missing_selection != 0";
+
+        require_throws(
+            [&]()
+            {
+                (void)syst::detail::compute_sample(tree.get(), spec, syst::SystematicsOptions{});
+            },
+            "failed to compile selection expression",
+            "invalid selection expression");
+    }
+
     void test_inconsistent_universe_count_rejected()
     {
         EventRow first = make_plain_row(0.5);
@@ -1328,6 +1369,8 @@ int main()
         test_memory_cache_uses_distribution_content_revision();
         test_persistent_cache_uses_eventlist_content_revision();
         test_missing_weight_branch_rejected();
+        test_invalid_observable_expression_rejected();
+        test_invalid_selection_expression_rejected();
         test_inconsistent_universe_count_rejected();
         test_knob_size_mismatch_rejected();
         test_empty_knob_payload_ignored();

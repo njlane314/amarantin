@@ -4,6 +4,7 @@
 #include <cmath>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #include "TTree.h"
 #include "TTreeFormula.h"
@@ -101,6 +102,17 @@ namespace
         if (bin < 0 || bin >= spec.nbins)
             return -1;
         return bin;
+    }
+
+    void require_valid_formula(TTreeFormula &formula,
+                               const std::string &label,
+                               const std::string &expression)
+    {
+        if (formula.GetTree() && formula.GetNdim() > 0)
+            return;
+
+        throw std::runtime_error("syst: failed to compile " + label +
+                                 " expression: " + expression);
     }
 
     std::optional<syst::detail::UniverseAccumulator>
@@ -260,9 +272,13 @@ namespace syst::detail
         tree->SetBranchAddress(kCentralWeightBranch, &central_weight);
 
         TTreeFormula observable("systematics_observable", spec.branch_expr.c_str(), tree);
+        require_valid_formula(observable, "observable", spec.branch_expr);
         std::unique_ptr<TTreeFormula> selection;
         if (!spec.selection_expr.empty())
+        {
             selection.reset(new TTreeFormula("systematics_selection", spec.selection_expr.c_str(), tree));
+            require_valid_formula(*selection, "selection", spec.selection_expr);
+        }
 
         if (options.enable_genie_knobs)
         {
