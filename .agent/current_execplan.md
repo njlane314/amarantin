@@ -1,5 +1,94 @@
 # ExecPlan
 
+## ExecPlan Addendum: Clarify Detector-Systematics Naming
+
+### 1. Objective
+Make the detector-systematics matching path easier to grep by renaming the
+internal identifiers that currently blur baseline-versus-variation roles.
+
+### 2. Constraints
+- Preserve detector-systematics behavior exactly.
+- Keep installed targets, installed public headers, and CLI surfaces stable.
+- Limit the rename to internal `syst/` and focused regression coverage.
+- Do not broaden this pass into public API churn or unrelated formatting.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep this repository easy to grep
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+This pass only renames existing internal plain-data surfaces so the data flow
+reads more directly.
+
+### 4. System map
+- `syst/bits/Detail.hh`
+- `syst/DetectorSystematics.cc`
+- `syst/Systematics.cc`
+- `tests/systematics_rigorous_check.cc`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- rename the detector source-match struct and fields so the baseline sample and
+  shifted sample roles are explicit at every use site
+
+#### stale scaffolding
+- replace generic loop/local names in detector matching with identifiers that
+  describe the requested sample, detector mates, and shifted samples directly
+
+### 6. Milestones
+
+#### Milestone A: Rename detector matching internals for clearer baseline/shift semantics
+- status: done
+- hypothesis: names like `DetectorShiftSource`, `baseline_sample_key`, and
+  `shifted_sample_key` make the detector flow easier to follow than the
+  current generic `Match` / `cv` / `varied` naming
+- files / symbols touched:
+  - `syst::detail::DetectorShiftSource`
+  - `syst::detail::resolve_detector_shift_sources(...)`
+  - detector-systematics local variables in `syst/DetectorSystematics.cc`
+  - focused regression references in `tests/systematics_rigorous_check.cc`
+- expected behavior risk: low
+- verification commands:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/bits/Detail.hh syst/DetectorSystematics.cc syst/Systematics.cc tests/systematics_rigorous_check.cc`
+  - `docker run --rm --platform linux/amd64 -v "$PWD":/work -w /work rootproject/root:6.30.06-ubuntu22.04 bash -lc 'apt-get update >/tmp/amarantin-apt-update.log && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cmake libsqlite3-dev nlohmann-json3-dev pkg-config libeigen3-dev >/tmp/amarantin-apt-install.log && cmake --build .build/testroot-trace --parallel --target systematics_rigorous_check >/tmp/amarantin-syst-build.log && ctest --test-dir .build/testroot-trace --output-on-failure -R systematics_rigorous_check'`
+- acceptance criteria:
+  - no behavior changes beyond internal naming
+  - baseline-versus-shifted detector roles are explicit in the implementation
+  - the focused detector-systematics regression still passes
+- verification results:
+  - `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/bits/Detail.hh syst/DetectorSystematics.cc syst/Systematics.cc tests/systematics_rigorous_check.cc` passed
+  - `docker run --rm --platform linux/amd64 -v "$PWD":/work -w /work rootproject/root:6.30.06-ubuntu22.04 bash -lc 'apt-get update >/tmp/amarantin-apt-update.log && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cmake libsqlite3-dev nlohmann-json3-dev pkg-config libeigen3-dev >/tmp/amarantin-apt-install.log && cmake --build .build/testroot-trace --parallel --target systematics_rigorous_check >/tmp/amarantin-syst-build.log && ctest --test-dir .build/testroot-trace --output-on-failure -R systematics_rigorous_check'` passed after restarting Docker Desktop locally
+
+### 7. Public-surface check
+- compatibility impact:
+  - no installed target changes
+  - no installed public-header changes
+  - no CLI changes
+- migration note or explicit non-goal:
+  - this pass intentionally avoids public API renames
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta: about `+140`, mostly from explicit names plus the
+  required planning/log bookkeeping
+
+### 9. Decision log
+- keep the rename local to the detector-systematics path where the ambiguity is
+  real
+- stop before renaming wider `syst/` surfaces that are already sufficiently
+  clear
+
+### 10. Stop conditions
+- stop once the detector matching path reads clearly and the focused
+  verification stays green
+- do not broaden this pass into style-only churn elsewhere
+
 ## ExecPlan Addendum: Retire Native Fit Surfaces In Favor Of `collie`
 
 ### 1. Objective

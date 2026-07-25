@@ -1,6 +1,58 @@
 # Minimality Log
 
 ## Current milestone
+- status: done
+- subsystem: detector-systematics naming cleanup
+- design rule from `DESIGN.md`: keep the code easy to grep and prefer plain
+  data with direct names over ambiguous local shorthand
+
+## What changed
+- renamed the internal detector matching struct from
+  `DetectorSourceMatch` to `DetectorShiftSource`
+- renamed the matching helper from `resolve_detector_source_matches(...)` to
+  `resolve_detector_shift_sources(...)`
+- renamed the key fields to `baseline_sample_key` and
+  `shifted_sample_key`
+- renamed the local detector-systematics variables in `syst/` so the
+  requested sample, detector mates, baseline sample, and shifted sample roles
+  read directly
+- updated the focused detector-systematics regression to match the renamed
+  internal surface
+
+## Why this is simpler
+- the detector matching path now reads as one explicit baseline-versus-shifted
+  flow instead of mixing `cv`, `varied`, and generic `match` terminology
+- the implementation and regression now use the same terms for the same roles,
+  which makes the path easier to grep and less error-prone to extend
+
+## Verification
+- configure/build commands:
+- target-only commands:
+-  `docker run --rm --platform linux/amd64 -v "$PWD":/work -w /work rootproject/root:6.30.06-ubuntu22.04 bash -lc 'apt-get update >/tmp/amarantin-apt-update.log && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cmake libsqlite3-dev nlohmann-json3-dev pkg-config libeigen3-dev >/tmp/amarantin-apt-install.log && cmake --build .build/testroot-trace --parallel --target systematics_rigorous_check >/tmp/amarantin-syst-build.log && ctest --test-dir .build/testroot-trace --output-on-failure -R systematics_rigorous_check'`
+- shell checks:
+-  `git diff --check -- .agent/current_execplan.md docs/minimality-log.md syst/bits/Detail.hh syst/DetectorSystematics.cc syst/Systematics.cc tests/systematics_rigorous_check.cc`
+- smoke checks:
+- results:
+-  focused `git diff --check` passed
+-  `systematics_rigorous_check` passed in the containerized `.build/testroot-trace` tree after restarting Docker Desktop on this host
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - about `+140`, mostly from explicit naming plus the required planning/log
+    bookkeeping
+
+## Decisions
+- keep this pass internal-only and avoid public API rename churn
+
+## Remaining hotspots
+- wider `syst/` naming is acceptable for now; do not broaden this into
+  style-only rename churn without a stronger payoff
+
+## Current milestone
 - status: blocked
 - subsystem: native fit-surface retirement in favor of `~/programs/collie`
 - design rule from `DESIGN.md`: keep module boundaries sharp and delete a

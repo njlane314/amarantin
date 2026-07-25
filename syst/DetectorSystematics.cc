@@ -34,100 +34,121 @@ namespace syst::detail
         return eventlist.detector_mates(request.sample_key);
     }
 
-    std::vector<DetectorSourceMatch> resolve_detector_source_matches(
+    std::vector<DetectorShiftSource> resolve_detector_shift_sources(
         EventListIO &eventlist,
         const std::string &sample_key,
         const std::vector<std::string> &detector_sample_keys)
     {
-        const DatasetIO::Sample seed = eventlist.sample(sample_key);
-        const std::string seed_nominal = nominal_or_key(sample_key, seed);
+        const DatasetIO::Sample requested_sample = eventlist.sample(sample_key);
+        const std::string requested_nominal_key =
+            nominal_or_key(sample_key, requested_sample);
 
-        std::vector<std::string> siblings = eventlist.detector_mates(sample_key);
-        if (is_detector_cv(seed))
-            siblings.push_back(sample_key);
+        std::vector<std::string> detector_mate_keys =
+            eventlist.detector_mates(sample_key);
+        if (is_detector_cv(requested_sample))
+            detector_mate_keys.push_back(sample_key);
 
         std::map<std::string, std::string> detector_cv_by_role;
         std::vector<std::string> detector_cv_keys;
         std::string default_detector_cv_key;
-        for (const auto &key : siblings)
+        for (const auto &candidate_key : detector_mate_keys)
         {
-            const DatasetIO::Sample sample = eventlist.sample(key);
-            if (!is_detector_cv(sample))
+            const DatasetIO::Sample candidate_sample =
+                eventlist.sample(candidate_key);
+            if (!is_detector_cv(candidate_sample))
                 continue;
-            if (nominal_or_key(key, sample) != seed_nominal)
+            if (nominal_or_key(candidate_key, candidate_sample) !=
+                requested_nominal_key)
                 continue;
 
-            detector_cv_keys.push_back(key);
-            if (!sample.role.empty())
+            detector_cv_keys.push_back(candidate_key);
+            if (!candidate_sample.role.empty())
             {
-                const auto it = detector_cv_by_role.find(sample.role);
-                if (it != detector_cv_by_role.end() && it->second != key)
+                const auto role_it =
+                    detector_cv_by_role.find(candidate_sample.role);
+                if (role_it != detector_cv_by_role.end() &&
+                    role_it->second != candidate_key)
                 {
                     throw std::runtime_error(
                         "syst: multiple detector CV samples found for nominal " +
-                        seed_nominal + " role " + sample.role);
+                        requested_nominal_key + " role " + candidate_sample.role);
                 }
-                detector_cv_by_role[sample.role] = key;
+                detector_cv_by_role[candidate_sample.role] = candidate_key;
             }
             else if (!default_detector_cv_key.empty() &&
-                     default_detector_cv_key != key)
+                     default_detector_cv_key != candidate_key)
             {
                 throw std::runtime_error(
                     "syst: multiple detector CV samples found for nominal " +
-                    seed_nominal + " without an explicit role");
+                    requested_nominal_key + " without an explicit role");
             }
             else
             {
-                default_detector_cv_key = key;
+                default_detector_cv_key = candidate_key;
             }
         }
 
-        std::vector<DetectorSourceMatch> out;
-        std::set<std::string> seen_varied_keys;
+        std::vector<DetectorShiftSource> shift_sources;
+        std::set<std::string> seen_shifted_sample_keys;
         std::set<std::string> seen_source_labels;
-        for (const auto &key : detector_sample_keys)
+        for (const auto &candidate_key : detector_sample_keys)
         {
-            if (key.empty() || !seen_varied_keys.insert(key).second)
+            if (candidate_key.empty() ||
+                !seen_shifted_sample_keys.insert(candidate_key).second)
                 continue;
 
-            const DatasetIO::Sample sample = eventlist.sample(key);
-            if (sample.variation != DatasetIO::Sample::Variation::kDetector)
+            const DatasetIO::Sample shifted_sample =
+                eventlist.sample(candidate_key);
+            if (shifted_sample.variation != DatasetIO::Sample::Variation::kDetector)
                 continue;
-            if (is_detector_cv(sample))
+            if (is_detector_cv(shifted_sample))
                 continue;
 
-            const std::string candidate_nominal = nominal_or_key(key, sample);
-            if (candidate_nominal != seed_nominal)
+            const std::string shifted_nominal_key =
+                nominal_or_key(candidate_key, shifted_sample);
+            if (shifted_nominal_key != requested_nominal_key)
             {
                 throw std::runtime_error(
-                    "syst: detector sample " + key +
-                    " does not match nominal " + seed_nominal);
+                    "syst: detector sample " + candidate_key +
+                    " does not match nominal " + requested_nominal_key);
             }
 
-            std::string cv_sample_key = sample_key;
-            if (!sample.role.empty())
+            std::string baseline_sample_key = sample_key;
+            if (!shifted_sample.role.empty())
             {
-                const auto it = detector_cv_by_role.find(sample.role);
-                if (it != detector_cv_by_role.end())
-                    cv_sample_key = it->second;
+                const auto role_it =
+                    detector_cv_by_role.find(shifted_sample.role);
+                if (role_it != detector_cv_by_role.end())
+                    baseline_sample_key = role_it->second;
             }
-            if (cv_sample_key == sample_key && !default_detector_cv_key.empty())
-                cv_sample_key = default_detector_cv_key;
-            if (cv_sample_key == sample_key && detector_cv_keys.size() == 1)
-                cv_sample_key = detector_cv_keys.front();
+            if (baseline_sample_key == sample_key &&
+                !default_detector_cv_key.empty())
+            {
+                baseline_sample_key = default_detector_cv_key;
+            }
+            if (baseline_sample_key == sample_key &&
+                detector_cv_keys.size() == 1)
+            {
+                baseline_sample_key = detector_cv_keys.front();
+            }
 
-            const std::string source_label = sample.tag.empty() ? key : sample.tag;
+            const std::string source_label =
+                shifted_sample.tag.empty() ? candidate_key : shifted_sample.tag;
             if (!seen_source_labels.insert(source_label).second)
             {
                 throw std::runtime_error(
                     "syst: duplicate detector source label " + source_label +
-                    " for nominal " + seed_nominal);
+                    " for nominal " + requested_nominal_key);
             }
 
-            out.push_back(DetectorSourceMatch{source_label, cv_sample_key, key});
+            shift_sources.push_back(
+                DetectorShiftSource{
+                    source_label,
+                    baseline_sample_key,
+                    candidate_key});
         }
 
-        return out;
+        return shift_sources;
     }
 
     std::vector<double> detector_covariance_from_shift_vectors(const std::vector<double> &shift_vectors,

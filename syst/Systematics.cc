@@ -318,61 +318,63 @@ namespace
         std::vector<std::vector<double>> detector_histograms;
         if (options.enable_detector && !options.detector_sample_keys.empty())
         {
-            const std::vector<syst::detail::DetectorSourceMatch> detector_sources =
-                syst::detail::resolve_detector_source_matches(eventlist,
-                                                              sample_key,
-                                                              options.detector_sample_keys);
+            const std::vector<syst::detail::DetectorShiftSource> detector_shift_sources =
+                syst::detail::resolve_detector_shift_sources(eventlist,
+                                                             sample_key,
+                                                             options.detector_sample_keys);
 
-            detector_histograms.reserve(detector_sources.size());
-            entry.detector_source_labels.reserve(detector_sources.size());
-            entry.detector_sample_keys.reserve(detector_sources.size());
-            entry.detector_shift_vectors.assign(static_cast<std::size_t>(detector_sources.size() * fine_spec.nbins), 0.0);
+            detector_histograms.reserve(detector_shift_sources.size());
+            entry.detector_source_labels.reserve(detector_shift_sources.size());
+            entry.detector_sample_keys.reserve(detector_shift_sources.size());
+            entry.detector_shift_vectors.assign(static_cast<std::size_t>(detector_shift_sources.size() * fine_spec.nbins), 0.0);
 
-            for (std::size_t row = 0; row < detector_sources.size(); ++row)
+            for (std::size_t row = 0; row < detector_shift_sources.size(); ++row)
             {
-                const auto &source = detector_sources[row];
+                const auto &detector_source = detector_shift_sources[row];
 
-                TTree *cv_tree = eventlist.selected_tree(source.cv_sample_key);
-                if (!cv_tree)
+                TTree *baseline_tree =
+                    eventlist.selected_tree(detector_source.baseline_sample_key);
+                if (!baseline_tree)
                 {
                     throw std::runtime_error("syst: missing detector CV tree for sample " +
-                                             source.cv_sample_key);
+                                             detector_source.baseline_sample_key);
                 }
-                TTree *varied_tree = eventlist.selected_tree(source.varied_sample_key);
-                if (!varied_tree)
+                TTree *shifted_tree =
+                    eventlist.selected_tree(detector_source.shifted_sample_key);
+                if (!shifted_tree)
                 {
                     throw std::runtime_error("syst: missing detector variation tree for sample " +
-                                             source.varied_sample_key);
+                                             detector_source.shifted_sample_key);
                 }
 
-                const syst::detail::ComputedSample cv_sample =
-                    syst::detail::compute_sample(cv_tree, fine_spec, syst::SystematicsOptions{});
-                const syst::detail::ComputedSample variation_sample =
-                    syst::detail::compute_sample(varied_tree, fine_spec, syst::SystematicsOptions{});
+                const syst::detail::ComputedSample baseline_sample =
+                    syst::detail::compute_sample(baseline_tree, fine_spec, syst::SystematicsOptions{});
+                const syst::detail::ComputedSample shifted_sample =
+                    syst::detail::compute_sample(shifted_tree, fine_spec, syst::SystematicsOptions{});
 
                 if (options.validate_detector_cv_compatibility &&
-                    source.cv_sample_key != sample_key &&
-                    !histogram_compatible(cv_sample.nominal, entry.nominal, 1e-9))
+                    detector_source.baseline_sample_key != sample_key &&
+                    !histogram_compatible(baseline_sample.nominal, entry.nominal, 1e-9))
                 {
                     throw std::runtime_error(
-                        "syst: detector CV sample " + source.cv_sample_key +
+                        "syst: detector CV sample " + detector_source.baseline_sample_key +
                         " is not histogram-compatible with nominal " + sample_key +
                         "; fit-side recentering of detector shifts would be ill-defined");
                 }
 
-                entry.detector_source_labels.push_back(source.source_label);
-                entry.detector_sample_keys.push_back(source.varied_sample_key);
-                detector_histograms.push_back(variation_sample.nominal);
+                entry.detector_source_labels.push_back(detector_source.source_label);
+                entry.detector_sample_keys.push_back(detector_source.shifted_sample_key);
+                detector_histograms.push_back(shifted_sample.nominal);
 
                 for (int col = 0; col < fine_spec.nbins; ++col)
                 {
                     entry.detector_shift_vectors[static_cast<std::size_t>(row * fine_spec.nbins + col)] =
-                        variation_sample.nominal[static_cast<std::size_t>(col)] -
-                        cv_sample.nominal[static_cast<std::size_t>(col)];
+                        shifted_sample.nominal[static_cast<std::size_t>(col)] -
+                        baseline_sample.nominal[static_cast<std::size_t>(col)];
                 }
             }
 
-            entry.detector_source_count = static_cast<int>(detector_sources.size());
+            entry.detector_source_count = static_cast<int>(detector_shift_sources.size());
             entry.detector_covariance =
                 syst::detail::detector_covariance_from_shift_vectors(entry.detector_shift_vectors,
                                                                      entry.detector_source_count,

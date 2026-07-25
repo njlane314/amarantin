@@ -707,16 +707,16 @@ namespace
         write_roleless_detector_cv_fallback_eventlist(eventlist_path);
 
         EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
-        const std::vector<syst::detail::DetectorSourceMatch> matches =
-            syst::detail::resolve_detector_source_matches(eventlist,
-                                                          "beam",
-                                                          {"beam-sce"});
+        const std::vector<syst::detail::DetectorShiftSource> shift_sources =
+            syst::detail::resolve_detector_shift_sources(eventlist,
+                                                         "beam",
+                                                         {"beam-sce"});
 
-        require(matches.size() == 1,
+        require(shift_sources.size() == 1,
                 "roleless detector CV fallback should produce one source match");
-        require(matches.front().cv_sample_key == "beam-cv-default",
+        require(shift_sources.front().baseline_sample_key == "beam-cv-default",
                 "roleless detector variation should match the default detector CV sample");
-        require(matches.front().varied_sample_key == "beam-sce",
+        require(shift_sources.front().shifted_sample_key == "beam-sce",
                 "roleless detector variation should preserve its varied sample key");
     }
 

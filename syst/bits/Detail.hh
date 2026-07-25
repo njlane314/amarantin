@@ -19,11 +19,11 @@ namespace syst::detail
     using CacheEntry = DistributionIO::Spectrum;
     using FamilyCache = DistributionIO::UniverseFamily;
 
-    struct DetectorSourceMatch
+    struct DetectorShiftSource
     {
         std::string source_label;
-        std::string cv_sample_key;
-        std::string varied_sample_key;
+        std::string baseline_sample_key;
+        std::string shifted_sample_key;
     };
 
     struct UniverseAccumulator
@@ -141,7 +141,7 @@ namespace syst::detail
     std::vector<std::string> resolve_detector_sample_keys(EventListIO &eventlist,
                                                           const CacheRequest &request);
 
-    std::vector<DetectorSourceMatch> resolve_detector_source_matches(
+    std::vector<DetectorShiftSource> resolve_detector_shift_sources(
         EventListIO &eventlist,
         const std::string &sample_key,
         const std::vector<std::string> &detector_sample_keys);
