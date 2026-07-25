@@ -13,6 +13,29 @@
 
 namespace
 {
+    int read_content_revision(TFile *file)
+    {
+        if (!file)
+            return 0;
+        TDirectory *meta_dir = file->GetDirectory("meta");
+        if (!meta_dir)
+            return 0;
+
+        TObject *obj = meta_dir->Get("content_revision");
+        auto *param = dynamic_cast<TParameter<int> *>(obj);
+        if (!param)
+            return 0;
+        return param->GetVal();
+    }
+
+    void bump_content_revision(TFile *file)
+    {
+        TDirectory *meta_dir = utils::must_dir(file, "meta", true);
+        utils::write_param<int>(meta_dir,
+                                "content_revision",
+                                read_content_revision(file) + 1);
+    }
+
     void require_count_non_negative(const char *label, int count)
     {
         if (count < 0)
@@ -567,12 +590,19 @@ void DistributionIO::write_metadata(const Metadata &metadata)
     utils::write_named(meta_dir, "eventlist_path", metadata.eventlist_path);
     utils::write_named(meta_dir, "eventlist_uuid", metadata.eventlist_uuid);
     utils::write_param<int>(meta_dir, "build_version", metadata.build_version);
+    bump_content_revision(file_);
 }
 
 std::string DistributionIO::file_uuid() const
 {
     require_open_();
     return std::string(file_->GetUUID().AsString());
+}
+
+int DistributionIO::content_revision() const
+{
+    require_open_();
+    return read_content_revision(file_);
 }
 
 void DistributionIO::flush()
@@ -903,6 +933,7 @@ void DistributionIO::write(const std::string &sample_key,
 
     payload.Fill();
     payload.Write("payload", TObject::kOverwrite);
+    bump_content_revision(file_);
 }
 
 std::string default_distribution_path(const std::string &eventlist_path)

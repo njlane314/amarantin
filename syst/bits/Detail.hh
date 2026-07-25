@@ -121,6 +121,7 @@ namespace syst::detail
            << eventlist.file_uuid() << "|"
            << (distfile ? distfile->path() : std::string()) << "|"
            << (distfile ? distfile->file_uuid() : std::string()) << "|"
+           << (distfile ? std::to_string(distfile->content_revision()) : std::string()) << "|"
            << sample_key << "|"
            << syst::cache_key(spec, options) << "|"
            << spec.nbins << "|"
