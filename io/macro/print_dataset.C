@@ -18,7 +18,7 @@ namespace
     {
         os << "[" << i << "] "
            << "sample=" << (s.sample.empty() ? "-" : s.sample)
-           << "origin=" << DatasetIO::Sample::origin_name(s.origin)
+           << " origin=" << DatasetIO::Sample::origin_name(s.origin)
            << "  variation=" << DatasetIO::Sample::variation_name(s.variation)
            << "  beam=" << DatasetIO::Sample::beam_name(s.beam)
            << "  polarity=" << DatasetIO::Sample::polarity_name(s.polarity)

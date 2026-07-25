@@ -448,7 +448,7 @@ grep -F "origin=external beam=numi polarity=fhc shards=1" "${PRINT_SAMPLE_LOG}" 
 
 run_macro_capture "${PRINT_DATASET_LOG}" print_dataset "${DATASET_PATH}"
 grep -F "samples: 1" "${PRINT_DATASET_LOG}" >/dev/null
-grep -F "sample=beamorigin=external" "${PRINT_DATASET_LOG}" >/dev/null
+grep -F "sample=beam origin=external" "${PRINT_DATASET_LOG}" >/dev/null
 
 run_macro_capture "${PRINT_EVENTLIST_LOG}" print_eventlist "${EVENTLIST_PATH}"
 grep -F "Sample: beam" "${PRINT_EVENTLIST_LOG}" >/dev/null

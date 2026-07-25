@@ -41,10 +41,12 @@ require_binary "${BUILD_DIR}/bin/mk_cov"
 
 SOURCE="${TMP_DIR}/macro_fixture.cc"
 BINARY="${TMP_DIR}/macro_fixture"
+DATASET_PATH="${TMP_DIR}/macro-smoke.dataset.root"
 EVENTLIST_PATH="${TMP_DIR}/macro-smoke.eventlist.root"
 DIST_PATH="${TMP_DIR}/macro-smoke.dists.root"
 CACHE_DIST_PATH="${TMP_DIR}/macro-cache.dists.root"
 COV_PATH="${TMP_DIR}/macro-smoke.cov.root"
+DATASET_LOG="${TMP_DIR}/print_dataset.log"
 WEIGHTS_LOG="${TMP_DIR}/inspect_weights.log"
 CUTFLOW_LOG="${TMP_DIR}/inspect_cutflow.log"
 CATEGORIES_LOG="${TMP_DIR}/inspect_categories.log"
@@ -156,6 +158,35 @@ namespace
         return tree;
     }
 
+    DatasetIO::Sample make_nominal_sample()
+    {
+        DatasetIO::Sample nominal;
+        nominal.origin = DatasetIO::Sample::Origin::kOverlay;
+        nominal.variation = DatasetIO::Sample::Variation::kNominal;
+        nominal.beam = DatasetIO::Sample::Beam::kNuMI;
+        nominal.polarity = DatasetIO::Sample::Polarity::kFHC;
+        nominal.sample = "beam";
+        nominal.root_files = {"synthetic_beam.root"};
+        return nominal;
+    }
+
+    DatasetIO::Sample make_detector_sample()
+    {
+        DatasetIO::Sample detector = make_nominal_sample();
+        detector.variation = DatasetIO::Sample::Variation::kDetector;
+        detector.sample = "beam-sce";
+        detector.nominal = "beam";
+        detector.root_files = {"synthetic_beam_sce.root"};
+        return detector;
+    }
+
+    void write_dataset(const std::string &path)
+    {
+        DatasetIO dataset(path, "macro-smoke");
+        dataset.add_sample("beam", make_nominal_sample());
+        dataset.add_sample("beam-sce", make_detector_sample());
+    }
+
     void write_eventlist(const std::string &path)
     {
         EventListIO eventlist(path, EventListIO::Mode::kWrite);
@@ -169,17 +200,8 @@ namespace
         metadata.selection_expr = "selected != 0";
         eventlist.write_metadata(metadata);
 
-        DatasetIO::Sample nominal;
-        nominal.origin = DatasetIO::Sample::Origin::kOverlay;
-        nominal.variation = DatasetIO::Sample::Variation::kNominal;
-        nominal.beam = DatasetIO::Sample::Beam::kNuMI;
-        nominal.polarity = DatasetIO::Sample::Polarity::kFHC;
-        nominal.sample = "beam";
-
-        DatasetIO::Sample detector = nominal;
-        detector.variation = DatasetIO::Sample::Variation::kDetector;
-        detector.sample = "beam-sce";
-        detector.nominal = "beam";
+        DatasetIO::Sample nominal = make_nominal_sample();
+        DatasetIO::Sample detector = make_detector_sample();
 
         TTree *beam_selected = make_selected_tree({
             {1, 1, 101, 1, 1, 0.20, 0.50,  1.0,  0.50,   0.2500, true,  true,  true,  true,  15, true },
@@ -289,11 +311,12 @@ namespace
 
 int main(int argc, char **argv)
 {
-    if (argc != 3)
-        throw std::runtime_error("expected eventlist and dist paths");
+    if (argc != 4)
+        throw std::runtime_error("expected dataset, eventlist, and dist paths");
 
-    write_eventlist(argv[1]);
-    write_dist(argv[2]);
+    write_dataset(argv[1]);
+    write_eventlist(argv[2]);
+    write_dist(argv[3]);
     return 0;
 }
 EOF
@@ -315,7 +338,7 @@ read -r -a ROOT_LIBS <<<"$(root-config --libs)"
 export DYLD_LIBRARY_PATH="${BUILD_DIR}/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
 export LD_LIBRARY_PATH="${BUILD_DIR}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
-"${BINARY}" "${EVENTLIST_PATH}" "${DIST_PATH}"
+"${BINARY}" "${DATASET_PATH}" "${EVENTLIST_PATH}" "${DIST_PATH}"
 "${BUILD_DIR}/bin/mk_cov" "${DIST_PATH}" beam "${COV_PATH}"
 
 run_macro_capture() {
@@ -326,6 +349,11 @@ run_macro_capture() {
     AMARANTIN_BUILD_DIR="${BUILD_DIR}" bash "${ROOT_DIR}/tools/run-macro" "$@"
   ) >"${log_path}" 2>&1
 }
+
+run_macro_capture "${DATASET_LOG}" print_dataset "${DATASET_PATH}"
+grep -F "samples: 2" "${DATASET_LOG}" >/dev/null
+grep -F "sample=beam origin=overlay  variation=nominal" "${DATASET_LOG}" >/dev/null
+grep -F "sample=beam-sce origin=overlay  variation=detector" "${DATASET_LOG}" >/dev/null
 
 run_macro_capture "${WEIGHTS_LOG}" inspect_weights "${EVENTLIST_PATH}" beam
 
