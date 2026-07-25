@@ -43,6 +43,11 @@ namespace
         const auto keys = dist.dist_keys(sample_key);
         if (keys.empty())
             throw std::runtime_error("inspect_dist: no cached distributions found for sample_key");
+        if (keys.size() > 1)
+        {
+            throw std::runtime_error(
+                "inspect_dist: sample_key has multiple cached distributions; pass cache_key");
+        }
         return keys.front();
     }
 

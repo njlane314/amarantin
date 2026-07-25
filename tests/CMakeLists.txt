@@ -334,3 +334,34 @@ if(TARGET IO AND TARGET mk_cov)
     )
   endif()
 endif()
+
+if(TARGET IO AND TARGET Plot)
+  add_executable(inspect_macro_rigorous_check
+    inspect_macro_rigorous_check.cc
+    InspectDistMacroHarness.cc
+    InspectSystematicsMacroHarness.cc
+  )
+
+  target_link_libraries(inspect_macro_rigorous_check
+    PRIVATE
+      IO
+      Plot
+      amarantin_build_options
+  )
+
+  set_target_properties(inspect_macro_rigorous_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+
+  add_test(NAME inspect_macro_rigorous_check
+    COMMAND "${CMAKE_BINARY_DIR}/bin/inspect_macro_rigorous_check"
+  )
+
+  if(TARGET check)
+    add_dependencies(check
+      IO
+      Plot
+      inspect_macro_rigorous_check
+    )
+  endif()
+endif()
