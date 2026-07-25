@@ -16,8 +16,14 @@ namespace
         float reco_neutrino_vertex_y = -999.f;
         float reco_neutrino_vertex_z = -999.f;
 
+        const bool has_subrun = tree->GetBranch("subRun") != nullptr;
+        const bool has_sub = tree->GetBranch("sub") != nullptr;
+
         tree->SetBranchAddress("run", &run);
-        tree->SetBranchAddress("sub", &sub);
+        if (has_subrun)
+            tree->SetBranchAddress("subRun", &sub);
+        else if (has_sub)
+            tree->SetBranchAddress("sub", &sub);
         tree->SetBranchAddress("evt", &evt);
         tree->SetBranchAddress("selected", &selected);
 

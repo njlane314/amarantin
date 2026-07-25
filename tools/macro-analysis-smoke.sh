@@ -47,6 +47,7 @@ DIST_PATH="${TMP_DIR}/macro-smoke.dists.root"
 CACHE_DIST_PATH="${TMP_DIR}/macro-cache.dists.root"
 COV_PATH="${TMP_DIR}/macro-smoke.cov.root"
 DATASET_LOG="${TMP_DIR}/print_dataset.log"
+EVENTLIST_LOG="${TMP_DIR}/print_eventlist.log"
 WEIGHTS_LOG="${TMP_DIR}/inspect_weights.log"
 CUTFLOW_LOG="${TMP_DIR}/inspect_cutflow.log"
 CATEGORIES_LOG="${TMP_DIR}/inspect_categories.log"
@@ -354,6 +355,10 @@ run_macro_capture "${DATASET_LOG}" print_dataset "${DATASET_PATH}"
 grep -F "samples: 2" "${DATASET_LOG}" >/dev/null
 grep -F "sample=beam origin=overlay  variation=nominal" "${DATASET_LOG}" >/dev/null
 grep -F "sample=beam-sce origin=overlay  variation=detector" "${DATASET_LOG}" >/dev/null
+
+run_macro_capture "${EVENTLIST_LOG}" print_eventlist "${EVENTLIST_PATH}"
+grep -F "Sample: beam  selected_entries=3" "${EVENTLIST_LOG}" >/dev/null
+grep -F "run=1 sub=1 evt=101 selected=1 selection_pass=1" "${EVENTLIST_LOG}" >/dev/null
 
 run_macro_capture "${WEIGHTS_LOG}" inspect_weights "${EVENTLIST_PATH}" beam
 
