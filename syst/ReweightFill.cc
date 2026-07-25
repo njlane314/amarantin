@@ -121,19 +121,19 @@ namespace
         if (!tree || !branch_name || !tree->GetBranch(branch_name))
             return std::nullopt;
 
-        syst::detail::UniverseAccumulator family;
-        family.branch_name = branch_name;
-        return family;
+        syst::detail::UniverseAccumulator accumulator;
+        accumulator.branch_name = branch_name;
+        return accumulator;
     }
 
     void bind_universe_family(TTree *tree,
-                              syst::detail::UniverseAccumulator &family)
+                              syst::detail::UniverseAccumulator &accumulator)
     {
-        if (!tree || family.branch_name.empty())
+        if (!tree || accumulator.branch_name.empty())
             return;
 
-        family.raw = nullptr;
-        tree->SetBranchAddress(family.branch_name.c_str(), &family.raw);
+        accumulator.universe_weights = nullptr;
+        tree->SetBranchAddress(accumulator.branch_name.c_str(), &accumulator.universe_weights);
     }
 
     std::optional<syst::detail::UniverseAccumulator>
@@ -159,23 +159,23 @@ namespace
             return std::nullopt;
         }
 
-        syst::detail::PairedShiftAccumulator paired;
-        paired.up_branch_name = "weightsGenieUp";
-        paired.down_branch_name = "weightsGenieDn";
-        paired.source_labels = genie_knob_source_labels();
-        return paired;
+        syst::detail::PairedShiftAccumulator knob_pairs;
+        knob_pairs.up_branch_name = "weightsGenieUp";
+        knob_pairs.down_branch_name = "weightsGenieDn";
+        knob_pairs.source_labels = genie_knob_source_labels();
+        return knob_pairs;
     }
 
     void bind_genie_knob_pairs(TTree *tree,
-                               syst::detail::PairedShiftAccumulator &paired)
+                               syst::detail::PairedShiftAccumulator &knob_pairs)
     {
         if (!tree)
             return;
 
-        paired.raw_up = nullptr;
-        paired.raw_down = nullptr;
-        tree->SetBranchAddress(paired.up_branch_name.c_str(), &paired.raw_up);
-        tree->SetBranchAddress(paired.down_branch_name.c_str(), &paired.raw_down);
+        knob_pairs.up_weights = nullptr;
+        knob_pairs.down_weights = nullptr;
+        tree->SetBranchAddress(knob_pairs.up_branch_name.c_str(), &knob_pairs.up_weights);
+        tree->SetBranchAddress(knob_pairs.down_branch_name.c_str(), &knob_pairs.down_weights);
     }
 }
 
@@ -183,11 +183,11 @@ namespace syst::detail
 {
     void UniverseAccumulator::ensure_size(int nbins)
     {
-        if (!raw)
+        if (!universe_weights)
             return;
         if (n_universes == 0)
         {
-            n_universes = raw->size();
+            n_universes = universe_weights->size();
             histograms.assign(static_cast<std::size_t>(nbins) * n_universes, 0.0);
         }
     }
@@ -195,9 +195,9 @@ namespace syst::detail
     void UniverseAccumulator::accumulate(int bin, int nbins, double base_weight)
     {
         ensure_size(nbins);
-        if (n_universes == 0 || !raw)
+        if (n_universes == 0 || !universe_weights)
             return;
-        if (raw->size() != n_universes)
+        if (universe_weights->size() != n_universes)
         {
             throw std::runtime_error(
                 "syst: universe family " + branch_name +
@@ -205,9 +205,10 @@ namespace syst::detail
         }
 
         const std::size_t offset = static_cast<std::size_t>(bin) * n_universes;
-        const std::size_t n = std::min(n_universes, raw->size());
+        const std::size_t n = std::min(n_universes, universe_weights->size());
         for (std::size_t universe = 0; universe < n; ++universe)
-            histograms[offset + universe] += base_weight * decode_universe_weight((*raw)[universe]);
+            histograms[offset + universe] +=
+                base_weight * decode_universe_weight((*universe_weights)[universe]);
     }
 
     void PairedShiftAccumulator::ensure_size(int nbins)
@@ -222,11 +223,11 @@ namespace syst::detail
 
     void PairedShiftAccumulator::accumulate(int bin, int nbins, double base_weight)
     {
-        if (!raw_up || !raw_down || source_labels.empty())
+        if (!up_weights || !down_weights || source_labels.empty())
             return;
 
-        const std::size_t up_size = raw_up->size();
-        const std::size_t down_size = raw_down->size();
+        const std::size_t up_size = up_weights->size();
+        const std::size_t down_size = down_weights->size();
         if (up_size == 0 && down_size == 0)
             return;
         ensure_size(nbins);
@@ -238,8 +239,8 @@ namespace syst::detail
 
         for (std::size_t source = 0; source < source_labels.size(); ++source)
         {
-            const double up_weight = decode_universe_weight((*raw_up)[source]);
-            const double down_weight = decode_universe_weight((*raw_down)[source]);
+            const double up_weight = decode_universe_weight((*up_weights)[source]);
+            const double down_weight = decode_universe_weight((*down_weights)[source]);
             const double shift = 0.5 * base_weight * (up_weight - down_weight);
             shift_vectors[static_cast<std::size_t>(source * nbins + bin)] += shift;
         }
@@ -258,9 +259,9 @@ namespace syst::detail
         if (!(spec.xmax > spec.xmin))
             throw std::runtime_error("syst: invalid histogram range");
 
-        ComputedSample out;
-        out.nominal.assign(static_cast<std::size_t>(spec.nbins), 0.0);
-        out.sumw2.assign(static_cast<std::size_t>(spec.nbins), 0.0);
+        ComputedSample result;
+        result.nominal.assign(static_cast<std::size_t>(spec.nbins), 0.0);
+        result.sumw2.assign(static_cast<std::size_t>(spec.nbins), 0.0);
 
         double central_weight = 1.0;
         if (!tree->GetBranch(kCentralWeightBranch))
@@ -282,27 +283,27 @@ namespace syst::detail
 
         if (options.enable_genie_knobs)
         {
-            out.genie_knobs = make_genie_knob_pairs(tree);
-            if (out.genie_knobs)
-                bind_genie_knob_pairs(tree, *out.genie_knobs);
+            result.genie_knobs = make_genie_knob_pairs(tree);
+            if (result.genie_knobs)
+                bind_genie_knob_pairs(tree, *result.genie_knobs);
         }
         if (options.enable_genie)
         {
-            out.genie = make_universe_family(tree, "weightsGenie");
-            if (out.genie)
-                bind_universe_family(tree, *out.genie);
+            result.genie = make_universe_family(tree, "weightsGenie");
+            if (result.genie)
+                bind_universe_family(tree, *result.genie);
         }
         if (options.enable_flux)
         {
-            out.flux = make_flux_family(tree);
-            if (out.flux)
-                bind_universe_family(tree, *out.flux);
+            result.flux = make_flux_family(tree);
+            if (result.flux)
+                bind_universe_family(tree, *result.flux);
         }
         if (options.enable_reint)
         {
-            out.reint = make_universe_family(tree, "weightsReint");
-            if (out.reint)
-                bind_universe_family(tree, *out.reint);
+            result.reint = make_universe_family(tree, "weightsReint");
+            if (result.reint)
+                bind_universe_family(tree, *result.reint);
         }
 
         const Long64_t n_entries = tree->GetEntries();
@@ -318,19 +319,19 @@ namespace syst::detail
             if (bin < 0)
                 continue;
 
-            out.nominal[static_cast<std::size_t>(bin)] += central_weight;
-            out.sumw2[static_cast<std::size_t>(bin)] += central_weight * central_weight;
+            result.nominal[static_cast<std::size_t>(bin)] += central_weight;
+            result.sumw2[static_cast<std::size_t>(bin)] += central_weight * central_weight;
 
-            if (out.genie_knobs)
-                out.genie_knobs->accumulate(bin, spec.nbins, central_weight);
-            if (out.genie)
-                out.genie->accumulate(bin, spec.nbins, central_weight);
-            if (out.flux)
-                out.flux->accumulate(bin, spec.nbins, central_weight);
-            if (out.reint)
-                out.reint->accumulate(bin, spec.nbins, central_weight);
+            if (result.genie_knobs)
+                result.genie_knobs->accumulate(bin, spec.nbins, central_weight);
+            if (result.genie)
+                result.genie->accumulate(bin, spec.nbins, central_weight);
+            if (result.flux)
+                result.flux->accumulate(bin, spec.nbins, central_weight);
+            if (result.reint)
+                result.reint->accumulate(bin, spec.nbins, central_weight);
         }
 
-        return out;
+        return result;
     }
 }

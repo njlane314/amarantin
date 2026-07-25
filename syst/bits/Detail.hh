@@ -29,7 +29,7 @@ namespace syst::detail
     struct UniverseAccumulator
     {
         std::string branch_name;
-        std::vector<unsigned short> *raw = nullptr;
+        std::vector<unsigned short> *universe_weights = nullptr;
         std::size_t n_universes = 0;
         std::vector<double> histograms; // row-major: bin-major, universe-minor
 
@@ -42,8 +42,8 @@ namespace syst::detail
         std::string up_branch_name;
         std::string down_branch_name;
         std::vector<std::string> source_labels;
-        std::vector<unsigned short> *raw_up = nullptr;
-        std::vector<unsigned short> *raw_down = nullptr;
+        std::vector<unsigned short> *up_weights = nullptr;
+        std::vector<unsigned short> *down_weights = nullptr;
         std::vector<double> shift_vectors; // row-major: source-major, bin-minor
 
         void ensure_size(int nbins);
