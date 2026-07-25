@@ -33,6 +33,14 @@ namespace
         throw std::runtime_error("mk_eventlist: invalid arguments");
     }
 
+    bool looks_like_option_token(const char *arg)
+    {
+        if (!arg)
+            return true;
+        const std::string value = arg;
+        return value == "-h" || value == "--help" || value.rfind("--", 0) == 0;
+    }
+
     CliOptions parse_args(int argc, char **argv)
     {
         if (argc < 3)
@@ -51,14 +59,14 @@ namespace
             }
             if (arg == "--preset")
             {
-                if (++i >= argc) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
                 options.selection_name = argv[i] ? argv[i] : "";
                 options.explicit_selection = false;
                 continue;
             }
             if (arg == "--selection")
             {
-                if (++i >= argc) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
                 options.selection_expr = argv[i] ? argv[i] : "";
                 options.selection_name = "raw";
                 options.explicit_selection = true;
@@ -66,13 +74,13 @@ namespace
             }
             if (arg == "--event-tree")
             {
-                if (++i >= argc) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
                 options.event_tree_name = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--subrun-tree")
             {
-                if (++i >= argc) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
                 options.subrun_tree_name = argv[i] ? argv[i] : "";
                 continue;
             }

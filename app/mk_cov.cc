@@ -92,6 +92,14 @@ namespace
         throw std::runtime_error("mk_cov: invalid arguments");
     }
 
+    bool looks_like_option_token(const char *arg)
+    {
+        if (!arg)
+            return true;
+        const std::string value = arg;
+        return value == "-h" || value == "--help" || value.rfind("--", 0) == 0;
+    }
+
     CliOptions parse_args(int argc, char **argv)
     {
         CliOptions options;
@@ -107,28 +115,28 @@ namespace
             }
             if (arg == "--cache-key")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.cache_key = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--manifest")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.manifest_path = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--matrix-name")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.matrix_name = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--nominal-name")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.nominal_name = argv[i] ? argv[i] : "";
                 continue;

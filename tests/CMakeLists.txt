@@ -41,6 +41,14 @@ set_tests_properties(app_cli_help_source_check PROPERTIES
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+add_test(NAME app_cli_option_value_source_check
+  COMMAND bash "${CMAKE_SOURCE_DIR}/tests/app_cli_option_value_source_check.sh"
+)
+
+set_tests_properties(app_cli_option_value_source_check PROPERTIES
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 if(TARGET Ana)
   add_executable(signal_definition_contract_check signal_definition_contract_check.cc)
 

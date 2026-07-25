@@ -52,6 +52,14 @@ namespace
         throw std::runtime_error("mk_dataset: invalid arguments");
     }
 
+    bool looks_like_option_token(const char *arg)
+    {
+        if (!arg)
+            return true;
+        const std::string value = arg;
+        return value == "-h" || value == "--help" || value.rfind("--", 0) == 0;
+    }
+
     SampleArg parse_sample_arg(const std::string &arg)
     {
         const std::string::size_type pos = arg.find('=');
@@ -393,42 +401,42 @@ namespace
             }
             if (arg == "--defs")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.defs_path = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--campaign")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.campaign = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--manifest")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.manifest_path = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--run")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.run = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--beam")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.beam = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--polarity")
             {
-                if (++i >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw();
                 options.polarity = argv[i] ? argv[i] : "";
                 continue;

@@ -104,6 +104,14 @@ namespace
         throw std::runtime_error("mk_dist: invalid arguments");
     }
 
+    bool looks_like_option_token(const char *arg)
+    {
+        if (!arg)
+            return true;
+        const std::string value = arg;
+        return value == "-h" || value == "--help" || value.rfind("--", 0) == 0;
+    }
+
     std::vector<syst::CacheRequest> read_dist_manifest(
         const std::string &path,
         const std::vector<std::string> &default_detector_keys)
@@ -195,26 +203,26 @@ namespace
             }
             if (arg == "--manifest")
             {
-                if (++i >= argc) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
                 options.manifest_path = argv[i] ? argv[i] : "";
                 options.use_manifest = true;
                 continue;
             }
             if (arg == "--selection")
             {
-                if (++i >= argc) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
                 options.selection_expr = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--detvars")
             {
-                if (++i >= argc) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
                 options.detector_sample_keys = split_csv(argv[i] ? argv[i] : "");
                 continue;
             }
             if (arg == "--fine-nbins")
             {
-                if (++i >= argc) print_usage_and_throw();
+                if (++i >= argc || looks_like_option_token(argv[i])) print_usage_and_throw();
                 options.fine_nbins = std::stoi(argv[i] ? argv[i] : "");
                 continue;
             }

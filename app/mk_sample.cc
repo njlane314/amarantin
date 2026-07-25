@@ -37,6 +37,14 @@ namespace
         throw std::runtime_error("mk_sample: invalid arguments");
     }
 
+    bool looks_like_option_token(const char *arg)
+    {
+        if (!arg)
+            return true;
+        const std::string value = arg;
+        return value == "-h" || value == "--help" || value.rfind("--", 0) == 0;
+    }
+
     std::string trim_copy(const std::string &input)
     {
         const std::string::size_type first = input.find_first_not_of(" \t\r\n");
@@ -175,23 +183,23 @@ namespace
             }
             if (arg == "--run-db")
             {
-                if (i + 1 >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     throw std::runtime_error("mk_sample: --run-db requires a path");
-                options.run_db_path = argv[++i];
+                options.run_db_path = argv[i];
                 continue;
             }
             if (arg == "--sample")
             {
-                if (i + 1 >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     throw std::runtime_error("mk_sample: --sample requires a name");
-                options.sample = argv[++i] ? argv[i] : "";
+                options.sample = argv[i] ? argv[i] : "";
                 continue;
             }
             if (arg == "--manifest")
             {
-                if (i + 1 >= argc)
+                if (++i >= argc || looks_like_option_token(argv[i]))
                     throw std::runtime_error("mk_sample: --manifest requires a path");
-                options.manifest_path = argv[++i] ? argv[i] : "";
+                options.manifest_path = argv[i] ? argv[i] : "";
                 continue;
             }
             positional.push_back(arg);
