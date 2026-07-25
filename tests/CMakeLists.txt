@@ -25,6 +25,14 @@ set_tests_properties(overnight_minimality_pass_wrapper_check PROPERTIES
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+add_test(NAME mklist_argument_check
+  COMMAND bash "${CMAKE_SOURCE_DIR}/tests/mklist_argument_check.sh"
+)
+
+set_tests_properties(mklist_argument_check PROPERTIES
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 if(TARGET Ana)
   add_executable(signal_definition_contract_check signal_definition_contract_check.cc)
 

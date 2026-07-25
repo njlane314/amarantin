@@ -16,6 +16,15 @@ Usage:
 EOF
 }
 
+require_option_value() {
+    local flag="$1"
+    if [[ $# -lt 2 ]]; then
+        echo "mklist: missing value for ${flag}" >&2
+        usage
+        exit 2
+    fi
+}
+
 write_if_changed() {
     local tmp="$1"
     local target="$2"
@@ -138,22 +147,27 @@ write_samdef_list() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dir)
+            require_option_value "$@"
             dir="$2"
             shift 2
             ;;
         --pat)
+            require_option_value "$@"
             pat="$2"
             shift 2
             ;;
         --out)
+            require_option_value "$@"
             out="$2"
             shift 2
             ;;
         --list)
+            require_option_value "$@"
             source_list="$2"
             shift 2
             ;;
         --samdef)
+            require_option_value "$@"
             samdef="$2"
             shift 2
             ;;
