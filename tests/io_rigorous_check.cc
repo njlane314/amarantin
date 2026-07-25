@@ -700,7 +700,7 @@ namespace
         DistributionIO::Spectrum spectrum = make_valid_spectrum();
         {
             DistributionIO dist(dist_path.string(), DistributionIO::Mode::kUpdate);
-            dist.write_metadata(DistributionIO::Metadata{"beam.eventlist.root", 2});
+            dist.write_metadata(DistributionIO::Metadata{"beam.eventlist.root", "", 2});
             dist.write("beam", "shape", spectrum);
             dist.flush();
         }
