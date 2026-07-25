@@ -148,11 +148,16 @@ prefixed_literal() {
 
 to_cpp_literal() {
   local arg=$1
+  local literal
+  local prefixed_status
 
-  if prefixed_literal "${arg}"; then
+  if literal=$(prefixed_literal "${arg}"); then
+    printf '%s' "${literal}"
     return 0
+  else
+    prefixed_status=$?
   fi
-  local prefixed_status=$?
+
   if [[ ${prefixed_status} -eq 2 ]]; then
     return 2
   fi
@@ -169,27 +174,34 @@ to_cpp_literal() {
 
 build_invocation() {
   local path=$1
-  local name=$2
-  shift 2
+  shift
 
   if [[ $# -eq 0 ]]; then
-    printf '%s' "${path}"
+    invocation=${path}
     return 0
   fi
 
   local -a raw_args=("$@")
   local -a args=()
   local raw_arg
+  local literal
+  local status
   for raw_arg in "${raw_args[@]}"; do
-    args+=("$(to_cpp_literal "${raw_arg}")")
+    if literal=$(to_cpp_literal "${raw_arg}"); then
+      args+=("${literal}")
+    else
+      status=$?
+      return "${status}"
+    fi
   done
 
   local joined=
   printf -v joined '%s, ' "${args[@]}"
   joined=${joined%, }
 
-  printf '%s(%s)' "${path}" "${joined}"
+  printf -v invocation '%s(%s)' "${path}" "${joined}"
 }
 
-invocation=$(build_invocation "${macro_path}" "${macro_name}" "$@")
+invocation=
+build_invocation "${macro_path}" "$@"
 exec root -l -q "${ROOTLOGON_PATH}" "${invocation}"
