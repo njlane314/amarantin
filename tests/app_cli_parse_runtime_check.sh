@@ -92,6 +92,17 @@ capture_failure "${dist_manifest_log}" \
 grep -Fx "mk_dist: invalid integer for nbins at line 1 in ${dist_manifest}: 10junk" \
   "${dist_manifest_log}" >/dev/null
 
+dist_manifest_conflict="${TMP_DIR}/ok.requests.manifest"
+cat > "${dist_manifest_conflict}" <<'EOF'
+beam score 10 0 1
+EOF
+dist_manifest_conflict_log="${TMP_DIR}/mk_dist_manifest_conflict.log"
+capture_failure "${dist_manifest_conflict_log}" \
+  "${BUILD_DIR}/bin/mk_dist" --manifest "${dist_manifest_conflict}" --selection "sel != 0" out.root in.root
+grep -F "usage: mk_dist " "${dist_manifest_conflict_log}" >/dev/null
+grep -Fx "mk_dist: --selection is not supported with --manifest" \
+  "${dist_manifest_conflict_log}" >/dev/null
+
 cov_log="${TMP_DIR}/mk_cov.log"
 capture_failure "${cov_log}" "${BUILD_DIR}/bin/mk_cov" --matrix-name
 grep -F "usage: mk_cov " "${cov_log}" >/dev/null

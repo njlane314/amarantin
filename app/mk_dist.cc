@@ -114,6 +114,12 @@ namespace
                                  " requires " + description);
     }
 
+    [[noreturn]] void print_usage_and_throw_manifest_selection_conflict()
+    {
+        print_usage(std::cerr);
+        throw std::runtime_error("mk_dist: --selection is not supported with --manifest");
+    }
+
     void print_command_error(const std::string &message)
     {
         static const std::string prefix = "mk_dist: ";
@@ -235,6 +241,8 @@ namespace
     CliOptions parse_args(int argc, char **argv)
     {
         CliOptions options;
+        bool saw_manifest = false;
+        bool saw_selection = false;
 
         int i = 1;
         for (; i < argc; ++i)
@@ -249,15 +257,21 @@ namespace
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw_missing_value("--manifest", "a path");
+                if (saw_selection)
+                    print_usage_and_throw_manifest_selection_conflict();
                 options.manifest_path = argv[i] ? argv[i] : "";
                 options.use_manifest = true;
+                saw_manifest = true;
                 continue;
             }
             if (arg == "--selection")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw_missing_value("--selection", "an expression");
+                if (saw_manifest)
+                    print_usage_and_throw_manifest_selection_conflict();
                 options.selection_expr = argv[i] ? argv[i] : "";
+                saw_selection = true;
                 continue;
             }
             if (arg == "--detvars")
