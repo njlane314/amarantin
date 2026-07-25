@@ -14,27 +14,22 @@ require_help_handler() {
 
 require_help_success_exit() {
   local path=$1
-  if grep -F 'if (std::string(e.what()).empty())' "${path}" >/dev/null; then
-    return
-  fi
-  if grep -F "return (*e.what() == '\\0') ? 0 : 1;" "${path}" >/dev/null; then
-    return
-  fi
-  if grep -F 'return (*e.what() == '\''\0'\'') ? 0 : 1;' "${path}" >/dev/null; then
-    return
-  fi
-  if grep -F "if (*e.what() != '\\0')" "${path}" >/dev/null &&
-     grep -F "return (*e.what() == '\\0') ? 0 : 1;" "${path}" >/dev/null; then
-    return
-  fi
-  if grep -F "if (*e.what() != '\0')" "${path}" >/dev/null &&
-     grep -F "return (*e.what() == '\0') ? 0 : 1;" "${path}" >/dev/null; then
-    return
-  fi
-  {
-    printf 'app_cli_help_source_check: missing empty-help success exit in %s\n' "${path}" >&2
+  if ! grep -F 'struct HelpRequested final {};' "${path}" >/dev/null; then
+    printf 'app_cli_help_source_check: missing explicit HelpRequested marker in %s\n' "${path}" >&2
     exit 1
-  }
+  fi
+  if ! grep -F 'throw HelpRequested{};' "${path}" >/dev/null; then
+    printf 'app_cli_help_source_check: missing explicit help throw in %s\n' "${path}" >&2
+    exit 1
+  fi
+  if ! grep -F 'catch (const HelpRequested &)' "${path}" >/dev/null; then
+    printf 'app_cli_help_source_check: missing HelpRequested success catch in %s\n' "${path}" >&2
+    exit 1
+  fi
+  if grep -F 'throw std::runtime_error("")' "${path}" >/dev/null; then
+    printf 'app_cli_help_source_check: stale empty runtime_error help path in %s\n' "${path}" >&2
+    exit 1
+  fi
 }
 
 require_help_handler "${ROOT_DIR}/app/mk_sample.cc"

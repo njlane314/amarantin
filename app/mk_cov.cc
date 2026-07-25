@@ -17,6 +17,8 @@
 
 namespace
 {
+    struct HelpRequested final {};
+
     struct CliOptions
     {
         std::string input_path;
@@ -119,7 +121,7 @@ namespace
             if (arg == "-h" || arg == "--help")
             {
                 print_usage(std::cout);
-                throw std::runtime_error("");
+                throw HelpRequested{};
             }
             if (arg == "--cache-key")
             {
@@ -1195,10 +1197,13 @@ int main(int argc, char **argv)
 
         return 0;
     }
+    catch (const HelpRequested &)
+    {
+        return 0;
+    }
     catch (const std::exception &e)
     {
-        if (*e.what() != '\0')
-            std::cerr << e.what() << "\n";
-        return (*e.what() == '\0') ? 0 : 1;
+        std::cerr << e.what() << "\n";
+        return 1;
     }
 }

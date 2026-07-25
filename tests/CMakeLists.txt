@@ -54,6 +54,16 @@ if(TARGET mk_sample AND
    TARGET mk_eventlist AND
    TARGET mk_dist AND
    TARGET mk_cov)
+  add_test(NAME app_cli_help_runtime_check
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "AMARANTIN_BUILD_DIR=${CMAKE_BINARY_DIR}"
+      bash "${CMAKE_SOURCE_DIR}/tests/app_cli_help_runtime_check.sh"
+  )
+
+  set_tests_properties(app_cli_help_runtime_check PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  )
+
   add_test(NAME app_cli_parse_runtime_check
     COMMAND "${CMAKE_COMMAND}" -E env
       "AMARANTIN_BUILD_DIR=${CMAKE_BINARY_DIR}"

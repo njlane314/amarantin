@@ -13,6 +13,8 @@
 
 namespace
 {
+    struct HelpRequested final {};
+
     struct CliOptions
     {
         std::string output_path;
@@ -252,7 +254,7 @@ namespace
             if (arg == "-h" || arg == "--help")
             {
                 print_usage(std::cout);
-                throw std::runtime_error("");
+                throw HelpRequested{};
             }
             if (arg == "--manifest")
             {
@@ -389,10 +391,12 @@ int main(int argc, char **argv)
         }
         return 0;
     }
+    catch (const HelpRequested &)
+    {
+        return 0;
+    }
     catch (const std::exception &e)
     {
-        if (std::string(e.what()).empty())
-            return 0;
         print_command_error(e.what());
         return 1;
     }
