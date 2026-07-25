@@ -43,6 +43,12 @@ namespace
                                  " requires " + description);
     }
 
+    [[noreturn]] void print_usage_and_throw_conflicting_selection_modes()
+    {
+        print_usage(std::cerr);
+        throw std::runtime_error("mk_eventlist: --preset and --selection are mutually exclusive");
+    }
+
     void print_command_error(const std::string &message)
     {
         static const std::string prefix = "mk_eventlist: ";
@@ -65,6 +71,8 @@ namespace
     CliOptions parse_args(int argc, char **argv)
     {
         CliOptions options;
+        bool saw_preset = false;
+        bool saw_selection = false;
 
         int i = 1;
         for (; i < argc; ++i)
@@ -79,17 +87,23 @@ namespace
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw_missing_value("--preset", "a name");
+                if (saw_selection)
+                    print_usage_and_throw_conflicting_selection_modes();
                 options.selection_name = argv[i] ? argv[i] : "";
                 options.explicit_selection = false;
+                saw_preset = true;
                 continue;
             }
             if (arg == "--selection")
             {
                 if (++i >= argc || looks_like_option_token(argv[i]))
                     print_usage_and_throw_missing_value("--selection", "an expression");
+                if (saw_preset)
+                    print_usage_and_throw_conflicting_selection_modes();
                 options.selection_expr = argv[i] ? argv[i] : "";
                 options.selection_name = "raw";
                 options.explicit_selection = true;
+                saw_selection = true;
                 continue;
             }
             if (arg == "--event-tree")

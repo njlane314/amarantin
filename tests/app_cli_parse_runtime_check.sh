@@ -70,6 +70,13 @@ capture_failure "${eventlist_log}" "${BUILD_DIR}/bin/mk_eventlist" --selection
 grep -F "usage: mk_eventlist " "${eventlist_log}" >/dev/null
 grep -Fx "mk_eventlist: --selection requires an expression" "${eventlist_log}" >/dev/null
 
+eventlist_conflict_log="${TMP_DIR}/mk_eventlist_conflict.log"
+capture_failure "${eventlist_conflict_log}" \
+  "${BUILD_DIR}/bin/mk_eventlist" --preset muon --selection "x != 0" out.root in.root
+grep -F "usage: mk_eventlist " "${eventlist_conflict_log}" >/dev/null
+grep -Fx "mk_eventlist: --preset and --selection are mutually exclusive" \
+  "${eventlist_conflict_log}" >/dev/null
+
 dist_log="${TMP_DIR}/mk_dist.log"
 capture_failure "${dist_log}" \
   "${BUILD_DIR}/bin/mk_dist" --fine-nbins nope out.root in.root beam x 1 0 1
