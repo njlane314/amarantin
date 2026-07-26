@@ -221,6 +221,14 @@ The current branch mapping is:
 - flux: prefer `weightsPPFX`, otherwise fall back to `weightsFlux`
 - reinteraction: `weightsReint`
 
+The universe and paired-knob branches are packed `vector<unsigned short>`
+payloads whose elements are decoded by dividing by `1000`. Their persisted
+element type must match exactly: ROOT collection conversion is rejected because
+it changes that encoding. Scalar central-weight conversions remain accepted
+when ROOT reports a non-negative binding status. All calculation-owned branch
+addresses are released on exit, and binding or entry-read failures are hard
+errors rather than partial systematic results.
+
 For each enabled family, syst/:
 
 - reads the branch of packed universe weights from the nominal tree

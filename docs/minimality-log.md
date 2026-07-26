@@ -4132,3 +4132,65 @@
 ## Remaining hotspots
 - broader repository diagnostics remain ongoing; event-list construction now
   rejects incompatible branch bindings and negative ROOT entry reads
+
+---
+
+## Current milestone
+- status: done
+- subsystem: checked systematics calculation branch bindings and entry reads
+- design rule from `DESIGN.md`: centralize repeated ROOT checks only where one
+  operation removes silent failure paths
+
+## What changed
+- added scalar, object, and branch-address lifetime regressions
+- proved that returned universe accumulators retain a dangling ROOT-owned
+  payload pointer even after their branch address is reset
+- replaced all raw calculation branch bindings with one checked scope object
+- made negative selected-tree entry reads hard failures with tree, entry, and
+  ROOT status context
+- kept packed payload pointers local to the read loop and removed them from
+  returned accumulator state
+
+## Why this is simpler
+- one checked binding operation replaces every unchecked systematics
+  branch-address call
+- one scope object makes branch-address cleanup independent of exit path
+- returned accumulator data now contains only branch identity and accumulated
+  numeric state, not borrowed ROOT payloads
+
+## Verification
+- an `Int_t __w__` branch logs ROOT's type mismatch but published
+  `compute_sample(...)` returns without throwing
+- ROOT accepts `vector<float> weightsGenie` through collection conversion even
+  though the calculation applies packed-unsigned-short decoding
+- successful calculation leaves central and universe branch addresses set
+- focused builds pass with repository warnings enabled
+- final post-deletion `systematics_rigorous_check` passes in 2.28 seconds
+- the exact-final warning-enabled Docker build passes
+- all 18 configured CTest tests pass in 203.82 seconds
+- final full-suite `testroot_pipeline_smoke` passes in 68.50 seconds
+- final full-suite `systematics_rigorous_check` passes in 1.99 seconds
+- final full-suite `macro_analysis_smoke` passes in 32.38 seconds
+- required shell syntax checks and `git diff --check` pass
+- final code, naming, deletion, ownership, diagnostics, and boundary review finds
+  no blocking issue
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 2 one-call accumulator size helpers
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - systematics implementation and internal state: `+139 / -55`
+  - rigorous regression: `+88 / -0`
+  - analysis and user documentation: `+15 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- accept ROOT-compatible scalar conversions and reject negative statuses
+- require an exact match for packed weight vectors because collection conversion
+  changes the `/1000` decoding semantics
+
+## Remaining hotspots
+- broader repository diagnostics remain ongoing; systematics calculation now
+  rejects semantically incompatible inputs and returns no borrowed ROOT state

@@ -187,6 +187,13 @@ style.
     branch is absent
   - `ppfx_cv` for NuMI when present
   - `RootinoFix` when present
+- systematics calculation input contract:
+  - `__w__` must bind to the calculation scalar with a non-negative ROOT status
+  - packed universe and paired-knob branches must persist as exact
+    `vector<unsigned short>` payloads because calculation decodes each element
+    by dividing by `1000`
+  - incompatible bindings and negative selected-tree reads are hard failures
+    before covariance inputs are returned
 - mandatory detector / weight families:
   - detector variations from alternate samples / detvars
   - `weightsGenie`

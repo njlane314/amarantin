@@ -6863,3 +6863,176 @@ event-list transform.
 - stop after incompatible homogeneous bindings and negative reads fail clearly
   while all current valid fixtures pass
 - stop before replacing `TChain` or redesigning source ntuple types
+
+## ExecPlan Addendum: Check Systematics Branch Bindings
+
+### 1. Objective
+Prevent `syst::detail::compute_sample(...)` from silently using default nominal
+weights or dropping requested universe families when selected-tree branches
+cannot bind to the C++ types expected by the systematics calculation.
+
+### 2. Constraints
+- Preserve valid scalar ROOT branch conversions with non-negative binding
+  statuses.
+- Require exact `vector<unsigned short>` matches for packed universe and paired
+  knob weights; collection conversion changes the `/1000` decoding semantics.
+- Reject negative binding statuses for the central weight, universe families,
+  and paired GENIE knob branches.
+- Treat negative selected-tree `GetEntry(...)` results as hard failures rather
+  than returning partial covariance inputs.
+- Release calculation-owned branch addresses on every return and exception so
+  later evaluations cannot write through dangling local addresses.
+- Keep ROOT-owned entry payload pointers local to `compute_sample(...)`; do not
+  return borrowed pointers inside covariance accumulator state.
+- Preserve public headers, cache schema, fit math, and command shapes.
+- Keep calculation policy in `syst/`; do not move it into `io/`.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep `syst/` focused on systematic calculations and cache construction
+- prefer direct namespace functions and flat control flow
+- add one helper only when it removes repeated unchecked boundary handling
+
+### 4. System map
+- `syst/ReweightFill.cc`
+- `syst/bits/Detail.hh`
+- `tests/systematics_rigorous_check.cc`
+- `.agent/analysis/ccnumu_hyperon.md`
+- `syst/README`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### repeated boundary handling
+- route every selected-tree binding through one checked operation
+
+#### silent fallback removal
+- replace ROOT stderr plus default/null values with contextual exceptions
+
+#### read-loop sharpening
+- reject negative entry reads before formulas or accumulators consume stale data
+
+#### lifetime ownership
+- use one scope guard to release calculation-owned branch addresses on every
+  exit path
+
+### 6. Milestones
+
+#### Milestone A: Prove incompatible persisted types are accepted
+- status: done
+- hypothesis: an `Int_t __w__` branch fails scalar binding while a
+  `vector<float> weightsGenie` branch receives ROOT collection conversion;
+  current code accepts both instead of enforcing calculation semantics
+- files / symbols touched:
+  - `tests/systematics_rigorous_check.cc`
+- expected behavior risk: none; regressions only
+- verification commands:
+  - build `systematics_rigorous_check` against published `Syst`
+  - run `systematics_rigorous_check`
+- acceptance criteria:
+  - scalar and object mismatch cases both require an exception naming the
+    affected branch
+  - at least one regression fails against current `main`
+- verification results:
+  - the scalar regression builds against published `Syst`; ROOT reports a
+    `Double_t` / `Int_t` mismatch for `__w__`, but `compute_sample(...)`
+    returns and the regression fails
+  - the object regression builds against published `Syst`; ROOT accepts
+    `vector<float> weightsGenie` through collection conversion even though the
+    calculation then applies packed-unsigned-short decoding, and the regression
+    fails because no exception is raised
+  - a successful calculation leaves the `__w__` and universe branch addresses
+    set; the ownership regression fails against published `Syst`
+
+#### Milestone B: Check every calculation binding and entry read
+- status: done
+- hypothesis: one checked binding operation rejects unusable persisted types
+  and one lifetime guard clears borrowed addresses without changing valid
+  covariance results
+- files / symbols touched:
+  - `syst/ReweightFill.cc`
+  - analysis-facing documentation
+- expected behavior risk: medium; valid packed weight vectors must remain bound
+- verification commands:
+  - build `Syst` and `systematics_rigorous_check`
+  - run `systematics_rigorous_check`
+  - run the systematics and real-pipeline smoke tests
+- acceptance criteria:
+  - every raw `SetBranchAddress(...)` call in `ReweightFill.cc` is checked
+  - diagnostics identify the affected branch and ROOT status
+  - negative entry reads identify the tree and entry
+  - calculation-owned branch addresses are reset after success and failure
+  - existing nominal and covariance math remains unchanged
+- verification results:
+  - every raw `SetBranchAddress(...)` call is routed through one checked,
+    scope-owned binding object
+  - scalar binding errors report tree, branch, and ROOT status context
+  - packed vector collection conversions are rejected while exact persisted
+    vectors retain current covariance output
+  - successful and exceptional calculations release every branch address they
+    set
+  - borrowed ROOT payload pointers were removed from returned accumulator state
+    and remain local to the entry loop
+  - focused `Syst` and `systematics_rigorous_check` builds pass with repository
+    warnings enabled
+  - final post-deletion `systematics_rigorous_check` passes in 2.28 seconds
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification catches cache, CLI, macro, and downstream plot
+  regressions
+- files / symbols touched:
+  - all files above
+- expected behavior risk: medium
+- verification commands:
+  - full warning-enabled Docker build
+  - complete configured CTest suite
+  - required shell checks and `git diff --check`
+- acceptance criteria:
+  - all configured tests pass
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - the exact-final warning-enabled Docker build passes
+  - all 18 configured CTest tests pass in 203.82 seconds
+  - final `testroot_pipeline_smoke` passes in 68.50 seconds
+  - final `systematics_rigorous_check` passes in 1.99 seconds
+  - final `macro_analysis_smoke` passes in 32.38 seconds
+  - required shell syntax checks and `git diff --check` pass
+  - source review finds one `SetBranchAddress(...)` operation inside the
+    checked scope object and no returned borrowed payload fields
+  - the final naming, deletion, ownership, diagnostics, and module-boundary
+    review finds no blocking issue
+
+### 7. Public-surface check
+- compatibility impact: no signature, cache-schema, or CLI change; malformed
+  persisted calculation inputs become hard errors
+- migration note or explicit non-goal: producers must persist a compatible
+  central scalar and exact packed weight vectors; application-side coercion is
+  out of scope
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 2 one-call accumulator size helpers
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - systematics implementation and internal state: `+139 / -55`
+  - rigorous regression: `+88 / -0`
+  - analysis and user documentation: `+15 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- accept non-negative scalar ROOT conversion statuses and reject negative errors
+- reject positive collection-conversion statuses for packed weight vectors
+  because their element type is part of the encoding contract
+- validate requested calculation bindings in `syst/`, where their expected C++
+  types and semantics are owned
+
+### 10. Stop conditions
+- stop after incompatible scalar/object bindings, dangling addresses, and
+  negative reads fail clearly while all valid fixtures preserve their current
+  covariance output
+- stop before changing universe decoding, covariance normalization, or cache
+  persistence

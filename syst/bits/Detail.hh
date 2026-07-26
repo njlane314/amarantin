@@ -29,12 +29,13 @@ namespace syst::detail
     struct UniverseAccumulator
     {
         std::string branch_name;
-        std::vector<unsigned short> *universe_weights = nullptr;
         std::size_t n_universes = 0;
         std::vector<double> histograms; // row-major: bin-major, universe-minor
 
-        void ensure_size(int nbins);
-        void accumulate(int bin, int nbins, double base_weight);
+        void accumulate(int bin,
+                        int nbins,
+                        double base_weight,
+                        const std::vector<unsigned short> *universe_weights);
     };
 
     struct PairedShiftAccumulator
@@ -42,12 +43,13 @@ namespace syst::detail
         std::string up_branch_name;
         std::string down_branch_name;
         std::vector<std::string> source_labels;
-        std::vector<unsigned short> *up_weights = nullptr;
-        std::vector<unsigned short> *down_weights = nullptr;
         std::vector<double> shift_vectors; // row-major: source-major, bin-minor
 
-        void ensure_size(int nbins);
-        void accumulate(int bin, int nbins, double base_weight);
+        void accumulate(int bin,
+                        int nbins,
+                        double base_weight,
+                        const std::vector<unsigned short> *up_weights,
+                        const std::vector<unsigned short> *down_weights);
     };
 
     struct ComputedSample

@@ -1,10 +1,10 @@
 #include "bits/Detail.hh"
 
-#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "TTree.h"
 #include "TTreeFormula.h"
@@ -12,6 +12,62 @@
 namespace
 {
     constexpr const char *kCentralWeightBranch = "__w__";
+
+    class CheckedBranchBindings
+    {
+    public:
+        explicit CheckedBranchBindings(TTree &tree) : tree_(tree) {}
+
+        ~CheckedBranchBindings()
+        {
+            for (TBranch *branch : bound_branches_)
+                tree_.ResetBranchAddress(branch);
+        }
+
+        CheckedBranchBindings(const CheckedBranchBindings &) = delete;
+        CheckedBranchBindings &operator=(const CheckedBranchBindings &) = delete;
+
+        template <typename Address>
+        int bind_branch(const std::string &branch_name, Address address)
+        {
+            TBranch *bound_branch = nullptr;
+            const int binding_status =
+                tree_.SetBranchAddress(branch_name.c_str(), address, &bound_branch);
+            if (binding_status < 0)
+            {
+                throw std::runtime_error(
+                    "syst: tree " + std::string(tree_.GetName()) + ", branch " + branch_name +
+                    " has an incompatible persisted type for calculation binding (ROOT status " +
+                    std::to_string(binding_status) + ")");
+            }
+            if (!bound_branch)
+            {
+                throw std::runtime_error(
+                    "syst: ROOT did not return the bound branch " + branch_name +
+                    " from tree " + tree_.GetName());
+            }
+
+            bound_branches_.push_back(bound_branch);
+            return binding_status;
+        }
+
+        template <typename Address>
+        void bind_exact_branch(const std::string &branch_name, Address address)
+        {
+            const int binding_status = bind_branch(branch_name, address);
+            if (binding_status != TTree::kMatch)
+            {
+                throw std::runtime_error(
+                    "syst: tree " + std::string(tree_.GetName()) + ", branch " + branch_name +
+                    " must exactly match its packed calculation type (ROOT status " +
+                    std::to_string(binding_status) + ")");
+            }
+        }
+
+    private:
+        TTree &tree_;
+        std::vector<TBranch *> bound_branches_;
+    };
 
     const std::vector<std::string> &genie_knob_source_labels()
     {
@@ -126,14 +182,13 @@ namespace
         return accumulator;
     }
 
-    void bind_universe_family(TTree *tree,
-                              syst::detail::UniverseAccumulator &accumulator)
+    void bind_universe_weights(CheckedBranchBindings &branch_bindings,
+                               const syst::detail::UniverseAccumulator &accumulator,
+                               std::vector<unsigned short> *&universe_weights)
     {
-        if (!tree || accumulator.branch_name.empty())
-            return;
-
-        accumulator.universe_weights = nullptr;
-        tree->SetBranchAddress(accumulator.branch_name.c_str(), &accumulator.universe_weights);
+        universe_weights = nullptr;
+        branch_bindings.bind_exact_branch(accumulator.branch_name,
+                                          &universe_weights);
     }
 
     std::optional<syst::detail::UniverseAccumulator>
@@ -166,22 +221,26 @@ namespace
         return knob_pairs;
     }
 
-    void bind_genie_knob_pairs(TTree *tree,
-                               syst::detail::PairedShiftAccumulator &knob_pairs)
+    void bind_genie_knob_weights(CheckedBranchBindings &branch_bindings,
+                                 const syst::detail::PairedShiftAccumulator &knob_pairs,
+                                 std::vector<unsigned short> *&up_weights,
+                                 std::vector<unsigned short> *&down_weights)
     {
-        if (!tree)
-            return;
-
-        knob_pairs.up_weights = nullptr;
-        knob_pairs.down_weights = nullptr;
-        tree->SetBranchAddress(knob_pairs.up_branch_name.c_str(), &knob_pairs.up_weights);
-        tree->SetBranchAddress(knob_pairs.down_branch_name.c_str(), &knob_pairs.down_weights);
+        up_weights = nullptr;
+        down_weights = nullptr;
+        branch_bindings.bind_exact_branch(knob_pairs.up_branch_name, &up_weights);
+        branch_bindings.bind_exact_branch(knob_pairs.down_branch_name,
+                                          &down_weights);
     }
 }
 
 namespace syst::detail
 {
-    void UniverseAccumulator::ensure_size(int nbins)
+    void UniverseAccumulator::accumulate(
+        int bin,
+        int nbins,
+        double base_weight,
+        const std::vector<unsigned short> *universe_weights)
     {
         if (!universe_weights)
             return;
@@ -190,12 +249,7 @@ namespace syst::detail
             n_universes = universe_weights->size();
             histograms.assign(static_cast<std::size_t>(nbins) * n_universes, 0.0);
         }
-    }
-
-    void UniverseAccumulator::accumulate(int bin, int nbins, double base_weight)
-    {
-        ensure_size(nbins);
-        if (n_universes == 0 || !universe_weights)
+        if (n_universes == 0)
             return;
         if (universe_weights->size() != n_universes)
         {
@@ -205,23 +259,17 @@ namespace syst::detail
         }
 
         const std::size_t offset = static_cast<std::size_t>(bin) * n_universes;
-        const std::size_t n = std::min(n_universes, universe_weights->size());
-        for (std::size_t universe = 0; universe < n; ++universe)
+        for (std::size_t universe = 0; universe < n_universes; ++universe)
             histograms[offset + universe] +=
                 base_weight * decode_universe_weight((*universe_weights)[universe]);
     }
 
-    void PairedShiftAccumulator::ensure_size(int nbins)
-    {
-        if (source_labels.empty())
-            return;
-        if (shift_vectors.empty())
-        {
-            shift_vectors.assign(static_cast<std::size_t>(nbins) * source_labels.size(), 0.0);
-        }
-    }
-
-    void PairedShiftAccumulator::accumulate(int bin, int nbins, double base_weight)
+    void PairedShiftAccumulator::accumulate(
+        int bin,
+        int nbins,
+        double base_weight,
+        const std::vector<unsigned short> *up_weights,
+        const std::vector<unsigned short> *down_weights)
     {
         if (!up_weights || !down_weights || source_labels.empty())
             return;
@@ -230,7 +278,8 @@ namespace syst::detail
         const std::size_t down_size = down_weights->size();
         if (up_size == 0 && down_size == 0)
             return;
-        ensure_size(nbins);
+        if (shift_vectors.empty())
+            shift_vectors.assign(static_cast<std::size_t>(nbins) * source_labels.size(), 0.0);
         if (up_size != source_labels.size() || down_size != source_labels.size())
         {
             throw std::runtime_error(
@@ -270,7 +319,14 @@ namespace syst::detail
                 std::string("syst: missing required selected-tree branch ") +
                 kCentralWeightBranch);
         }
-        tree->SetBranchAddress(kCentralWeightBranch, &central_weight);
+        CheckedBranchBindings branch_bindings(*tree);
+        branch_bindings.bind_branch(kCentralWeightBranch, &central_weight);
+
+        std::vector<unsigned short> *genie_universe_weights = nullptr;
+        std::vector<unsigned short> *flux_universe_weights = nullptr;
+        std::vector<unsigned short> *reint_universe_weights = nullptr;
+        std::vector<unsigned short> *genie_knob_up_weights = nullptr;
+        std::vector<unsigned short> *genie_knob_down_weights = nullptr;
 
         TTreeFormula observable("systematics_observable", spec.branch_expr.c_str(), tree);
         require_valid_formula(observable, "observable", spec.branch_expr);
@@ -285,31 +341,42 @@ namespace syst::detail
         {
             result.genie_knobs = make_genie_knob_pairs(tree);
             if (result.genie_knobs)
-                bind_genie_knob_pairs(tree, *result.genie_knobs);
+            {
+                bind_genie_knob_weights(branch_bindings,
+                                        *result.genie_knobs,
+                                        genie_knob_up_weights,
+                                        genie_knob_down_weights);
+            }
         }
         if (options.enable_genie)
         {
             result.genie = make_universe_family(tree, "weightsGenie");
             if (result.genie)
-                bind_universe_family(tree, *result.genie);
+                bind_universe_weights(branch_bindings, *result.genie, genie_universe_weights);
         }
         if (options.enable_flux)
         {
             result.flux = make_flux_family(tree);
             if (result.flux)
-                bind_universe_family(tree, *result.flux);
+                bind_universe_weights(branch_bindings, *result.flux, flux_universe_weights);
         }
         if (options.enable_reint)
         {
             result.reint = make_universe_family(tree, "weightsReint");
             if (result.reint)
-                bind_universe_family(tree, *result.reint);
+                bind_universe_weights(branch_bindings, *result.reint, reint_universe_weights);
         }
 
         const Long64_t n_entries = tree->GetEntries();
         for (Long64_t entry = 0; entry < n_entries; ++entry)
         {
-            tree->GetEntry(entry);
+            const int bytes_read = tree->GetEntry(entry);
+            if (bytes_read < 0)
+            {
+                throw std::runtime_error(
+                    "syst: failed to read entry " + std::to_string(entry) + " from tree " +
+                    tree->GetName() + " (ROOT status " + std::to_string(bytes_read) + ")");
+            }
 
             if (selection && selection->EvalInstance() == 0.0)
                 continue;
@@ -323,13 +390,28 @@ namespace syst::detail
             result.sumw2[static_cast<std::size_t>(bin)] += central_weight * central_weight;
 
             if (result.genie_knobs)
-                result.genie_knobs->accumulate(bin, spec.nbins, central_weight);
+            {
+                result.genie_knobs->accumulate(bin,
+                                               spec.nbins,
+                                               central_weight,
+                                               genie_knob_up_weights,
+                                               genie_knob_down_weights);
+            }
             if (result.genie)
-                result.genie->accumulate(bin, spec.nbins, central_weight);
+                result.genie->accumulate(bin,
+                                         spec.nbins,
+                                         central_weight,
+                                         genie_universe_weights);
             if (result.flux)
-                result.flux->accumulate(bin, spec.nbins, central_weight);
+                result.flux->accumulate(bin,
+                                        spec.nbins,
+                                        central_weight,
+                                        flux_universe_weights);
             if (result.reint)
-                result.reint->accumulate(bin, spec.nbins, central_weight);
+                result.reint->accumulate(bin,
+                                         spec.nbins,
+                                         central_weight,
+                                         reint_universe_weights);
         }
 
         return result;

@@ -1283,6 +1283,91 @@ namespace
             "missing central-weight branch");
     }
 
+    void test_incompatible_central_weight_binding_rejected()
+    {
+        auto tree = std::make_unique<TTree>("selected", "selected");
+        Double_t x = 0.5;
+        Int_t central_weight = 2;
+        tree->Branch("x", &x);
+        tree->Branch("__w__", &central_weight);
+        tree->Fill();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 1;
+        spec.xmin = 0.0;
+        spec.xmax = 1.0;
+
+        require_throws(
+            [&]()
+            {
+                (void)syst::detail::compute_sample(tree.get(), spec, syst::SystematicsOptions{});
+            },
+            "__w__",
+            "incompatible central-weight binding");
+    }
+
+    void test_non_exact_packed_weight_binding_rejected()
+    {
+        auto tree = std::make_unique<TTree>("selected", "selected");
+        Double_t x = 0.5;
+        Double_t central_weight = 1.0;
+        std::vector<float> genie_weights = {1.0f, 1.0f};
+        tree->Branch("x", &x);
+        tree->Branch("__w__", &central_weight);
+        tree->Branch("weightsGenie", &genie_weights);
+        tree->Fill();
+        tree->ResetBranchAddresses();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 1;
+        spec.xmin = 0.0;
+        spec.xmax = 1.0;
+
+        syst::SystematicsOptions options;
+        options.enable_genie = true;
+
+        require_throws(
+            [&]()
+            {
+                (void)syst::detail::compute_sample(tree.get(), spec, options);
+            },
+            "weightsGenie",
+            "non-exact packed universe-weight binding");
+
+        require(tree->GetBranch("__w__")->GetAddress() == nullptr,
+                "failed calculation should release the central-weight branch address");
+        require(tree->GetBranch("weightsGenie")->GetAddress() == nullptr,
+                "failed calculation should release universe-weight branch addresses");
+    }
+
+    void test_compute_sample_releases_branch_addresses()
+    {
+        EventRow row = make_plain_row(0.5);
+        row.genie = {1000, 1000};
+        std::unique_ptr<TTree> tree(make_selected_tree(
+            {row},
+            TreeOptions{true, false, true, false, false, false, false}));
+        tree->ResetBranchAddresses();
+
+        syst::HistogramSpec spec;
+        spec.branch_expr = "x";
+        spec.nbins = 1;
+        spec.xmin = 0.0;
+        spec.xmax = 1.0;
+
+        syst::SystematicsOptions options;
+        options.enable_genie = true;
+
+        (void)syst::detail::compute_sample(tree.get(), spec, options);
+
+        require(tree->GetBranch("__w__")->GetAddress() == nullptr,
+                "compute_sample should release the central-weight branch address");
+        require(tree->GetBranch("weightsGenie")->GetAddress() == nullptr,
+                "compute_sample should release universe-weight branch addresses");
+    }
+
     void test_invalid_observable_expression_rejected()
     {
         std::unique_ptr<TTree> tree(make_selected_tree({make_plain_row(0.5)},
@@ -1590,6 +1675,9 @@ int main()
         test_memory_cache_uses_distribution_content_revision();
         test_persistent_cache_uses_eventlist_content_revision();
         test_missing_weight_branch_rejected();
+        test_compute_sample_releases_branch_addresses();
+        test_non_exact_packed_weight_binding_rejected();
+        test_incompatible_central_weight_binding_rejected();
         test_invalid_observable_expression_rejected();
         test_invalid_selection_expression_rejected();
         test_inconsistent_universe_count_rejected();
