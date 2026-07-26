@@ -1,7 +1,11 @@
 #include "Snapshot.hh"
 
 #include <algorithm>
+#include <atomic>
+#include <cerrno>
 #include <cctype>
+#include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -11,6 +15,8 @@
 #include <unistd.h>
 #include <vector>
 
+#include <fcntl.h>
+#include <sys/file.h>
 #include <Compression.h>
 #include <ROOT/RDataFrame.hxx>
 #include <ROOT/RDFHelpers.hxx>
@@ -26,6 +32,133 @@
 namespace
 {
     using SnapshotSpec = snapshot::Spec;
+
+    class SnapshotOutputLock
+    {
+    public:
+        explicit SnapshotOutputLock(const std::string &output_path)
+            : lock_path_(output_path + ".lock"),
+              descriptor_(::open(lock_path_.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666))
+        {
+            if (descriptor_ < 0)
+            {
+                throw std::runtime_error(
+                    "snapshot: failed to open output lock: " + lock_path_ + ": " +
+                    std::strerror(errno));
+            }
+
+            while (::flock(descriptor_, LOCK_EX) != 0)
+            {
+                if (errno == EINTR)
+                    continue;
+
+                const int error_number = errno;
+                ::close(descriptor_);
+                descriptor_ = -1;
+                throw std::runtime_error(
+                    "snapshot: failed to acquire output lock: " + lock_path_ + ": " +
+                    std::strerror(error_number));
+            }
+        }
+
+        ~SnapshotOutputLock()
+        {
+            if (descriptor_ >= 0)
+                ::close(descriptor_);
+        }
+
+        SnapshotOutputLock(const SnapshotOutputLock &) = delete;
+        SnapshotOutputLock &operator=(const SnapshotOutputLock &) = delete;
+
+    private:
+        std::string lock_path_;
+        int descriptor_ = -1;
+    };
+
+    std::string unused_staged_output_path(const std::string &output_path)
+    {
+        const std::string base_path =
+            output_path + ".tmp." + std::to_string(::getpid());
+
+        for (std::size_t suffix = 0;; ++suffix)
+        {
+            const std::string candidate =
+                suffix == 0 ? base_path : base_path + "." + std::to_string(suffix);
+            std::error_code error;
+            const std::filesystem::file_status status =
+                std::filesystem::symlink_status(candidate, error);
+            if ((!error && status.type() == std::filesystem::file_type::not_found) ||
+                error == std::errc::no_such_file_or_directory)
+            {
+                return candidate;
+            }
+            if (error)
+            {
+                throw std::runtime_error(
+                    "snapshot: failed to inspect staged output path: " + candidate +
+                    ": " + error.message());
+            }
+        }
+    }
+
+    void copy_output_if_present(const std::string &output_path,
+                                const std::string &staged_path)
+    {
+        std::error_code error;
+        const bool output_exists = std::filesystem::exists(output_path, error);
+        if (error)
+        {
+            throw std::runtime_error(
+                "snapshot: failed to inspect existing output file: " + output_path + ": " +
+                error.message());
+        }
+        if (!output_exists)
+            return;
+
+        const bool copied = std::filesystem::copy_file(
+            output_path,
+            staged_path,
+            std::filesystem::copy_options::none,
+            error);
+        if (error || !copied)
+        {
+            const std::string detail =
+                error ? error.message() : "copy did not create a file";
+            throw std::runtime_error(
+                "snapshot: failed to copy existing output file: " + output_path + ": " +
+                detail);
+        }
+    }
+
+    template <class UpdateStagedOutput>
+    bool update_output_atomically(const std::string &output_path,
+                                  UpdateStagedOutput update_staged_output)
+    {
+        const SnapshotOutputLock output_lock(output_path);
+        const std::string staged_path = unused_staged_output_path(output_path);
+        try
+        {
+            copy_output_if_present(output_path, staged_path);
+            if (!update_staged_output(staged_path))
+            {
+                std::remove(staged_path.c_str());
+                return false;
+            }
+            if (std::rename(staged_path.c_str(), output_path.c_str()) != 0)
+            {
+                const int error_number = errno;
+                throw std::runtime_error(
+                    "snapshot: failed to publish output file: " +
+                    std::string(std::strerror(error_number)));
+            }
+            return true;
+        }
+        catch (...)
+        {
+            std::remove(staged_path.c_str());
+            throw;
+        }
+    }
 
     std::string selected_tree_path(const std::string &sample_key)
     {
@@ -78,6 +211,17 @@ namespace
 
     bool tree_exists(const std::string &out_path, const std::string &tree_name)
     {
+        std::error_code error;
+        const bool output_exists = std::filesystem::exists(out_path, error);
+        if (error)
+        {
+            throw std::runtime_error(
+                "snapshot: failed to inspect output file: " + out_path + ": " +
+                error.message());
+        }
+        if (!output_exists)
+            return false;
+
         std::unique_ptr<TFile> file(TFile::Open(out_path.c_str(), "READ"));
         return file && !file->IsZombie() && file->Get(tree_name.c_str());
     }
@@ -89,6 +233,10 @@ namespace
             return;
         if (file->Get(tree_name.c_str()))
             file->Delete((tree_name + ";*").c_str());
+        const bool write_failed = file->TestBit(TFile::kWriteError);
+        file->Close();
+        if (write_failed || file->TestBit(TFile::kWriteError))
+            throw std::runtime_error("snapshot: failed to update staged output file");
     }
 
     void write_tree_from_scratch(const std::string &out_path,
@@ -96,30 +244,41 @@ namespace
                                  const std::string &tree_name,
                                  bool append)
     {
-        std::unique_ptr<TFile> fin(TFile::Open(scratch_file.c_str(), "READ"));
-        if (!fin || fin->IsZombie())
+        std::unique_ptr<TFile> source_file(TFile::Open(scratch_file.c_str(), "READ"));
+        if (!source_file || source_file->IsZombie())
             throw std::runtime_error("snapshot: failed to open scratch snapshot file: " + scratch_file);
 
-        TTree *tin = dynamic_cast<TTree *>(fin->Get(tree_name.c_str()));
-        if (!tin)
+        TTree *source_tree = dynamic_cast<TTree *>(source_file->Get(tree_name.c_str()));
+        if (!source_tree)
             throw std::runtime_error("snapshot: scratch snapshot missing tree: " + tree_name);
 
-        std::unique_ptr<TFile> fout = open_existing_or_create(out_path);
-        TTree *tout = dynamic_cast<TTree *>(fout->Get(tree_name.c_str()));
-        fout->cd();
+        std::unique_ptr<TFile> output_file = open_existing_or_create(out_path);
+        TTree *output_tree = dynamic_cast<TTree *>(output_file->Get(tree_name.c_str()));
+        output_file->cd();
 
-        if (!tout || !append)
+        if (!output_tree || !append)
         {
-            std::unique_ptr<TTree> cloned(tin->CloneTree(-1, "fast"));
-            cloned->SetName(tree_name.c_str());
-            cloned->Write(tree_name.c_str(), TObject::kOverwrite);
-            return;
+            std::unique_ptr<TTree> cloned_tree(source_tree->CloneTree(-1, "fast"));
+            if (!cloned_tree)
+                throw std::runtime_error("snapshot: failed to clone scratch snapshot tree");
+            cloned_tree->SetName(tree_name.c_str());
+            if (cloned_tree->Write(tree_name.c_str(), TObject::kOverwrite) <= 0)
+                throw std::runtime_error("snapshot: failed to write cloned snapshot tree");
+        }
+        else
+        {
+            validate_matching_schema(output_tree, source_tree);
+            output_tree->SetDirectory(output_file.get());
+            if (output_tree->CopyEntries(source_tree, -1, "fast") < 0)
+                throw std::runtime_error("snapshot: failed to append scratch snapshot tree");
+            if (output_tree->Write("", TObject::kOverwrite) <= 0)
+                throw std::runtime_error("snapshot: failed to write appended snapshot tree");
         }
 
-        validate_matching_schema(tout, tin);
-        tout->SetDirectory(fout.get());
-        tout->CopyEntries(tin, -1, "fast");
-        tout->Write("", TObject::kOverwrite);
+        const bool write_failed = output_file->TestBit(TFile::kWriteError);
+        output_file->Close();
+        if (write_failed || output_file->TestBit(TFile::kWriteError))
+            throw std::runtime_error("snapshot: failed to write staged output file");
     }
 
     std::filesystem::path snapshot_scratch_dir()
@@ -169,26 +328,54 @@ namespace
                                   const std::string &tree_name,
                                   const std::string &suffix)
     {
-        return (scratch_dir / ("amarantin_snapshot_" + tree_name + "_" + suffix + "_" +
-                               std::to_string(::getpid()) + ".root")).string();
+        static std::atomic<unsigned long long> next_scratch_id{0};
+        for (;;)
+        {
+            const unsigned long long scratch_id =
+                next_scratch_id.fetch_add(1, std::memory_order_relaxed);
+            const std::filesystem::path candidate =
+                scratch_dir / ("amarantin_snapshot_" + tree_name + "_" + suffix + "_" +
+                               std::to_string(::getpid()) + "_" +
+                               std::to_string(scratch_id) + ".root");
+            std::error_code error;
+            const std::filesystem::file_status status =
+                std::filesystem::symlink_status(candidate, error);
+            if ((!error && status.type() == std::filesystem::file_type::not_found) ||
+                error == std::errc::no_such_file_or_directory)
+            {
+                return candidate.string();
+            }
+            if (error)
+            {
+                throw std::runtime_error(
+                    "snapshot: failed to inspect scratch path: " + candidate.string() +
+                    ": " + error.message());
+            }
+        }
     }
 
     struct ScratchSnapshot
     {
-        std::string file;
-        unsigned long long count = 0;
+        std::string path;
+        unsigned long long entry_count = 0;
     };
 
-    ScratchSnapshot snapshot_to_scratch(const EventListIO &event_list,
-                                        const std::string &sample_key,
-                                        const std::filesystem::path &scratch_dir,
-                                        const std::string &tree_name,
-                                        const SnapshotSpec &spec,
-                                        std::vector<std::string> columns,
-                                        const int sample_id = -1)
+    void remove_scratch_file(const std::string &scratch_file)
     {
-        ROOT::RDataFrame df(selected_tree_path(sample_key), event_list.path());
-        ROOT::RDF::RNode node = apply_selection(df, spec.selection);
+        std::error_code error;
+        std::filesystem::remove(scratch_file, error);
+    }
+
+    ScratchSnapshot create_scratch_snapshot(const EventListIO &event_list,
+                                            const std::string &sample_key,
+                                            const std::filesystem::path &scratch_dir,
+                                            const std::string &tree_name,
+                                            const SnapshotSpec &spec,
+                                            std::vector<std::string> columns,
+                                            const int sample_id = -1)
+    {
+        ROOT::RDataFrame dataframe(selected_tree_path(sample_key), event_list.path());
+        ROOT::RDF::RNode node = apply_selection(dataframe, spec.selection);
 
         if (sample_id >= 0)
         {
@@ -200,18 +387,20 @@ namespace
         const std::string scratch_file =
             scratch_file_path(scratch_dir, tree_name, snapshot::sanitise_root_key(sample_key));
 
-        auto count = node.Count();
-        auto snap = node.Snapshot(tree_name, scratch_file, columns, snapshot_options());
-        ROOT::RDF::RunGraphs({count, snap});
-        (void)snap.GetValue();
-
-        return {scratch_file, count.GetValue()};
-    }
-
-    void remove_scratch_file(const std::string &scratch_file)
-    {
-        std::error_code ec;
-        std::filesystem::remove(scratch_file, ec);
+        try
+        {
+            auto entry_count = node.Count();
+            auto snapshot_result =
+                node.Snapshot(tree_name, scratch_file, columns, snapshot_options());
+            ROOT::RDF::RunGraphs({entry_count, snapshot_result});
+            (void)snapshot_result.GetValue();
+            return {scratch_file, entry_count.GetValue()};
+        }
+        catch (...)
+        {
+            remove_scratch_file(scratch_file);
+            throw;
+        }
     }
 }
 
@@ -240,16 +429,30 @@ unsigned long long snapshot::sample(const EventListIO &event_list,
 
     const std::vector<std::string> columns = snapshot_columns(spec);
     const std::filesystem::path scratch_dir = snapshot_scratch_dir();
-    const ScratchSnapshot snap =
-        snapshot_to_scratch(event_list, sample_key, scratch_dir, tree_name, spec, columns);
+    const ScratchSnapshot scratch_snapshot =
+        create_scratch_snapshot(event_list, sample_key, scratch_dir, tree_name, spec, columns);
 
-    if (spec.overwrite_if_exists)
-        delete_tree_if_present(out_path, tree_name);
-    write_tree_from_scratch(out_path, snap.file, tree_name, false);
-
-    remove_scratch_file(snap.file);
-
-    return snap.count;
+    try
+    {
+        const bool published = update_output_atomically(
+            out_path,
+            [&](const std::string &staged_path)
+            {
+                if (!spec.overwrite_if_exists && tree_exists(staged_path, tree_name))
+                    return false;
+                if (spec.overwrite_if_exists)
+                    delete_tree_if_present(staged_path, tree_name);
+                write_tree_from_scratch(staged_path, scratch_snapshot.path, tree_name, false);
+                return true;
+            });
+        remove_scratch_file(scratch_snapshot.path);
+        return published ? scratch_snapshot.entry_count : 0;
+    }
+    catch (...)
+    {
+        remove_scratch_file(scratch_snapshot.path);
+        throw;
+    }
 }
 
 unsigned long long snapshot::merged(const EventListIO &event_list,
@@ -260,27 +463,52 @@ unsigned long long snapshot::merged(const EventListIO &event_list,
     const std::vector<std::string> base_columns = snapshot_columns(spec);
     const std::filesystem::path scratch_dir = snapshot_scratch_dir();
     const std::string tree_name = sanitise_root_key(spec.tree_name);
-    unsigned long long total = 0;
+    unsigned long long total_entries = 0;
 
     if (!spec.overwrite_if_exists && tree_exists(out_path, tree_name))
         return 0;
-    if (spec.overwrite_if_exists)
-        delete_tree_if_present(out_path, tree_name);
 
-    bool append = false;
-    for (size_t i = 0; i < keys.size(); ++i)
-    {
-        const std::string &sample_key = keys[i];
-        const int sample_id = spec.include_sample_id ? static_cast<int>(i) : -1;
-        const ScratchSnapshot snap =
-            snapshot_to_scratch(event_list, sample_key, scratch_dir, tree_name, spec, base_columns, sample_id);
+    const bool published = update_output_atomically(
+        out_path,
+        [&](const std::string &staged_path)
+        {
+            const bool existing_tree = tree_exists(staged_path, tree_name);
+            if (!spec.overwrite_if_exists && existing_tree)
+                return false;
+            if (spec.overwrite_if_exists)
+                delete_tree_if_present(staged_path, tree_name);
 
-        write_tree_from_scratch(out_path, snap.file, tree_name, append);
-        append = true;
-        total += snap.count;
+            bool append = false;
+            for (std::size_t i = 0; i < keys.size(); ++i)
+            {
+                const std::string &sample_key = keys[i];
+                const int sample_id = spec.include_sample_id ? static_cast<int>(i) : -1;
+                const ScratchSnapshot scratch_snapshot = create_scratch_snapshot(
+                    event_list,
+                    sample_key,
+                    scratch_dir,
+                    tree_name,
+                    spec,
+                    base_columns,
+                    sample_id);
 
-        remove_scratch_file(snap.file);
-    }
+                try
+                {
+                    write_tree_from_scratch(
+                        staged_path, scratch_snapshot.path, tree_name, append);
+                }
+                catch (...)
+                {
+                    remove_scratch_file(scratch_snapshot.path);
+                    throw;
+                }
+                remove_scratch_file(scratch_snapshot.path);
+                append = true;
+                total_entries += scratch_snapshot.entry_count;
+            }
 
-    return total;
+            return existing_tree || !keys.empty();
+        });
+
+    return published ? total_entries : 0;
 }

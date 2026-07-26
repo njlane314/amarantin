@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include <unistd.h>
+
 #include "Cuts.hh"
 #include "DatasetIO.hh"
 #include "DistributionIO.hh"
@@ -19,6 +21,7 @@
 #include "TCanvas.h"
 #include "TFile.h"
 #include "TMatrixT.h"
+#include "TNamed.h"
 #include "TROOT.h"
 #include "TTree.h"
 
@@ -38,6 +41,28 @@ namespace
     bool contains(const std::vector<std::string> &values, const std::string &target)
     {
         return std::find(values.begin(), values.end(), target) != values.end();
+    }
+
+    std::vector<char> read_file_bytes(const std::string &path)
+    {
+        std::ifstream input(path, std::ios::binary);
+        if (!input)
+            fail("failed to read file bytes: " + path);
+        return std::vector<char>(std::istreambuf_iterator<char>(input),
+                                 std::istreambuf_iterator<char>());
+    }
+
+    bool directory_has_filename_prefix(const std::filesystem::path &directory,
+                                       const std::string &prefix)
+    {
+        if (!std::filesystem::exists(directory))
+            return false;
+        for (const auto &entry : std::filesystem::directory_iterator(directory))
+        {
+            if (entry.path().filename().string().rfind(prefix, 0) == 0)
+                return true;
+        }
+        return false;
     }
 
     template <class TObjectType>
@@ -312,6 +337,19 @@ int main(int argc, char **argv)
 
         gROOT->SetBatch(kTRUE);
 
+        constexpr const char *snapshot_marker_name = "preserved_marker";
+        constexpr const char *snapshot_marker_title = "unrelated snapshot content";
+        {
+            TFile snapshot_output(snapshot_path.c_str(), "RECREATE");
+            require(!snapshot_output.IsZombie(), "failed to create snapshot output");
+            TNamed(snapshot_marker_name, snapshot_marker_title)
+                .Write(snapshot_marker_name, TObject::kOverwrite);
+            const bool write_failed = snapshot_output.TestBit(TFile::kWriteError);
+            snapshot_output.Close();
+            require(!write_failed && !snapshot_output.TestBit(TFile::kWriteError),
+                    "failed to write snapshot marker");
+        }
+
         snapshot::Spec snapshot_spec;
         snapshot_spec.columns = {"topological_score", "__w__"};
         snapshot_spec.selection = "selection_pass != 0";
@@ -328,6 +366,73 @@ int main(int argc, char **argv)
             require_branch(snapshot_tree, "topological_score", "snapshot tree");
             require_branch(snapshot_tree, "__w__", "snapshot tree");
             require_branch(snapshot_tree, "sample_id", "snapshot tree");
+            TNamed *snapshot_marker =
+                must_get<TNamed>(snapshot_input, snapshot_marker_name);
+            require(std::string(snapshot_marker->GetTitle()) == snapshot_marker_title,
+                    "snapshot::merged should preserve unrelated ROOT objects");
+        }
+
+        const unsigned long long sample_snapshot_entries =
+            snapshot::sample(eventlist, snapshot_path, "beam", snapshot_spec);
+        require(sample_snapshot_entries == snapshot_entries,
+                "snapshot::sample should write the selected fixture entries");
+        {
+            TFile snapshot_input(snapshot_path.c_str(), "READ");
+            require(!snapshot_input.IsZombie(),
+                    "failed to open snapshot output after sample update");
+            TTree *merged_snapshot_tree = must_get<TTree>(snapshot_input, "train");
+            require(static_cast<unsigned long long>(merged_snapshot_tree->GetEntries()) ==
+                        snapshot_entries,
+                    "snapshot::sample should preserve the merged snapshot tree");
+            TTree *sample_snapshot_tree = must_get<TTree>(snapshot_input, "train_beam");
+            require(static_cast<unsigned long long>(sample_snapshot_tree->GetEntries()) ==
+                        sample_snapshot_entries,
+                    "sample snapshot entry count should match snapshot::sample");
+            require_branch(sample_snapshot_tree, "topological_score", "sample snapshot tree");
+            require_branch(sample_snapshot_tree, "__w__", "sample snapshot tree");
+            require(sample_snapshot_tree->GetBranch("sample_id") == nullptr,
+                    "sample snapshot tree should not add a merged sample ID");
+            TNamed *snapshot_marker =
+                must_get<TNamed>(snapshot_input, snapshot_marker_name);
+            require(std::string(snapshot_marker->GetTitle()) == snapshot_marker_title,
+                    "snapshot::sample should preserve unrelated ROOT objects");
+        }
+
+        const std::vector<char> snapshot_before_failed_replacement =
+            read_file_bytes(snapshot_path);
+        snapshot::Spec invalid_snapshot_spec = snapshot_spec;
+        invalid_snapshot_spec.columns.push_back("missing_snapshot_column");
+        bool rejected_invalid_snapshot = false;
+        try
+        {
+            (void)snapshot::merged(eventlist, snapshot_path, invalid_snapshot_spec);
+        }
+        catch (const std::exception &)
+        {
+            rejected_invalid_snapshot = true;
+        }
+        require(rejected_invalid_snapshot,
+                "snapshot::merged should reject a missing replacement column");
+        require(read_file_bytes(snapshot_path) == snapshot_before_failed_replacement,
+                "failed snapshot replacement should preserve the output bytes");
+        const std::filesystem::path snapshot_output_path(snapshot_path);
+        const std::string process_id = std::to_string(::getpid());
+        require(!directory_has_filename_prefix(
+                    snapshot_output_path.parent_path(),
+                    snapshot_output_path.filename().string() + ".tmp." + process_id),
+                "failed snapshot replacement should clean staged output files");
+        require(!directory_has_filename_prefix(
+                    std::filesystem::temp_directory_path() / "amarantin_snapshot",
+                    "amarantin_snapshot_train_beam_" + process_id + "_"),
+                "failed snapshot replacement should clean scratch files");
+        {
+            TFile snapshot_input(snapshot_path.c_str(), "READ");
+            require(!snapshot_input.IsZombie(),
+                    "failed to reopen snapshot output after rejected replacement");
+            TTree *snapshot_tree = must_get<TTree>(snapshot_input, "train");
+            require(static_cast<unsigned long long>(snapshot_tree->GetEntries()) ==
+                        snapshot_entries,
+                    "rejected snapshot replacement should preserve the entry count");
         }
 
         {

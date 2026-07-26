@@ -49,6 +49,11 @@ Snapshot.hh
   snapshot::merged(...), used for exporting selected columns to simpler ROOT
   trees for downstream training or inspection.
 
+Snapshot replacements use a serialized staged copy. A completed ROOT file is
+published only after every requested tree has been written and closed; failed
+replacements preserve the previous output. The adjacent empty `.lock` sidecar
+is intentionally retained and does not indicate an active writer.
+
 Local helper headers
 --------------------
 Cuts.hh

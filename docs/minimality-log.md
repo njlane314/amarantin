@@ -3944,3 +3944,72 @@
 ## Remaining hotspots
 - broader repository diagnostics remain ongoing; writable app paths now either
   check ROOT finalization directly or use SampleIO's checked writer
+
+---
+
+## Current milestone
+- status: done
+- subsystem: transactional analysis snapshots
+- design rule from `DESIGN.md`: keep snapshot transforms in `ana/`, use one
+  explicit transaction, and publish only complete derived files
+
+## What changed
+- replaced direct mutation of the final snapshot ROOT file with a serialized
+  staged-copy update and atomic rename
+- delayed removal of the replaced tree until the staged copy exists, so
+  selection, schema, and ROOT write failures leave the final file untouched
+- made scratch paths unique within a process and cleaned scratch plus staged
+  files on success and failure
+- checked ROOT output close errors before publication
+- added real-pipeline coverage for merged and per-sample updates, unrelated
+  ROOT-object preservation, byte-for-byte rollback, and temporary-file cleanup
+
+## Why this is simpler
+- one local transaction owns lock, copy, rollback, and publish behavior for both
+  public snapshot functions
+- callers no longer depend on the ordering of delete, scratch generation, and
+  repeated output-file opens to infer whether the final file is valid
+- descriptive source/output and scratch names replace the previous abbreviated
+  local names in the changed write path
+
+## Verification
+- focused checks:
+  - build `Ana` and `testroot_pipeline_check`
+  - run `testroot_pipeline_smoke`
+  - run `macro_analysis_smoke`
+- results:
+  - focused targets build cleanly with warnings enabled
+  - final focused `testroot_pipeline_smoke` passes in 68.96 seconds
+  - full Docker build passes with repository warnings enabled
+  - all 18 configured CTest tests pass in 202.83 seconds
+  - final full-suite `macro_analysis_smoke` passes in 31.96 seconds
+  - shell syntax checks and `git diff --check` pass
+  - final code, naming, cleanup, and boundary review finds no blocking issue
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - snapshot implementation: `+297 / -69`
+  - real-pipeline regression: `+105 / -0`
+  - user documentation: `+9 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- keep the transaction private to `ana/Snapshot.cc` rather than couple the
+  analysis library to app-private filesystem helpers
+- prefer bounded private POSIX mechanics over a new cross-module utility layer
+- retain the adjacent lock sidecar so concurrent writers always lock the same
+  inode
+- hold the merged transaction across every sample so no partial merged tree can
+  be published
+- check both ROOT tree-write return values and file close error bits before
+  publication
+- leave analysis memory unchanged because snapshot schema and training sample
+  rules do not change
+
+## Remaining hotspots
+- broader repository diagnostics remain ongoing; snapshot publication now has
+  direct success, rollback, preservation, and cleanup coverage

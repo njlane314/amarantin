@@ -6414,3 +6414,153 @@ and receive any ROOT write error before the callback returns for rename.
 - stop after all three writer classes reject forced finalization failures and
   focused plus full verification pass
 - stop before redesigning persistence ownership beyond explicit close semantics
+
+## ExecPlan Addendum: Make Snapshot Replacement Transactional
+
+### 1. Objective
+Prevent `snapshot::sample(...)` and `snapshot::merged(...)` failures from
+deleting or partially replacing existing snapshot trees, and reject silent ROOT
+write failures before publication.
+
+### 2. Constraints
+- Preserve snapshot names, columns, sample IDs, counts, and overwrite flags.
+- Keep snapshot workflow ownership in `ana/`; do not move it into `io/`.
+- Preserve unrelated trees in an existing snapshot ROOT file.
+- Serialize same-output snapshot updates to avoid stale-copy publication.
+- Keep scratch files and staged files cleaned on every exception path.
+- Leave analysis-facing training-snapshot requirements unchanged.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep `ana/` focused on build-time transforms
+- prefer namespace functions and flat control flow
+- add abstractions only when they delete complexity
+
+The complete snapshot replacement, including all merged samples, must happen on
+a staged copy and publish only after checked ROOT close succeeds.
+
+### 4. System map
+- `ana/Snapshot.cc`
+- `tests/testroot_pipeline_check.cc`
+- `ana/README`
+- `io/bits/DERIVED`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- one local snapshot-output transaction should own lock, copy, cleanup, and
+  rename instead of spreading rollback branches across sample and merged paths
+
+#### boundary sharpening
+- scratch generation remains temporary analysis work; only a fully written and
+  closed staged ROOT file can become the requested output
+
+#### stale scaffolding
+- remove pre-transaction deletion of final output trees
+- remove success-only scratch cleanup paths
+
+### 6. Milestones
+
+#### Milestone A: Prove destructive merged-snapshot failure
+- status: done
+- hypothesis: an invalid replacement column causes merged snapshot evaluation
+  to throw after the existing output tree has already been deleted
+- files / symbols touched:
+  - `tests/testroot_pipeline_check.cc`
+- expected behavior risk: none; regression only
+- verification commands:
+  - build `testroot_pipeline_check`
+  - run `testroot_pipeline_smoke` against the published Ana library
+- acceptance criteria:
+  - first create and validate a real snapshot tree
+  - force replacement failure through a missing column
+  - require the original tree and entry count to remain intact
+- verification results:
+  - `testroot_pipeline_check` builds against the published Ana library
+  - the real pipeline creates and validates the initial snapshot
+  - the missing-column replacement throws as expected
+  - the regression fails because the existing ROOT file bytes change before
+    the rejected replacement returns
+
+#### Milestone B: Add serialized copy-on-write snapshot publication
+- status: done
+- hypothesis: copying the current file beside the final output, mutating only
+  that copy, checking ROOT close, and renaming after success protects all trees
+- files / symbols touched:
+  - `ana/Snapshot.cc`
+  - snapshot documentation
+- expected behavior risk: medium; multi-tree updates, lock lifetime, and scratch
+  cleanup must remain correct
+- verification commands:
+  - build `Ana` and `testroot_pipeline_check`
+  - run `testroot_pipeline_smoke`
+  - run `macro_analysis_smoke`
+- acceptance criteria:
+  - acquire an adjacent output lock before copying existing state
+  - preserve unrelated trees and overwrite/no-overwrite behavior
+  - publish only after every merged sample writes and closes successfully
+  - preserve the final file byte-for-byte after replacement failure
+  - clean scratch and staged paths after success and failure
+- verification results:
+  - `Ana` and `testroot_pipeline_check` build cleanly with warnings enabled
+  - final focused `testroot_pipeline_smoke` passes in 68.96 seconds
+  - failed merged replacement preserves the complete output byte-for-byte
+  - successful merged and per-sample updates preserve an unrelated ROOT object
+    and each other's trees
+  - successful and failed updates leave no process-owned scratch or staged file
+  - final full-suite `macro_analysis_smoke` passes in 31.96 seconds
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification will catch schema, count, path, and downstream
+  compatibility regressions
+- files / symbols touched:
+  - all files above
+- expected behavior risk: medium
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - shell syntax and `git diff --check`
+- acceptance criteria:
+  - every configured test passes
+  - no dependency on app-private helpers or installed API is introduced
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - full Docker build passes with repository warnings enabled
+  - all 18 configured CTest tests pass in 202.83 seconds
+  - all three required shell syntax checks pass
+  - `git diff --check` passes
+  - final code, naming, cleanup, and boundary review finds no blocking issue
+
+### 7. Public-surface check
+- compatibility impact: no installed signature or CLI change; successful output
+  content remains compatible and an adjacent lock sidecar is retained
+- migration note or explicit non-goal: no migration; distributed locking beyond
+  local POSIX advisory semantics remains out of scope
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - snapshot implementation: `+297 / -69`
+  - real-pipeline regression: `+105 / -0`
+  - user documentation: `+9 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- prove replacement rollback with a real missing-column evaluation failure
+- serialize snapshot read-modify-write updates for the same reason as mk_dist
+- keep the transaction local to Snapshot.cc rather than coupling `ana/` to app
+- prefer bounded private POSIX mechanics over a new cross-module utility layer
+- check both ROOT tree-write return values and file close error bits
+- keep analysis memory unchanged because snapshot requirements do not change
+
+### 10. Stop conditions
+- stop after failed replacements preserve the original tree and successful
+  sample/merged paths pass focused plus full verification
+- stop before changing snapshot schema or training sample rules

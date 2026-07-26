@@ -383,6 +383,10 @@ If include_sample_id is true, the snapshot helpers define and snapshots:
 where sample_id is the zero-based index of the sample key within the current
 EventListIO sample_keys() ordering.
 
+Snapshot output updates are serialized and copy-on-write. Existing trees remain
+unchanged until the complete staged replacement closes successfully and is
+published; the adjacent `.lock` sidecar is intentionally retained.
+
 DistributionIO file layout
 --------------------------
 
