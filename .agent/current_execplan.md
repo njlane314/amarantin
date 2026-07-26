@@ -5817,3 +5817,146 @@ second transaction concept.
   plus full verification pass
 - stop before implementing the distinct copy-on-write design required by
   `mk_dist`
+
+## ExecPlan Addendum: Update Distribution Caches Atomically
+
+### 1. Objective
+Prevent a later request failure in `mk_dist --manifest` from committing earlier
+cache mutations to an existing DistributionIO file or leaving a partial new
+cache.
+
+### 2. Constraints
+- Preserve valid single-request and manifest CLI behavior.
+- Preserve every pre-existing cache entry when an update succeeds.
+- Preserve installed targets and public headers.
+- Keep copy-on-write orchestration in `app/`; do not make DistributionIO own a
+  workflow transaction.
+- Leave `mk_sample` and analysis-facing contracts unchanged.
+- Leave unrelated local fixtures untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+The existing atomic publisher should own cleanup and rename; `mk_dist` should
+add only the cache-copy step required by update semantics.
+
+### 4. System map
+- `app/mk_dist.cc`
+- `app/CliPaths.hh`
+- `syst/Systematics.cc`
+- `io/DistributionIO.cc`
+- `tests/app_cli_parse_runtime_check.sh`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- no new transaction wrapper; compose an existing-cache copy with
+  `cli::write_file_atomically(...)`
+
+#### boundary sharpening
+- open DistributionIO in update mode only on the staged copy, never on the
+  requested final path
+
+#### stale scaffolding
+- remove any duplicate output-lifetime scope made obsolete by the transaction
+  callback
+
+### 6. Milestones
+
+#### Milestone A: Prove partial multi-request updates
+- status: done
+- hypothesis: a valid first request followed by a missing-sample request will
+  mutate the current output before the command fails
+- files / symbols touched:
+  - `tests/app_cli_parse_runtime_check.sh`
+- expected behavior risk: none; regression only
+- verification commands:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - run `app_cli_parse_runtime_check` against the published binaries
+- acceptance criteria:
+  - first seed and verify a valid DistributionIO cache
+  - preserve existing cache bytes after the second request fails
+  - leave no final or temporary file for the failed new-cache command
+- verification results:
+  - shell syntax and tracked-file diff checks passed
+  - the valid seed cache was built successfully
+  - the regression failed against the published binary because the existing
+    cache changed after the second request failed
+
+#### Milestone B: Add copy-on-write cache publication
+- status: done
+- hypothesis: copying an existing cache beside the final output, updating that
+  copy, then renaming it preserves both update behavior and failure atomicity
+- files / symbols touched:
+  - `app/mk_dist.cc`
+- expected behavior risk: medium; existing-cache update semantics must survive
+- verification commands:
+  - build `mk_dist`
+  - run `app_cli_parse_runtime_check`
+  - run systematics rigorous coverage
+- acceptance criteria:
+  - existing caches are copied before DistributionIO opens
+  - all requests complete and the writer closes before rename
+  - failed updates clean the staged copy
+  - successful updates retain old entries and add or replace requested entries
+- verification results:
+  - `mk_dist` builds in the Docker verification tree
+  - the focused runtime suite passes for existing and new failure paths
+  - a successful staged update retains the seed entry and adds a second cache
+  - `systematics_rigorous_check` passes
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification will catch metadata, UUID, and downstream cache
+  compatibility regressions
+- files / symbols touched:
+  - all files above
+- expected behavior risk: medium
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - stacked covariance export smoke
+  - shell syntax and `git diff --check`
+- acceptance criteria:
+  - every configured test and focused smoke passes
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 168.75 seconds
+  - stacked covariance export smoke passed
+  - shell syntax and tracked-file diff checks passed
+  - publication scope and remote parity verified after push
+
+### 7. Public-surface check
+- compatibility impact: valid commands and cache content remain compatible;
+  failed manifest updates stop publishing partial state
+- migration note or explicit non-goal: no migration; concurrent writer locking
+  and SampleIO output-path publication remain out of scope
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - `app/mk_dist.cc`: `+37 / -3`
+  - runtime regression: `+55 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- copy an existing cache byte-for-byte before opening the staged path in update
+  mode
+- use same-directory staging so final publication is one rename
+- keep successful output diagnostics on the requested final path
+
+### 10. Stop conditions
+- stop after existing and new cache failure atomicity plus successful update
+  compatibility are verified
+- stop before adding cross-process cache writer locking or changing public I/O
+  APIs

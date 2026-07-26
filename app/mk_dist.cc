@@ -1,5 +1,6 @@
 #include <cctype>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -172,6 +173,33 @@ namespace
             return true;
         const std::string value = arg;
         return value == "-h" || value == "--help" || value.rfind("--", 0) == 0;
+    }
+
+    void copy_existing_cache(const std::string &output_path,
+                             const std::string &temporary_path)
+    {
+        std::error_code error;
+        const bool output_exists = std::filesystem::exists(output_path, error);
+        if (error)
+        {
+            throw std::runtime_error(
+                "mk_dist: failed to inspect existing output ROOT file: " +
+                error.message());
+        }
+        if (!output_exists)
+            return;
+
+        const bool copied = std::filesystem::copy_file(
+            output_path,
+            temporary_path,
+            std::filesystem::copy_options::none,
+            error);
+        if (error || !copied)
+        {
+            const std::string detail = error ? error.message() : "copy did not create a file";
+            throw std::runtime_error(
+                "mk_dist: failed to copy existing output ROOT file: " + detail);
+        }
     }
 
     std::vector<syst::CacheRequest> read_dist_manifest(
@@ -383,9 +411,15 @@ int main(int argc, char **argv)
         }
 
         EventListIO event_list(options.eventlist_path, EventListIO::Mode::kRead);
-        DistributionIO distfile(options.output_path, DistributionIO::Mode::kUpdate);
-
-        syst::build_systematics_cache(event_list, distfile, cache_options);
+        cli::write_file_atomically(
+            options.output_path,
+            "mk_dist: failed to publish output ROOT file",
+            [&](const std::string &temporary_output_path)
+            {
+                copy_existing_cache(options.output_path, temporary_output_path);
+                DistributionIO distfile(temporary_output_path, DistributionIO::Mode::kUpdate);
+                syst::build_systematics_cache(event_list, distfile, cache_options);
+            });
 
         if (options.use_manifest)
         {

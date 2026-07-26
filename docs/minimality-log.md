@@ -3687,3 +3687,66 @@
   multi-request failures
 - `mk_sample` persists its output path, so atomic publication needs an explicit
   final-path metadata design rather than the current helper unchanged
+
+---
+
+## Current milestone
+- status: done
+- subsystem: copy-on-write distribution cache updates
+- design rule from `DESIGN.md`: keep workflows in `app/`, prefer verb-like
+  namespace functions, and add abstractions only when they delete complexity
+
+## What changed
+- made `mk_dist` copy an existing DistributionIO cache to the unused sibling
+  path before opening it in update mode
+- publish the staged cache only after every request completes and the writer
+  closes
+- added regressions for preserving an existing cache, omitting a failed new
+  cache, cleaning temporary files, and retaining old entries on success
+
+## Why this is simpler
+- copy-on-write composes one local cache-copy function with the existing atomic
+  publisher rather than adding an update transaction class
+- DistributionIO remains responsible only for persistence, while `mk_dist`
+  retains workflow ownership of all-or-nothing manifest execution
+- successful and failed cache update behavior is covered in the existing CLI
+  runtime test rather than a new test target
+
+## Verification
+- focused checks:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - build `mk_dist`
+  - run `app_cli_parse_runtime_check`
+  - run `systematics_rigorous_check`
+- results:
+  - the preservation regression failed against the published binary
+  - the updated `mk_dist` target builds
+  - focused failure and successful-update coverage passes
+  - systematics rigorous coverage passes
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 168.75 seconds
+  - stacked covariance export smoke passed
+  - shell syntax and tracked-file diff checks passed
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - `app/mk_dist.cc`: `+37 / -3`
+  - runtime regression: `+55 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- copy the final cache byte-for-byte before opening only the staged path in
+  update mode
+- preserve the copied ROOT UUID and pre-existing cache entries
+- leave concurrent writer locking and SampleIO output-path publication outside
+  this milestone
+
+## Remaining hotspots
+- `mk_sample` still writes directly to its final path and also persists that
+  path inside the ROOT file, so it needs a separate API-compatible design
+- cache publication is atomic for one process but does not serialize concurrent
+  writers targeting the same output

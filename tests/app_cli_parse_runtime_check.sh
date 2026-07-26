@@ -432,6 +432,61 @@ grep -Fx "mk_dist: event list and output paths must differ" \
 require_unchanged "${dist_eventlist_collision_copy}" "${dist_eventlist_collision}" \
   "mk_dist event list"
 
+dist_late_failure_output="${TMP_DIR}/dist-late-failure.root"
+dist_late_failure_expected="${TMP_DIR}/dist-late-failure.root.expected"
+dist_seed_log="${TMP_DIR}/dist-seed.log"
+dist_late_failure_manifest="${TMP_DIR}/dist-late-failure.manifest"
+dist_late_failure_log="${TMP_DIR}/dist-late-failure.log"
+capture_success "${dist_seed_log}" \
+  "${BUILD_DIR}/bin/mk_dist" \
+  "${dist_late_failure_output}" "${eventlist_late_failure_output}" \
+  beam topological_score 2 0 1
+grep -Fx "mk_dist: wrote ${dist_late_failure_output} from event list ${eventlist_late_failure_output} for sample beam" \
+  "${dist_seed_log}" >/dev/null
+cp "${dist_late_failure_output}" "${dist_late_failure_expected}"
+cat > "${dist_late_failure_manifest}" <<'EOF'
+beam software_trigger 2 0 2 1
+missing topological_score 2 0 1 1
+EOF
+capture_failure "${dist_late_failure_log}" \
+  "${BUILD_DIR}/bin/mk_dist" --manifest "${dist_late_failure_manifest}" \
+  "${dist_late_failure_output}" "${eventlist_late_failure_output}"
+grep -Fx "mk_dist: RootUtils: missing samples/missing" \
+  "${dist_late_failure_log}" >/dev/null
+require_unchanged "${dist_late_failure_expected}" "${dist_late_failure_output}" \
+  "mk_dist existing output after late request failure"
+require_no_temporary_output "${dist_late_failure_output}" \
+  "mk_dist existing output failure"
+
+dist_failed_new_output="${TMP_DIR}/dist-failed-new-output.root"
+dist_failed_new_output_log="${TMP_DIR}/dist-failed-new-output.log"
+capture_failure "${dist_failed_new_output_log}" \
+  "${BUILD_DIR}/bin/mk_dist" --manifest "${dist_late_failure_manifest}" \
+  "${dist_failed_new_output}" "${eventlist_late_failure_output}"
+grep -Fx "mk_dist: RootUtils: missing samples/missing" \
+  "${dist_failed_new_output_log}" >/dev/null
+if [[ -e "${dist_failed_new_output}" ]]; then
+  printf 'app_cli_parse_runtime_check: mk_dist left a partial output after late request failure\n' >&2
+  exit 1
+fi
+require_no_temporary_output "${dist_failed_new_output}" \
+  "mk_dist new output failure"
+
+dist_successful_update_manifest="${TMP_DIR}/dist-successful-update.manifest"
+dist_successful_update_log="${TMP_DIR}/dist-successful-update.log"
+dist_successful_update_cov_log="${TMP_DIR}/dist-successful-update-cov.log"
+printf 'beam software_trigger 2 0 2 1\n' > "${dist_successful_update_manifest}"
+capture_success "${dist_successful_update_log}" \
+  "${BUILD_DIR}/bin/mk_dist" --manifest "${dist_successful_update_manifest}" \
+  "${dist_late_failure_output}" "${eventlist_late_failure_output}"
+grep -Fx "mk_dist: wrote ${dist_late_failure_output} from event list ${eventlist_late_failure_output} using manifest ${dist_successful_update_manifest} (1 request(s))" \
+  "${dist_successful_update_log}" >/dev/null
+capture_failure "${dist_successful_update_cov_log}" \
+  "${BUILD_DIR}/bin/mk_cov" \
+  "${dist_late_failure_output}" beam "${TMP_DIR}/dist-successful-update.cov.root"
+grep -Fx "mk_cov: sample has multiple cached distributions; pass --cache-key" \
+  "${dist_successful_update_cov_log}" >/dev/null
+
 eventlist_log="${TMP_DIR}/mk_eventlist.log"
 capture_failure "${eventlist_log}" "${BUILD_DIR}/bin/mk_eventlist" --selection
 grep -F "usage: mk_eventlist " "${eventlist_log}" >/dev/null
