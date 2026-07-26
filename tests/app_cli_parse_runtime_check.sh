@@ -86,6 +86,16 @@ require_unchanged() {
   fi
 }
 
+require_no_temporary_output() {
+  local output_path=$1
+  local label=$2
+
+  if compgen -G "${output_path}.tmp.*" >/dev/null; then
+    printf 'app_cli_parse_runtime_check: %s left a temporary output\n' "${label}" >&2
+    exit 1
+  fi
+}
+
 write_minimal_sample_file() {
   local sample_path=$1
   local macro_path="${TMP_DIR}/write_minimal_sample.C"
@@ -347,6 +357,40 @@ capture_success "${dataset_legacy_log}" \
   "${BUILD_DIR}/bin/mk_dataset" --manifest "${dataset_manifest}" "${legacy_dataset_path}" context
 grep -F "mk_dataset: wrote ${legacy_dataset_path} with 1 logical samples from manifest ${dataset_manifest}" \
   "${dataset_legacy_log}" >/dev/null
+
+dataset_late_failure_manifest="${TMP_DIR}/dataset-late-failure.manifest"
+dataset_late_failure_missing_sample="${TMP_DIR}/missing.sample.root"
+dataset_late_failure_output="${TMP_DIR}/dataset-late-failure.root"
+dataset_late_failure_expected="${TMP_DIR}/dataset-late-failure.root.expected"
+dataset_late_failure_log="${TMP_DIR}/dataset-late-failure.log"
+printf 'beam %s\nmissing %s\n' \
+  "${sample_path}" "${dataset_late_failure_missing_sample}" \
+  > "${dataset_late_failure_manifest}"
+cp "${native_dataset_path}" "${dataset_late_failure_output}"
+cp "${dataset_late_failure_output}" "${dataset_late_failure_expected}"
+capture_failure "${dataset_late_failure_log}" \
+  "${BUILD_DIR}/bin/mk_dataset" --run run1 --beam numi --polarity fhc \
+  --manifest "${dataset_late_failure_manifest}" "${dataset_late_failure_output}"
+grep -Fx "mk_dataset: SampleIO: failed to open: ${dataset_late_failure_missing_sample}" \
+  "${dataset_late_failure_log}" >/dev/null
+require_unchanged "${dataset_late_failure_expected}" "${dataset_late_failure_output}" \
+  "mk_dataset existing output after late sample failure"
+require_no_temporary_output "${dataset_late_failure_output}" \
+  "mk_dataset existing output failure"
+
+dataset_failed_new_output="${TMP_DIR}/dataset-failed-new-output.root"
+dataset_failed_new_output_log="${TMP_DIR}/dataset-failed-new-output.log"
+capture_failure "${dataset_failed_new_output_log}" \
+  "${BUILD_DIR}/bin/mk_dataset" --manifest "${dataset_late_failure_manifest}" \
+  "${dataset_failed_new_output}" context
+grep -Fx "mk_dataset: SampleIO: failed to open: ${dataset_late_failure_missing_sample}" \
+  "${dataset_failed_new_output_log}" >/dev/null
+if [[ -e "${dataset_failed_new_output}" ]]; then
+  printf 'app_cli_parse_runtime_check: mk_dataset left a partial output after late sample failure\n' >&2
+  exit 1
+fi
+require_no_temporary_output "${dataset_failed_new_output}" \
+  "mk_dataset new output failure"
 
 eventlist_dataset_collision="${TMP_DIR}/eventlist-dataset-collision.root"
 eventlist_dataset_collision_copy="${TMP_DIR}/eventlist-dataset-collision.root.copy"

@@ -1,8 +1,5 @@
 #include <algorithm>
-#include <cerrno>
 #include <cmath>
-#include <cstdio>
-#include <cstring>
 #include <exception>
 #include <fstream>
 #include <iostream>
@@ -12,8 +9,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <unistd.h>
 
 #include "CliPaths.hh"
 #include "DistributionIO.hh"
@@ -1226,12 +1221,10 @@ namespace
                            const std::vector<LoadedEntry> &entries,
                            const PreparedCovarianceExport &prepared)
     {
-        const std::string temporary_path =
-            options.output_path + ".tmp." + std::to_string(getpid());
-        bool owns_temporary_file = false;
-
-        try
-        {
+        cli::write_file_atomically(
+            options.output_path,
+            "mk_cov: failed to publish output ROOT file",
+            [&](const std::string &temporary_path)
             {
                 TFile output(temporary_path.c_str(), "CREATE");
                 if (output.IsZombie())
@@ -1240,7 +1233,6 @@ namespace
                         "mk_cov: failed to create temporary output ROOT file: " +
                         temporary_path);
                 }
-                owns_temporary_file = true;
 
                 if (options.stacked_mode())
                 {
@@ -1259,23 +1251,7 @@ namespace
                 output.Close();
                 if (output.TestBit(TFile::kWriteError))
                     throw std::runtime_error("mk_cov: failed to close output ROOT file cleanly");
-            }
-
-            if (std::rename(temporary_path.c_str(), options.output_path.c_str()) != 0)
-            {
-                const int error_number = errno;
-                throw std::runtime_error(
-                    "mk_cov: failed to publish output ROOT file: " +
-                    std::string(std::strerror(error_number)));
-            }
-            owns_temporary_file = false;
-        }
-        catch (...)
-        {
-            if (owns_temporary_file)
-                std::remove(temporary_path.c_str());
-            throw;
-        }
+            });
     }
 }
 

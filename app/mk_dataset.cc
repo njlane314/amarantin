@@ -573,26 +573,35 @@ int main(int argc, char **argv)
             require_unique_keys(manifest_args, options.manifest_path);
             validate_input_paths(options, manifest_args);
 
-            DatasetIO dataset(options.output_path, context_from_scope(scope));
-            for (const auto &sample_arg : manifest_args)
-            {
-                SampleIO sample;
-                sample.read(sample_arg.path);
-
-                DatasetIO::Sample entry = sample.to_dataset_sample();
-                validate_native_sample_scope(scope, sample_arg.key, entry);
-
-                if (have_defs)
+            cli::write_file_atomically(
+                options.output_path,
+                "mk_dataset: failed to publish output ROOT file",
+                [&](const std::string &temporary_output_path)
                 {
-                    const ana::SampleDef *def = find_def(defs, sample_arg.key);
-                    if (!def)
-                        throw std::runtime_error("SampleDef: missing definition for sample key: " + sample_arg.key);
-                    ana::validate_sample_scope(*def, scope);
-                    def->apply(entry);
-                }
+                    DatasetIO dataset(temporary_output_path, context_from_scope(scope));
+                    for (const auto &sample_arg : manifest_args)
+                    {
+                        SampleIO sample;
+                        sample.read(sample_arg.path);
 
-                dataset.add_sample(sample_arg.key, entry);
-            }
+                        DatasetIO::Sample entry = sample.to_dataset_sample();
+                        validate_native_sample_scope(scope, sample_arg.key, entry);
+
+                        if (have_defs)
+                        {
+                            const ana::SampleDef *def = find_def(defs, sample_arg.key);
+                            if (!def)
+                            {
+                                throw std::runtime_error(
+                                    "SampleDef: missing definition for sample key: " + sample_arg.key);
+                            }
+                            ana::validate_sample_scope(*def, scope);
+                            def->apply(entry);
+                        }
+
+                        dataset.add_sample(sample_arg.key, entry);
+                    }
+                });
 
             std::cout << "mk_dataset: wrote " << options.output_path
                       << " with " << manifest_args.size() << " logical samples"
@@ -615,23 +624,29 @@ int main(int argc, char **argv)
         const std::vector<LogicalSample> logical_samples = group_samples(sample_args);
         validate_input_paths(options, sample_args);
 
-        DatasetIO dataset(options.output_path, options.context);
-        for (const auto &logical : logical_samples)
-        {
-            std::vector<DatasetIO::Sample> concrete_samples;
-            concrete_samples.reserve(logical.paths.size());
-            for (const auto &path : logical.paths)
+        cli::write_file_atomically(
+            options.output_path,
+            "mk_dataset: failed to publish output ROOT file",
+            [&](const std::string &temporary_output_path)
             {
-                SampleIO sample;
-                sample.read(path);
-                concrete_samples.push_back(sample.to_dataset_sample());
-            }
+                DatasetIO dataset(temporary_output_path, options.context);
+                for (const auto &logical : logical_samples)
+                {
+                    std::vector<DatasetIO::Sample> concrete_samples;
+                    concrete_samples.reserve(logical.paths.size());
+                    for (const auto &path : logical.paths)
+                    {
+                        SampleIO sample;
+                        sample.read(path);
+                        concrete_samples.push_back(sample.to_dataset_sample());
+                    }
 
-            DatasetIO::Sample entry = merge_samples(logical.key, concrete_samples);
-            if (have_defs)
-                ana::apply_sample_defs(defs, logical.key, entry);
-            dataset.add_sample(logical.key, entry);
-        }
+                    DatasetIO::Sample entry = merge_samples(logical.key, concrete_samples);
+                    if (have_defs)
+                        ana::apply_sample_defs(defs, logical.key, entry);
+                    dataset.add_sample(logical.key, entry);
+                }
+            });
 
         std::cout << "mk_dataset: wrote " << options.output_path
                   << " with " << logical_samples.size() << " logical samples";

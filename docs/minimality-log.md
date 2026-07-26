@@ -3566,3 +3566,63 @@
 ## Remaining hotspots
 - writable pipeline outputs are not yet transactional across multi-request or
   multi-sample failures; that is a separate, higher-risk pass
+
+---
+
+## Current milestone
+- status: done
+- subsystem: atomic dataset output publication
+- design rule from `DESIGN.md`: keep workflows in `app/`, prefer verb-like
+  namespace functions for one-shot work, and add abstractions only when they
+  delete complexity
+
+## What changed
+- made both native and legacy `mk_dataset` writes target a same-directory
+  temporary ROOT file before publishing the completed file in one rename
+- moved the existing `mk_cov` transaction mechanics into the same private
+  application helper
+- added late-sample-failure regressions for preserving an existing dataset,
+  omitting a failed new dataset, and cleaning temporary files
+
+## Why this is simpler
+- atomic publication is now one grep-visible `cli::write_file_atomically(...)`
+  call instead of application-local temporary-file ownership state
+- `mk_cov` retains its ROOT-specific write checks without retaining filesystem
+  cleanup and rename machinery
+- `DatasetIO` remains persistence-only and does not need workflow transaction
+  policy or a new installed method
+
+## Verification
+- focused checks:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - build `mk_dataset` and `mk_cov`
+  - run `app_cli_parse_runtime_check`
+  - run `tools/systematics-sbnfit-export-smoke.sh`
+- results:
+  - the new preservation regression failed against the published binary
+  - both updated targets build
+  - focused runtime and covariance export checks pass
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 150.09 seconds
+  - shell syntax and tracked-file diff checks passed
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - `mk_cov`'s local temporary-path ownership, cleanup, and rename block
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - private application code: `+109 / -63`
+  - runtime regression: `+44 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- use a private namespace function rather than a transaction class
+- keep temporary files beside the final output so publication cannot cross
+  filesystems
+- preserve the existing `mk_cov` create, write, close, and publish diagnostics
+
+## Remaining hotspots
+- other pipeline writers have not yet been audited for equivalent transaction
+  boundaries; widening this pass would exceed the current milestone

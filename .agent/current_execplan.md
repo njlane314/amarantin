@@ -5540,3 +5540,141 @@ and prevents four other CLIs from growing copies of it.
 ### 10. Stop conditions
 - stop after every pipeline CLI has the same destructive-output invariant
 - stop before transactional rewrites of otherwise valid multi-step outputs
+
+## ExecPlan Addendum: Publish Dataset Outputs Atomically
+
+### 1. Objective
+Prevent a late `mk_dataset` input or validation failure from replacing a valid
+dataset with a partial ROOT file, while consolidating the transaction mechanics
+already implemented locally by `mk_cov`.
+
+### 2. Constraints
+- Preserve all valid `mk_dataset` and `mk_cov` command shapes and output data.
+- Preserve installed targets and installed public headers.
+- Keep the helper private to `app/`; do not move workflow policy into `io/`.
+- Leave unrelated pipeline writers and local fixtures outside this milestone.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer verb-like namespace functions for one-shot work
+- add abstractions only when they delete complexity
+
+The new helper must replace the existing `mk_cov` transaction block as well as
+protect `mk_dataset`; it must not become a generic persistence layer.
+
+### 4. System map
+- `app/CliPaths.hh`
+- `app/mk_dataset.cc`
+- `app/mk_cov.cc`
+- `tests/app_cli_parse_runtime_check.sh`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- replace `mk_cov`'s local temporary-file ownership and rename code with one
+  private namespace function
+
+#### boundary sharpening
+- make final-path publication an explicit application workflow step after the
+  ROOT writer has closed successfully
+
+#### stale scaffolding
+- remove low-level headers from `mk_cov` once the transaction code moves to the
+  shared private helper
+
+### 6. Milestones
+
+#### Milestone A: Add late-failure preservation regressions
+- status: done
+- hypothesis: byte checks distinguish a clean failure from a partial ROOT file
+- files / symbols touched:
+  - `tests/app_cli_parse_runtime_check.sh`
+- expected behavior risk: none; regression only
+- verification commands:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - run `app_cli_parse_runtime_check` against the current binaries
+- acceptance criteria:
+  - a late missing sample does not alter an existing dataset
+  - the same failure does not leave a newly requested dataset behind
+- verification results:
+  - shell syntax and tracked-file diff checks passed
+  - the regression failed against the published binary because the existing
+    dataset changed after the late sample-open failure
+
+#### Milestone B: Centralise atomic file publication
+- status: done
+- hypothesis: one verb-like private helper is smaller than two application-local
+  temporary-file ownership implementations
+- files / symbols touched:
+  - `app/CliPaths.hh`
+  - `app/mk_dataset.cc`
+  - `app/mk_cov.cc`
+- expected behavior risk: low; final publication timing changes for
+  `mk_dataset`, valid ROOT content does not
+- verification commands:
+  - build `mk_dataset` and `mk_cov`
+  - run the focused CLI runtime regression
+  - run the covariance export smoke
+- acceptance criteria:
+  - publication occurs only after each writer closes
+  - temporary files are removed after exceptions
+  - `mk_cov` retains its existing user-facing diagnostics
+- verification results:
+  - `mk_dataset` and `mk_cov` build in the Docker verification tree
+  - the focused CLI runtime regression passes for native and legacy dataset
+    modes, including temporary-file cleanup
+  - the stacked covariance export smoke passes
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification catches cross-application regressions from the
+  shared private helper
+- files / symbols touched:
+  - all files above
+- expected behavior risk: low
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - shell syntax and `git diff --check`
+- acceptance criteria:
+  - every configured test passes
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 150.09 seconds
+  - stacked covariance export smoke passed
+  - shell syntax and tracked-file diff checks passed
+  - publication scope and remote parity verified after push
+
+### 7. Public-surface check
+- compatibility impact: valid CLI invocations and installed surfaces remain
+  unchanged; failed dataset builds no longer publish partial outputs
+- migration note or explicit non-goal: no migration; transactional conversion of
+  other pipeline writers is outside this milestone
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - `mk_cov`'s local temporary-path ownership, cleanup, and rename block
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - private application code: `+109 / -63`
+  - runtime regression: `+44 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- test both preservation of an existing output and absence of a new output
+- keep transaction policy in private application code
+- choose an unused same-directory temporary path so final publication remains a
+  single filesystem rename
+
+### 10. Stop conditions
+- stop after `mk_dataset` and the pre-existing `mk_cov` transaction share one
+  implementation and focused/full verification pass
+- stop before changing `DatasetIO`'s installed interface or widening the pass to
+  other writers
