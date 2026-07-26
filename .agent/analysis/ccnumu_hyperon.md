@@ -80,6 +80,9 @@ style.
   - every ROOT file in one logical sample must expose compatible event and
     subrun tree branch names and persisted types; cross-shard schema drift is a
     hard failure before `TChain` selection or cloning
+  - required event branches must bind to the analysis C++ types with a
+    non-negative ROOT status; incompatible bindings are a hard failure before
+    selected output is filled
 - workflow implication:
   - this repo owns the sample-orthogonality logic and should apply it before
     downstream dataset / event-list / training-snapshot production

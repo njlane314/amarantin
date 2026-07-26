@@ -34,6 +34,8 @@ EventListBuild.hh
   DatasetIO run/subrun normalization surface plus the event-tree CV weights.
   Before chaining, it validates that every input ROOT file has matching event
   and subrun branch names and persisted types; schema drift is a hard error.
+  Branch bindings and event-tree reads are checked while filling selected
+  output, so incompatible types or ROOT read failures cannot yield partial data.
 
 SampleDef.hh
   Defines ana::SampleDef plus read_sample_defs(...) and

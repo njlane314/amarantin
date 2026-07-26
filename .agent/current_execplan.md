@@ -6713,3 +6713,153 @@ cut setup, and `TChain::CloneTree(...)` input handling.
 - stop after both event and subrun schema drift reject before chain processing
   and homogeneous real/synthetic pipelines pass
 - stop before changing the physics selection or adding missing-branch defaults
+
+## ExecPlan Addendum: Check Event-Tree Branch Bindings
+
+### 1. Objective
+Prevent `ana::build_event_list(...)` from silently using default or stale values
+when a homogeneous event-tree branch cannot bind to the C++ type expected by the
+analysis code.
+
+### 2. Constraints
+- Preserve valid branch conversions accepted by ROOT.
+- Reject every negative `SetBranchAddress(...)` status with sample, tree, and
+  branch context.
+- Treat negative `LoadTree(...)` and `GetEntry(...)` results as hard read
+  failures rather than returning partial selected output.
+- Preserve installed headers, CMake targets, CLI shapes, and physics rules.
+- Keep this milestone in `ana/`; do not redesign ROOT persistence ownership.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep `ana/` focused on event-list construction and selection
+- prefer one direct helper over repeated unchecked calls
+- add abstractions only when they delete complexity
+
+One checked binding function should replace every raw branch-address call in the
+event-list transform.
+
+### 4. System map
+- `ana/EventListBuild.cc`
+- `tests/pipeline_normalization_check.cc`
+- `.agent/analysis/ccnumu_hyperon.md`
+- `ana/README`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- one templated checked bind replaces repeated unchecked
+  `chain.SetBranchAddress(...)` statements
+
+#### boundary sharpening
+- a persisted branch is usable only after ROOT confirms that its address type is
+  compatible with the analysis variable
+
+#### stale scaffolding
+- remove implicit reliance on ROOT stderr messages while continuing execution
+
+### 6. Milestones
+
+#### Milestone A: Prove incompatible homogeneous binding is accepted
+- status: done
+- hypothesis: two shards with identical `Int_t is_nu_mu_cc` branches pass schema
+  preflight, ROOT rejects the `Bool_t` address, and construction still succeeds
+- files / symbols touched:
+  - `tests/pipeline_normalization_check.cc`
+- expected behavior risk: none; regression only
+- verification commands:
+  - build `pipeline_normalization_check` against published Ana
+  - run `pipeline_normalization_check`
+- acceptance criteria:
+  - both shards have the same schema
+  - `is_nu_mu_cc` uses an incompatible persisted type
+  - event-list construction must throw with sample/tree/branch context
+- verification results:
+  - a direct ROOT probe returns `-2` for `Int_t` branch to `Bool_t` address
+  - the repository regression builds against published Ana
+  - ROOT reports the `is_nu_mu_cc` type error, but `build_event_list` returns
+    without throwing and the regression fails
+
+#### Milestone B: Check all bindings and entry reads
+- status: done
+- hypothesis: central checked operations prevent default truth/weight values and
+  partial event loops without changing valid files
+- files / symbols touched:
+  - `ana/EventListBuild.cc`
+  - analysis-facing documentation
+- expected behavior risk: medium; ROOT-compatible real fixture bindings must
+  remain accepted
+- verification commands:
+  - build `Ana` and `pipeline_normalization_check`
+  - run `pipeline_normalization_check`
+  - run `testroot_pipeline_smoke`
+- acceptance criteria:
+  - every scalar and object branch binding checks its ROOT status
+  - diagnostics identify sample, event tree, and branch
+  - negative tree-load or entry-read results throw with entry context
+  - valid real and synthetic pipelines retain their output
+- verification results:
+  - every raw `SetBranchAddress(...)` call is routed through one checked local
+    binding operation
+  - the homogeneous incompatible-binding regression is rejected with sample,
+    tree, branch, and ROOT status context
+  - `pipeline_normalization_check` passes in 1.98 seconds
+  - the exact real-fixture `testroot_pipeline_smoke` passes in 67.53 seconds
+  - focused target builds pass with repository warnings enabled
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification catches optional-weight, macro, and downstream
+  compatibility regressions
+- files / symbols touched:
+  - all files above
+- expected behavior risk: medium
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - required shell checks and `git diff --check`
+- acceptance criteria:
+  - all configured tests pass
+  - no unchecked EventListBuild branch binding remains
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - the full warning-enabled Docker build passes
+  - all 18 configured CTest tests pass in 202.84 seconds
+  - final `testroot_pipeline_smoke` passes in 68.38 seconds
+  - final `pipeline_normalization_check` passes in 1.94 seconds
+  - the required shell syntax checks and `git diff --check` pass
+  - source review finds one checked `SetBranchAddress(...)` operation and no
+    raw call site
+  - the final naming, deletion, diagnostics, and module-boundary review finds no
+    blocking issue
+
+### 7. Public-surface check
+- compatibility impact: no signature or CLI change; malformed persisted branch
+  types and failed reads become hard errors
+- migration note or explicit non-goal: producers must write ROOT-compatible
+  branch types; implicit application-side coercion is out of scope
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - event-list implementation: `+54 / -28`
+  - synthetic regression: `+69 / -25`
+  - analysis and user documentation: `+5 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- accept non-negative ROOT conversion statuses and reject only negative errors
+- validate binding compatibility separately from cross-file schema equality
+- update analysis memory because required truth fields now also require usable
+  persisted types
+
+### 10. Stop conditions
+- stop after incompatible homogeneous bindings and negative reads fail clearly
+  while all current valid fixtures pass
+- stop before replacing `TChain` or redesigning source ntuple types

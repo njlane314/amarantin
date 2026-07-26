@@ -509,6 +509,7 @@ namespace
         bool include_sigma0_flag = true;
         bool include_subrun_pot = true;
         bool count_strange_as_float = false;
+        bool is_nu_mu_cc_as_int = false;
     };
 
     void write_mc_schema_fixture(const std::string &path,
@@ -534,6 +535,7 @@ namespace
             Float_t count_strange_float = 0.0f;
             Int_t int_ccnc = 0;
             Bool_t is_nu_mu_cc = kTRUE;
+            Int_t is_nu_mu_cc_int = 1;
             Bool_t nu_vtx_in_fv = kTRUE;
             Bool_t truth_has_strange_fs = kFALSE;
             Bool_t truth_has_fs_lambda0 = kFALSE;
@@ -560,7 +562,14 @@ namespace
                 event_tree.Branch("count_strange", &count_strange, "count_strange/I");
             }
             event_tree.Branch("int_ccnc", &int_ccnc, "int_ccnc/I");
-            event_tree.Branch("is_nu_mu_cc", &is_nu_mu_cc, "is_nu_mu_cc/O");
+            if (schema.is_nu_mu_cc_as_int)
+            {
+                event_tree.Branch("is_nu_mu_cc", &is_nu_mu_cc_int, "is_nu_mu_cc/I");
+            }
+            else
+            {
+                event_tree.Branch("is_nu_mu_cc", &is_nu_mu_cc, "is_nu_mu_cc/O");
+            }
             event_tree.Branch("nu_vtx_in_fv", &nu_vtx_in_fv, "nu_vtx_in_fv/O");
             event_tree.Branch("truth_has_strange_fs", &truth_has_strange_fs,
                               "truth_has_strange_fs/O");
@@ -600,19 +609,22 @@ namespace
         file.Close();
     }
 
-    void require_cross_shard_schema_rejection(
-        const McFixtureSchema &mismatched_schema,
+    void require_event_list_input_rejection(
+        const McFixtureSchema &first_schema,
+        const McFixtureSchema &second_schema,
+        const std::string &expected_tree,
         const std::string &expected_branch,
-        const std::string &expected_difference)
+        const std::string &expected_difference,
+        bool expect_schema_mismatch)
     {
         const TempDir tmp = make_temp_dir();
-        const std::string complete_path = (tmp.path / "complete.root").string();
-        const std::string mismatched_path = (tmp.path / "mismatched.root").string();
+        const std::string first_shard_path = (tmp.path / "first.root").string();
+        const std::string second_shard_path = (tmp.path / "second.root").string();
         const std::string dataset_path = (tmp.path / "dataset.root").string();
         const std::string eventlist_path = (tmp.path / "eventlist.root").string();
 
-        write_mc_schema_fixture(complete_path, 0, McFixtureSchema{});
-        write_mc_schema_fixture(mismatched_path, 1, mismatched_schema);
+        write_mc_schema_fixture(first_shard_path, 0, first_schema);
+        write_mc_schema_fixture(second_shard_path, 1, second_schema);
 
         DatasetIO::Sample sample;
         sample.sample = "overlay";
@@ -621,7 +633,7 @@ namespace
         sample.beam = DatasetIO::Sample::Beam::kNuMI;
         sample.polarity = DatasetIO::Sample::Polarity::kFHC;
         sample.normalisation_mode = "run_subrun_pot";
-        sample.root_files = {complete_path, mismatched_path};
+        sample.root_files = {first_shard_path, second_shard_path};
         sample.run_subrun_normalisations = {
             {1, 0, 1.0e12, 1.0e12, 1.0},
             {1, 1, 1.0e12, 1.0e12, 1.0},
@@ -641,7 +653,7 @@ namespace
         config.selection_expr = "selected != 0";
         config.selection_name = "raw";
 
-        bool rejected_mismatched_schema = false;
+        bool rejected_input = false;
         try
         {
             ana::build_event_list(dataset, eventlist, config);
@@ -649,37 +661,69 @@ namespace
         catch (const std::exception &error)
         {
             const std::string message = error.what();
-            require(message.find("schema") != std::string::npos,
-                    "cross-shard rejection should identify a schema mismatch");
-            require(message.find(mismatched_path) != std::string::npos,
-                    "cross-shard rejection should identify the mismatched file");
+            require(message.find("sample overlay") != std::string::npos,
+                    "input rejection should identify the logical sample");
+            require(message.find(expected_tree) != std::string::npos,
+                    "input rejection should identify the affected tree");
             require(message.find(expected_branch) != std::string::npos,
-                    "cross-shard rejection should identify the divergent branch");
+                    "input rejection should identify the affected branch");
             require(message.find(expected_difference) != std::string::npos,
-                    "cross-shard rejection should identify the schema difference");
-            rejected_mismatched_schema = true;
+                    "input rejection should identify the failure mode");
+            if (expect_schema_mismatch)
+            {
+                require(message.find("schema") != std::string::npos,
+                        "cross-shard rejection should identify a schema mismatch");
+                require(message.find(second_shard_path) != std::string::npos,
+                        "cross-shard rejection should identify the mismatched file");
+            }
+            rejected_input = true;
         }
 
-        require(rejected_mismatched_schema,
-                "build_event_list should reject a later shard with a different tree schema");
+        require(rejected_input,
+                "build_event_list should reject incompatible event-list input trees");
     }
 
     void run_cross_shard_schema_rejection_checks()
     {
         McFixtureSchema missing_event_branch;
         missing_event_branch.include_sigma0_flag = false;
-        require_cross_shard_schema_rejection(
-            missing_event_branch, "truth_has_fs_sigma0", "missing branch");
+        require_event_list_input_rejection(
+            McFixtureSchema{},
+            missing_event_branch,
+            "EventSelectionFilter",
+            "truth_has_fs_sigma0",
+            "missing branch",
+            true);
 
         McFixtureSchema missing_subrun_branch;
         missing_subrun_branch.include_subrun_pot = false;
-        require_cross_shard_schema_rejection(
-            missing_subrun_branch, "pot", "missing branch");
+        require_event_list_input_rejection(
+            McFixtureSchema{},
+            missing_subrun_branch,
+            "SubRun",
+            "pot",
+            "missing branch",
+            true);
 
         McFixtureSchema changed_event_branch_type;
         changed_event_branch_type.count_strange_as_float = true;
-        require_cross_shard_schema_rejection(
-            changed_event_branch_type, "count_strange", "different persisted type");
+        require_event_list_input_rejection(
+            McFixtureSchema{},
+            changed_event_branch_type,
+            "EventSelectionFilter",
+            "count_strange",
+            "different persisted type",
+            true);
+
+        McFixtureSchema incompatible_binding;
+        incompatible_binding.is_nu_mu_cc_as_int = true;
+        require_event_list_input_rejection(
+            incompatible_binding,
+            incompatible_binding,
+            "EventSelectionFilter",
+            "is_nu_mu_cc",
+            "incompatible persisted type",
+            false);
     }
 }
 

@@ -4075,3 +4075,60 @@
 ## Remaining hotspots
 - broader repository diagnostics remain ongoing; event-list construction now
   rejects cross-shard tree drift before formula or clone processing
+
+---
+
+## Current milestone
+- status: done
+- subsystem: checked EventListBuild branch bindings and entry reads
+- design rule from `DESIGN.md`: centralize repeated ROOT checks only where one
+  helper removes silent failure paths
+
+## What changed
+- replaced every raw event-tree `SetBranchAddress(...)` call with one checked
+  local binding operation
+- made negative `LoadTree(...)` and `GetEntry(...)` results hard failures with
+  sample, tree, entry, and ROOT status context
+- added a homogeneous-schema regression whose persisted `Int_t` truth flag
+  cannot bind to the analysis `Bool_t`
+
+## Why this is simpler
+- one checked binding operation replaces every unchecked branch-address call
+- event-list construction has one failure policy for incompatible persisted
+  values instead of depending on ROOT stderr and implicit defaults
+
+## Verification
+- a direct ROOT probe reports status `-2` when an `Int_t` branch is bound to the
+  `Bool_t` address expected for `is_nu_mu_cc`
+- the repository regression fails against published `main` because ROOT reports
+  the error but event-list construction returns without throwing
+- focused builds pass with repository warnings enabled
+- `pipeline_normalization_check` passes in 1.98 seconds after the fix
+- exact real-fixture `testroot_pipeline_smoke` passes in 67.53 seconds
+- the full warning-enabled Docker build passes
+- all 18 configured CTest tests pass in 202.84 seconds
+- final full-suite `testroot_pipeline_smoke` passes in 68.38 seconds
+- final full-suite `pipeline_normalization_check` passes in 1.94 seconds
+- the post-naming focused rebuild passes and the regression passes in 2.09
+  seconds
+- required shell syntax checks and `git diff --check` pass
+- final code, naming, deletion, diagnostics, and boundary review finds no
+  blocking issue
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - event-list implementation: `+54 / -28`
+  - synthetic regression: `+69 / -25`
+  - analysis and user documentation: `+5 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- accept ROOT-compatible non-negative conversion statuses and reject negatives
+
+## Remaining hotspots
+- broader repository diagnostics remain ongoing; event-list construction now
+  rejects incompatible branch bindings and negative ROOT entry reads

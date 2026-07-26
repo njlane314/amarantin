@@ -656,55 +656,69 @@ namespace
             }
         }
 
+        const std::string source_sample_name = sample_context(sample_key, sample);
+        const auto bind_branch = [&](const char *branch_name, auto address)
+        {
+            const int binding_status = chain.SetBranchAddress(branch_name, address);
+            if (binding_status < 0)
+            {
+                throw std::runtime_error(
+                    "ana::build_event_list: sample " + source_sample_name + ", tree " +
+                    event_tree_name + ", branch " + branch_name +
+                    " has an incompatible persisted type for analysis binding (ROOT status " +
+                    std::to_string(binding_status) + ")");
+            }
+        };
+
         if (has_weight_spline)
-            chain.SetBranchAddress("weightSpline", &weight_spline);
+            bind_branch("weightSpline", &weight_spline);
         if (has_weight_tune)
-            chain.SetBranchAddress("weightTune", &weight_tune);
+            bind_branch("weightTune", &weight_tune);
         if (has_weight_spline_times_tune)
-            chain.SetBranchAddress("weightSplineTimesTune", &weight_spline_times_tune);
+            bind_branch("weightSplineTimesTune", &weight_spline_times_tune);
         if (has_ppfx_cv)
-            chain.SetBranchAddress("ppfx_cv", &ppfx_cv);
+            bind_branch("ppfx_cv", &ppfx_cv);
         if (has_rootino_fix)
-            chain.SetBranchAddress("RootinoFix", &rootino_fix);
-        chain.SetBranchAddress("run", &run);
-        chain.SetBranchAddress(has_subrun ? "subRun" : "sub", &subrun);
+            bind_branch("RootinoFix", &rootino_fix);
+        bind_branch("run", &run);
+        const char *subrun_branch_name = has_subrun ? "subRun" : "sub";
+        bind_branch(subrun_branch_name, &subrun);
         if (has_nu_pdg)
-            chain.SetBranchAddress("nu_pdg", &nu_pdg);
+            bind_branch("nu_pdg", &nu_pdg);
         if (has_int_ccnc)
-            chain.SetBranchAddress("int_ccnc", &int_ccnc);
+            bind_branch("int_ccnc", &int_ccnc);
         if (has_is_nu_mu_cc)
-            chain.SetBranchAddress("is_nu_mu_cc", &is_nu_mu_cc);
+            bind_branch("is_nu_mu_cc", &is_nu_mu_cc);
         if (has_truth_in_fiducial)
-            chain.SetBranchAddress("nu_vtx_in_fv", &truth_in_fiducial);
+            bind_branch("nu_vtx_in_fv", &truth_in_fiducial);
         if (has_truth_vtx_sce_x)
-            chain.SetBranchAddress("nu_vtx_sce_x", &truth_vtx_x);
+            bind_branch("nu_vtx_sce_x", &truth_vtx_x);
         else if (has_truth_vtx_x)
-            chain.SetBranchAddress("nu_vtx_x", &truth_vtx_x);
+            bind_branch("nu_vtx_x", &truth_vtx_x);
         if (has_truth_vtx_sce_y)
-            chain.SetBranchAddress("nu_vtx_sce_y", &truth_vtx_y);
+            bind_branch("nu_vtx_sce_y", &truth_vtx_y);
         else if (has_truth_vtx_y)
-            chain.SetBranchAddress("nu_vtx_y", &truth_vtx_y);
+            bind_branch("nu_vtx_y", &truth_vtx_y);
         if (has_truth_vtx_sce_z)
-            chain.SetBranchAddress("nu_vtx_sce_z", &truth_vtx_z);
+            bind_branch("nu_vtx_sce_z", &truth_vtx_z);
         else if (has_truth_vtx_z)
-            chain.SetBranchAddress("nu_vtx_z", &truth_vtx_z);
+            bind_branch("nu_vtx_z", &truth_vtx_z);
         if (has_truth_has_strange_fs)
-            chain.SetBranchAddress("truth_has_strange_fs", &truth_has_strange_fs);
+            bind_branch("truth_has_strange_fs", &truth_has_strange_fs);
         if (has_truth_has_fs_lambda0)
-            chain.SetBranchAddress("truth_has_fs_lambda0", &truth_has_fs_lambda0);
+            bind_branch("truth_has_fs_lambda0", &truth_has_fs_lambda0);
         if (has_truth_has_fs_sigma0)
-            chain.SetBranchAddress("truth_has_fs_sigma0", &truth_has_fs_sigma0);
+            bind_branch("truth_has_fs_sigma0", &truth_has_fs_sigma0);
         if (has_truth_has_g4_lambda0)
-            chain.SetBranchAddress("truth_has_g4_lambda0", &truth_has_g4_lambda0);
+            bind_branch("truth_has_g4_lambda0", &truth_has_g4_lambda0);
         if (has_truth_has_g4_lambda0_from_sigma0)
-            chain.SetBranchAddress("truth_has_g4_lambda0_from_sigma0",
-                                   &truth_has_g4_lambda0_from_sigma0);
+            bind_branch("truth_has_g4_lambda0_from_sigma0", &truth_has_g4_lambda0_from_sigma0);
         if (has_truth_fs_lambda0_p)
-            chain.SetBranchAddress("truth_fs_lambda0_p", &truth_fs_lambda0_p);
+            bind_branch("truth_fs_lambda0_p", &truth_fs_lambda0_p);
         if (has_truth_fs_sigma0_p)
-            chain.SetBranchAddress("truth_fs_sigma0_p", &truth_fs_sigma0_p);
+            bind_branch("truth_fs_sigma0_p", &truth_fs_sigma0_p);
         if (has_prim_pdg)
-            chain.SetBranchAddress("prim_pdg", &prim_pdg);
+            bind_branch("prim_pdg", &prim_pdg);
 
         double event_weight_normalisation = 1.0;
         double event_weight_central_value = 1.0;
@@ -754,7 +768,12 @@ namespace
         {
             const Long64_t local_entry = chain.LoadTree(i);
             if (local_entry < 0)
-                break;
+            {
+                throw std::runtime_error(
+                    "ana::build_event_list: failed to load entry " + std::to_string(i) +
+                    " for sample " + source_sample_name + ", tree " + event_tree_name +
+                    " (ROOT status " + std::to_string(local_entry) + ")");
+            }
 
             if (chain.GetTreeNumber() != current_tree_number)
             {
@@ -766,7 +785,14 @@ namespace
                 if (pass_muon_formula) pass_muon_formula->UpdateFormulaLeaves();
             }
 
-            chain.GetEntry(i);
+            const int bytes_read = chain.GetEntry(i);
+            if (bytes_read < 0)
+            {
+                throw std::runtime_error(
+                    "ana::build_event_list: failed to read entry " + std::to_string(i) +
+                    " for sample " + source_sample_name + ", tree " + event_tree_name +
+                    " (ROOT status " + std::to_string(bytes_read) + ")");
+            }
             pass_trigger = pass_trigger_formula ? (pass_trigger_formula->EvalInstance() != 0.0) : false;
             pass_slice = pass_slice_formula ? (pass_slice_formula->EvalInstance() != 0.0) : false;
             pass_fiducial = pass_fiducial_formula ? (pass_fiducial_formula->EvalInstance() != 0.0) : false;
