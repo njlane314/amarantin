@@ -5678,3 +5678,142 @@ protect `mk_dataset`; it must not become a generic persistence layer.
   implementation and focused/full verification pass
 - stop before changing `DatasetIO`'s installed interface or widening the pass to
   other writers
+
+## ExecPlan Addendum: Publish Event Lists Atomically
+
+### 1. Objective
+Prevent a later sample-build failure in `mk_eventlist` from replacing an
+existing event list with a partial ROOT file or leaving a failed new output.
+
+### 2. Constraints
+- Preserve valid `mk_eventlist` CLI behavior and EventListIO content.
+- Preserve installed targets and public headers.
+- Keep publication policy in `app/`; do not move workflow transactions into
+  `ana/` or `io/`.
+- Do not widen this pass to `mk_dist` update semantics or `mk_sample`'s
+  persisted output-path contract.
+- Leave the unrelated local ROOT and plot fixtures untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer verb-like namespace functions for one-shot work
+- add abstractions only when they delete complexity
+
+This pass should reuse `cli::write_file_atomically(...)` rather than add a
+second transaction concept.
+
+### 4. System map
+- `app/mk_eventlist.cc`
+- `app/CliPaths.hh`
+- `ana/EventListBuild.cc`
+- `io/EventListIO.cc`
+- `tests/app_cli_parse_runtime_check.sh`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- no new wrapper; reuse the existing private atomic-write function
+
+#### boundary sharpening
+- create and fill EventListIO at a temporary path, then publish only after the
+  event-list writer has flushed and closed
+
+#### stale scaffolding
+- no stale source scaffolding expected; keep the deletion pass limited to
+  unnecessary test-fixture duplication
+
+### 6. Milestones
+
+#### Milestone A: Prove late-sample output destruction
+- status: done
+- hypothesis: a self-contained two-sample dataset will show that the current
+  CLI replaces the output before the second sample fails
+- files / symbols touched:
+  - `tests/app_cli_parse_runtime_check.sh`
+- expected behavior risk: none; regression only
+- verification commands:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - run `app_cli_parse_runtime_check` against the published binaries
+- acceptance criteria:
+  - first prove the synthetic valid sample can build an event list
+  - require byte preservation for an existing output after a later sample fails
+  - require no final or temporary file for the corresponding new-output failure
+- verification results:
+  - shell syntax and tracked-file diff checks passed
+  - the real `mk_sample` producer built both test samples and the one-sample
+    event-list seed successfully
+  - the regression failed against the published `mk_eventlist` because the
+    seeded output changed after the later sample failed
+
+#### Milestone B: Reuse atomic publication in mk_eventlist
+- status: done
+- hypothesis: changing only the path passed to EventListIO protects the final
+  output without changing analysis or persistence APIs
+- files / symbols touched:
+  - `app/mk_eventlist.cc`
+- expected behavior risk: low; successful content should remain unchanged
+- verification commands:
+  - build `mk_eventlist`
+  - run `app_cli_parse_runtime_check`
+- acceptance criteria:
+  - EventListIO closes before the final rename
+  - failed builds clean the temporary file
+  - success diagnostics continue to name the requested final path
+- verification results:
+  - `mk_eventlist` builds in the Docker verification tree
+  - the focused runtime suite passes, including successful publication,
+    existing-output preservation, failed-new-output omission, and temporary
+    cleanup
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification will catch any ROOT lifetime or downstream
+  metadata regression from writing through a temporary path
+- files / symbols touched:
+  - all files above
+- expected behavior risk: low
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - shell syntax and `git diff --check`
+- acceptance criteria:
+  - every configured test passes
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 163.98 seconds
+  - shell syntax and tracked-file diff checks passed
+  - publication scope and remote parity verified after push
+
+### 7. Public-surface check
+- compatibility impact: valid commands and installed surfaces remain unchanged;
+  failed event-list builds no longer publish partial files
+- migration note or explicit non-goal: no migration; copy-on-write distribution
+  updates and SampleIO output-path semantics remain separate audit items
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale test scaffolding removed:
+  - the handwritten partial SampleIO ROOT layout
+- approximate LOC delta:
+  - `app/mk_eventlist.cc`: `+14 / -11`
+  - runtime regression and fixture cleanup: `+87 / -73`
+  - plus tracking-log updates
+
+### 9. Decision log
+- prove the first sample is valid before triggering failure on the second
+- reuse the shared app helper without changing EventListIO or ana interfaces
+- do not update the analysis-memory document because no sample rule, fit
+  structure, or training-snapshot requirement changes
+
+### 10. Stop conditions
+- stop after failed `mk_eventlist` commands preserve the final path and focused
+  plus full verification pass
+- stop before implementing the distinct copy-on-write design required by
+  `mk_dist`

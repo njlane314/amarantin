@@ -148,17 +148,20 @@ int main(int argc, char **argv)
         if (!options.explicit_selection && options.selection_name != "raw")
             selection_expr.clear();
 
-        {
-            EventListIO event_list(options.output_path, EventListIO::Mode::kWrite);
+        ana::BuildConfig build_config;
+        build_config.event_tree_name = options.event_tree_name;
+        build_config.subrun_tree_name = options.subrun_tree_name;
+        build_config.selection_expr = selection_expr;
+        build_config.selection_name = options.selection_name;
 
-            ana::BuildConfig build_config;
-            build_config.event_tree_name = options.event_tree_name;
-            build_config.subrun_tree_name = options.subrun_tree_name;
-            build_config.selection_expr = selection_expr;
-            build_config.selection_name = options.selection_name;
-
-            ana::build_event_list(dataset, event_list, build_config);
-        }
+        cli::write_file_atomically(
+            options.output_path,
+            "mk_eventlist: failed to publish output ROOT file",
+            [&](const std::string &temporary_output_path)
+            {
+                EventListIO event_list(temporary_output_path, EventListIO::Mode::kWrite);
+                ana::build_event_list(dataset, event_list, build_config);
+            });
 
         std::cout << "mk_eventlist: wrote " << options.output_path
                   << " from dataset " << options.dataset_path << "\n";

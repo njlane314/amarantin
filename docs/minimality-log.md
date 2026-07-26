@@ -3626,3 +3626,64 @@
 ## Remaining hotspots
 - other pipeline writers have not yet been audited for equivalent transaction
   boundaries; widening this pass would exceed the current milestone
+
+---
+
+## Current milestone
+- status: done
+- subsystem: atomic event-list output publication
+- design rule from `DESIGN.md`: keep workflows in `app/`, prefer verb-like
+  namespace functions for one-shot work, and add abstractions only when they
+  delete complexity
+
+## What changed
+- made `mk_eventlist` build into a same-directory temporary EventListIO file and
+  publish it only after `ana::build_event_list(...)` returns and the writer
+  closes
+- added a two-sample regression where the first sample succeeds and the second
+  lacks the requested event tree
+- replaced the test's handwritten partial SampleIO fixture with outputs from
+  the real `mk_sample` producer
+
+## Why this is simpler
+- `mk_eventlist` now uses the same grep-visible atomic publication path as
+  `mk_dataset` and `mk_cov`
+- neither EventListIO nor the analysis builder needs a transaction API
+- the runtime test no longer duplicates SampleIO's on-disk layout
+
+## Verification
+- focused checks:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - build `mk_eventlist`
+  - run `app_cli_parse_runtime_check`
+- results:
+  - the preservation regression failed against the published binary
+  - the updated `mk_eventlist` target builds
+  - the focused runtime suite passes
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 163.98 seconds
+  - shell syntax and tracked-file diff checks passed
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- test scaffolding removed:
+  - handwritten partial SampleIO ROOT persistence fixture
+- approximate LOC delta:
+  - `app/mk_eventlist.cc`: `+14 / -11`
+  - runtime regression and fixture cleanup: `+87 / -73`
+  - plus tracking-log updates
+
+## Decisions
+- reuse `cli::write_file_atomically(...)` without changing installed APIs
+- keep the final dataset path in EventListIO metadata while only the physical
+  output path is temporary
+- leave `mk_dist` copy-on-write and SampleIO's persisted output path for
+  separate milestones
+
+## Remaining hotspots
+- `mk_dist` still mutates existing distribution caches in place across
+  multi-request failures
+- `mk_sample` persists its output path, so atomic publication needs an explicit
+  final-path metadata design rather than the current helper unchanged

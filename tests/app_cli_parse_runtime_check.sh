@@ -96,77 +96,9 @@ require_no_temporary_output() {
   fi
 }
 
-write_minimal_sample_file() {
-  local sample_path=$1
-  local macro_path="${TMP_DIR}/write_minimal_sample.C"
-
-  cat > "${macro_path}" <<'EOF'
-#include <stdexcept>
-#include <string>
-
-#include "TDirectory.h"
-#include "TFile.h"
-#include "TNamed.h"
-#include "TParameter.h"
-#include "TTree.h"
-
-void write_minimal_sample(const char *path)
-{
-  TFile file(path, "RECREATE");
-  if (file.IsZombie())
-    throw std::runtime_error("failed to create minimal sample file");
-
-  TDirectory *meta_dir = file.mkdir("meta");
-  if (!meta_dir)
-    throw std::runtime_error("failed to create meta directory");
-  meta_dir->cd();
-  TNamed("output_path", path).Write("output_path", TObject::kOverwrite);
-
-  TTree input_paths("input_paths", "");
-  std::string input_path = "/tmp/input.root";
-  input_paths.Branch("input_path", &input_path);
-  input_paths.Fill();
-  input_paths.Write("input_paths", TObject::kOverwrite);
-
-  TDirectory *sample_dir = file.mkdir("sample");
-  if (!sample_dir)
-    throw std::runtime_error("failed to create sample directory");
-  sample_dir->cd();
-  TNamed("sample", "beam").Write("sample", TObject::kOverwrite);
-  TNamed("origin", "data").Write("origin", TObject::kOverwrite);
-  TNamed("variation", "nominal").Write("variation", TObject::kOverwrite);
-  TNamed("beam", "numi").Write("beam", TObject::kOverwrite);
-  TNamed("polarity", "fhc").Write("polarity", TObject::kOverwrite);
-  TNamed("normalisation_mode", "unit").Write("normalisation_mode", TObject::kOverwrite);
-  TParameter<double>("subrun_pot_sum", 1.0).Write("subrun_pot_sum", TObject::kOverwrite);
-  TParameter<double>("db_tortgt_pot_sum", 0.0).Write("db_tortgt_pot_sum", TObject::kOverwrite);
-  TParameter<double>("normalisation", 1.0).Write("normalisation", TObject::kOverwrite);
-  TParameter<double>("normalised_pot_sum", 1.0).Write("normalised_pot_sum", TObject::kOverwrite);
-
-  TTree normalisation_tree("run_subrun_normalisation", "");
-  Int_t run = 1;
-  Int_t subrun = 0;
-  Double_t generated_exposure = 1.0;
-  Double_t target_exposure = 0.0;
-  Double_t normalisation = 1.0;
-  normalisation_tree.Branch("run", &run, "run/I");
-  normalisation_tree.Branch("subrun", &subrun, "subrun/I");
-  normalisation_tree.Branch("generated_exposure", &generated_exposure, "generated_exposure/D");
-  normalisation_tree.Branch("target_exposure", &target_exposure, "target_exposure/D");
-  normalisation_tree.Branch("normalisation", &normalisation, "normalisation/D");
-  normalisation_tree.Fill();
-  normalisation_tree.Write("run_subrun_normalisation", TObject::kOverwrite);
-
-  file.Write();
-  file.Close();
-}
-EOF
-
-  root -n -l -b -q "${macro_path}(\"${sample_path}\")"
-}
-
 write_minimal_input_file() {
   local input_path=$1
+  local include_event_tree=${2:-true}
   local macro_path="${TMP_DIR}/write_minimal_input.C"
 
   cat > "${macro_path}" <<'EOF'
@@ -175,15 +107,35 @@ write_minimal_input_file() {
 #include "TFile.h"
 #include "TTree.h"
 
-void write_minimal_input(const char *path)
+void write_minimal_input(const char *path, bool include_event_tree)
 {
   TFile file(path, "RECREATE");
   if (file.IsZombie())
     throw std::runtime_error("failed to create minimal input file");
 
-  TTree subruns("SubRun", "");
   Int_t run = 1;
   Int_t subRun = 2;
+  Int_t software_trigger = 1;
+  Int_t num_slices = 1;
+  Float_t topological_score = 0.5f;
+  Bool_t in_reco_fiducial = true;
+  Int_t selection_pass = 1;
+
+  if (include_event_tree)
+  {
+    TTree events("EventSelectionFilter", "");
+    events.Branch("run", &run, "run/I");
+    events.Branch("subRun", &subRun, "subRun/I");
+    events.Branch("software_trigger", &software_trigger, "software_trigger/I");
+    events.Branch("num_slices", &num_slices, "num_slices/I");
+    events.Branch("topological_score", &topological_score, "topological_score/F");
+    events.Branch("in_reco_fiducial", &in_reco_fiducial, "in_reco_fiducial/O");
+    events.Branch("selection_pass", &selection_pass, "selection_pass/I");
+    events.Fill();
+    events.Write();
+  }
+
+  TTree subruns("SubRun", "");
   Double_t pot = 1.0;
   subruns.Branch("run", &run, "run/I");
   subruns.Branch("subRun", &subRun, "subRun/I");
@@ -194,7 +146,7 @@ void write_minimal_input(const char *path)
 }
 EOF
 
-  root -n -l -b -q "${macro_path}(\"${input_path}\")"
+  root -n -l -b -q "${macro_path}(\"${input_path}\",${include_event_tree})"
 }
 
 write_run_db() {
@@ -305,10 +257,16 @@ grep -F "usage: mk_dataset " "${dataset_log}" >/dev/null
 grep -Fx "mk_dataset: --run requires a run" "${dataset_log}" >/dev/null
 
 sample_path="${TMP_DIR}/beam=sample.root"
+sample_manifest="${TMP_DIR}/beam.sample.manifest"
+sample_build_log="${TMP_DIR}/beam.sample.log"
 dataset_manifest="${TMP_DIR}/dataset.manifest"
 native_dataset_path="${TMP_DIR}/native.dataset.root"
 legacy_dataset_path="${TMP_DIR}/legacy.dataset.root"
-write_minimal_sample_file "${sample_path}"
+printf 'beam-shard %s\n' "${sample_root_collision_list}" > "${sample_manifest}"
+capture_success "${sample_build_log}" \
+  "${BUILD_DIR}/bin/mk_sample" --run-db "${sample_root_collision_run_db}" \
+  --sample beam --manifest "${sample_manifest}" \
+  "${sample_path}" data nominal numi fhc
 printf 'beam %s\n' "${sample_path}" > "${dataset_manifest}"
 
 dataset_manifest_collision="${TMP_DIR}/dataset-manifest-collision.manifest"
@@ -404,6 +362,62 @@ grep -Fx "mk_eventlist: dataset and output paths must differ" \
   "${eventlist_dataset_collision_log}" >/dev/null
 require_unchanged "${eventlist_dataset_collision_copy}" "${eventlist_dataset_collision}" \
   "mk_eventlist dataset"
+
+eventlist_missing_tree_input="${TMP_DIR}/missing-tree-input.root"
+eventlist_missing_tree_input_list="${TMP_DIR}/missing-tree-input.list"
+eventlist_missing_tree_sample="${TMP_DIR}/missing-tree.sample.root"
+eventlist_missing_tree_sample_manifest="${TMP_DIR}/missing-tree.sample.manifest"
+eventlist_missing_tree_sample_log="${TMP_DIR}/missing-tree.sample.log"
+eventlist_failure_manifest="${TMP_DIR}/eventlist-failure.manifest"
+eventlist_failure_dataset="${TMP_DIR}/eventlist-failure.dataset.root"
+eventlist_failure_dataset_log="${TMP_DIR}/eventlist-failure-dataset.log"
+write_minimal_input_file "${eventlist_missing_tree_input}" false
+printf '%s\n' "${eventlist_missing_tree_input}" > "${eventlist_missing_tree_input_list}"
+printf 'bad-shard %s\n' "${eventlist_missing_tree_input_list}" \
+  > "${eventlist_missing_tree_sample_manifest}"
+capture_success "${eventlist_missing_tree_sample_log}" \
+  "${BUILD_DIR}/bin/mk_sample" --run-db "${sample_root_collision_run_db}" \
+  --sample z_bad --manifest "${eventlist_missing_tree_sample_manifest}" \
+  "${eventlist_missing_tree_sample}" data nominal numi fhc
+printf 'a_good %s\nz_bad %s\n' "${sample_path}" "${eventlist_missing_tree_sample}" \
+  > "${eventlist_failure_manifest}"
+capture_success "${eventlist_failure_dataset_log}" \
+  "${BUILD_DIR}/bin/mk_dataset" --manifest "${eventlist_failure_manifest}" \
+  "${eventlist_failure_dataset}" context
+
+eventlist_late_failure_output="${TMP_DIR}/eventlist-late-failure.root"
+eventlist_late_failure_expected="${TMP_DIR}/eventlist-late-failure.root.expected"
+eventlist_seed_log="${TMP_DIR}/eventlist-seed.log"
+eventlist_late_failure_log="${TMP_DIR}/eventlist-late-failure.log"
+capture_success "${eventlist_seed_log}" \
+  "${BUILD_DIR}/bin/mk_eventlist" --selection 1 \
+  "${eventlist_late_failure_output}" "${native_dataset_path}"
+grep -Fx "mk_eventlist: wrote ${eventlist_late_failure_output} from dataset ${native_dataset_path}" \
+  "${eventlist_seed_log}" >/dev/null
+cp "${eventlist_late_failure_output}" "${eventlist_late_failure_expected}"
+capture_failure "${eventlist_late_failure_log}" \
+  "${BUILD_DIR}/bin/mk_eventlist" --selection 1 \
+  "${eventlist_late_failure_output}" "${eventlist_failure_dataset}"
+grep -Fx "mk_eventlist: ana::build_event_list: failed to clone event tree structure" \
+  "${eventlist_late_failure_log}" >/dev/null
+require_unchanged "${eventlist_late_failure_expected}" "${eventlist_late_failure_output}" \
+  "mk_eventlist existing output after late sample failure"
+require_no_temporary_output "${eventlist_late_failure_output}" \
+  "mk_eventlist existing output failure"
+
+eventlist_failed_new_output="${TMP_DIR}/eventlist-failed-new-output.root"
+eventlist_failed_new_output_log="${TMP_DIR}/eventlist-failed-new-output.log"
+capture_failure "${eventlist_failed_new_output_log}" \
+  "${BUILD_DIR}/bin/mk_eventlist" --selection 1 \
+  "${eventlist_failed_new_output}" "${eventlist_failure_dataset}"
+grep -Fx "mk_eventlist: ana::build_event_list: failed to clone event tree structure" \
+  "${eventlist_failed_new_output_log}" >/dev/null
+if [[ -e "${eventlist_failed_new_output}" ]]; then
+  printf 'app_cli_parse_runtime_check: mk_eventlist left a partial output after late sample failure\n' >&2
+  exit 1
+fi
+require_no_temporary_output "${eventlist_failed_new_output}" \
+  "mk_eventlist new output failure"
 
 dist_eventlist_collision="${TMP_DIR}/dist-eventlist-collision.root"
 dist_eventlist_collision_copy="${TMP_DIR}/dist-eventlist-collision.root.copy"
