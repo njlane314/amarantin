@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "CliPaths.hh"
 #include "DatasetIO.hh"
 #include "EventListBuild.hh"
 #include "EventListIO.hh"
@@ -139,6 +140,8 @@ int main(int argc, char **argv)
     try
     {
         const CliOptions options = parse_args(argc, argv);
+        cli::require_distinct_output_path(
+            "mk_eventlist", options.output_path, "dataset", options.dataset_path);
 
         DatasetIO dataset(options.dataset_path);
         std::string selection_expr = options.selection_expr;

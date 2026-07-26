@@ -3509,3 +3509,60 @@
 ## Remaining hotspots
 - if you later want the source tree to match the new executable name exactly,
   the follow-up is a pure file-rename pass for `app/mk_xsec_fit.cc`
+
+---
+
+## Current milestone
+- status: done
+- subsystem: pipeline CLI output-path safety
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep module
+  boundaries sharp, and add abstractions only when they delete complexity
+
+## What changed
+- added one private `app/CliPaths.hh` helper for filesystem-identity checks
+- guarded `mk_sample`, `mk_dataset`, `mk_eventlist`, and `mk_dist` against
+  outputs that alias an input
+- moved `mk_cov` onto the same helper and deleted its local duplicate
+- added byte-preservation regressions, including a symlink alias and a raw
+  ROOT input discovered only after `mk_sample` shard scanning
+
+## Why this is simpler
+- all pipeline applications now express the same destructive-output invariant
+  with one grep-visible function call
+- filesystem canonicalisation remains an `app/` concern rather than leaking
+  workflow relationships into persistence classes
+- `mk_cov` no longer owns a special implementation of a pipeline-wide rule
+
+## Verification
+- focused checks:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - build `mk_sample`, `mk_dataset`, `mk_eventlist`, `mk_dist`, and `mk_cov`
+  - run `app_cli_parse_runtime_check`
+- results:
+  - the new runtime regressions failed against the old binaries
+  - all five updated applications build
+  - focused runtime regressions pass
+  - full `amarantin-dev` build passed
+  - all 18 configured CTest tests passed in 228.76 seconds
+  - `tools/systematics-sbnfit-export-smoke.sh` passed
+  - shell syntax and `git diff --check` passed
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - duplicated path canonicalisation and alias detection from `mk_cov.cc`
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - application code and private helper: `+140 / -35`
+  - runtime regression: `+149 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- reject exact, lexical, symlink, and hard-link aliases
+- preserve valid CLI shapes and existing `mk_cov` diagnostics
+- check `mk_sample` raw ROOT inputs after scanning and before persistence
+
+## Remaining hotspots
+- writable pipeline outputs are not yet transactional across multi-request or
+  multi-sample failures; that is a separate, higher-risk pass

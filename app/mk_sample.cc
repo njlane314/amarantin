@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "CliPaths.hh"
 #include "SampleIO.hh"
 
 namespace
@@ -258,6 +259,56 @@ namespace
 
         return options;
     }
+
+    void validate_input_paths(const CliOptions &options,
+                              const std::vector<SampleIO::ShardInput> &shards)
+    {
+        if (options.use_manifest)
+        {
+            cli::require_distinct_output_path(
+                "mk_sample", options.output_path, "manifest", options.manifest_path);
+        }
+        else
+        {
+            const std::string list_path = trim_copy(options.list_path);
+            if (!list_path.empty() && list_path.front() == '@')
+            {
+                cli::require_distinct_output_path(
+                    "mk_sample",
+                    options.output_path,
+                    "path list",
+                    trim_copy(list_path.substr(1)));
+            }
+        }
+
+        const std::string run_db_path = trim_copy(
+            options.run_db_path.empty() ? SampleIO::default_run_db_path()
+                                        : options.run_db_path);
+        if (!run_db_path.empty())
+        {
+            cli::require_distinct_output_path(
+                "mk_sample", options.output_path, "run database", run_db_path);
+        }
+
+        for (const auto &shard : shards)
+        {
+            cli::require_distinct_output_path(
+                "mk_sample", options.output_path, "sample list", shard.sample_list_path);
+        }
+    }
+
+    void validate_root_input_paths(const std::string &output_path,
+                                   const SampleIO &sample)
+    {
+        for (const auto &shard : sample.shards_)
+        {
+            for (const auto &input_path : shard.files())
+            {
+                cli::require_distinct_output_path(
+                    "mk_sample", output_path, "input ROOT", input_path);
+            }
+        }
+    }
 }
 
 int main(int argc, char **argv)
@@ -266,6 +317,7 @@ int main(int argc, char **argv)
     {
         const CliOptions options = parse_args(argc, argv);
         const std::vector<SampleIO::ShardInput> shards = resolve_shards(options);
+        validate_input_paths(options, shards);
 
         SampleIO sample;
         sample.build(options.use_manifest ? options.sample : std::string(),
@@ -275,6 +327,7 @@ int main(int argc, char **argv)
                      options.beam,
                      options.polarity,
                      options.run_db_path);
+        validate_root_input_paths(options.output_path, sample);
         sample.write(options.output_path);
 
         std::cout << "mk_sample: wrote " << options.output_path;

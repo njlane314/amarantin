@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <sstream>
 
+#include "CliPaths.hh"
 #include "DatasetIO.hh"
 #include "SampleDef.hh"
 #include "SampleIO.hh"
@@ -529,6 +530,26 @@ namespace
                                      " but dataset scope requested " + DatasetIO::Sample::polarity_name(scope.polarity));
         }
     }
+
+    void validate_input_paths(const CliOptions &options,
+                              const std::vector<SampleArg> &samples)
+    {
+        if (!options.defs_path.empty())
+        {
+            cli::require_distinct_output_path(
+                "mk_dataset", options.output_path, "sample definitions", options.defs_path);
+        }
+        if (!options.manifest_path.empty())
+        {
+            cli::require_distinct_output_path(
+                "mk_dataset", options.output_path, "manifest", options.manifest_path);
+        }
+        for (const auto &sample : samples)
+        {
+            cli::require_distinct_output_path(
+                "mk_dataset", options.output_path, "sample", sample.path);
+        }
+    }
 }
 
 int main(int argc, char **argv)
@@ -550,6 +571,7 @@ int main(int argc, char **argv)
             if (manifest_args.empty())
                 throw std::runtime_error("mk_dataset: dataset manifest is empty: " + options.manifest_path);
             require_unique_keys(manifest_args, options.manifest_path);
+            validate_input_paths(options, manifest_args);
 
             DatasetIO dataset(options.output_path, context_from_scope(scope));
             for (const auto &sample_arg : manifest_args)
@@ -591,6 +613,7 @@ int main(int argc, char **argv)
             sample_args.insert(sample_args.end(), manifest_args.begin(), manifest_args.end());
         }
         const std::vector<LogicalSample> logical_samples = group_samples(sample_args);
+        validate_input_paths(options, sample_args);
 
         DatasetIO dataset(options.output_path, options.context);
         for (const auto &logical : logical_samples)

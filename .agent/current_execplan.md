@@ -5394,3 +5394,149 @@ framework.
 - verify stacked detector and knob correlations from shared source labels
 - verify stacked multisim family correlations from retained universes
 - verify exporter rejection on mismatched family metadata
+
+## ExecPlan Addendum: Pipeline Output Collision Guards
+
+### 1. Objective
+Prevent every pipeline CLI from overwriting or mutating an input path when its
+output resolves to the same filesystem object, while keeping path comparison in
+one private, grep-friendly helper.
+
+### 2. Constraints
+- Preserve all valid CLI invocation shapes and installed targets.
+- Keep the validation at the `app/` workflow boundary.
+- Do not move workflow policy into `io/`.
+- Preserve existing `mk_cov` collision diagnostics.
+- Leave unrelated local fixtures untracked and unstaged.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- add abstractions only when they delete complexity
+- keep module boundaries sharp
+
+One private `app/CliPaths.hh` helper replaces the existing `mk_cov` path logic
+and prevents four other CLIs from growing copies of it.
+
+### 4. System map
+- shared private helper:
+  - `app/CliPaths.hh`
+- guarded workflows:
+  - `app/mk_sample.cc`
+  - `app/mk_dataset.cc`
+  - `app/mk_eventlist.cc`
+  - `app/mk_dist.cc`
+  - `app/mk_cov.cc`
+- runtime regression:
+  - `tests/app_cli_parse_runtime_check.sh`
+- tracking:
+  - `.agent/current_execplan.md`
+  - `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### boundary sharpening
+- reject destructive output aliases before opening a writable persistence object
+
+#### wrapper collapse
+- move the already-proven `mk_cov` filesystem comparison into one private
+  helper reused by every application
+
+#### stale scaffolding
+- delete the now-duplicated path comparison functions from `mk_cov`
+
+### 6. Milestones
+
+#### Milestone A: Add destructive-collision regressions
+- status: done
+- hypothesis: byte-for-byte preservation checks expose collisions that a
+  nonzero exit status alone can miss
+- files / symbols touched:
+  - `tests/app_cli_parse_runtime_check.sh`
+- expected behavior risk: low
+- verification commands:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - `ctest --test-dir .build/docker-rigorous --output-on-failure -R '^app_cli_parse_runtime_check$'`
+- acceptance criteria:
+  - cover sample lists and raw ROOT inputs
+  - cover dataset manifests and sample ROOT inputs
+  - cover event-list output over its dataset
+  - cover distribution output over its event list
+  - include one symlink alias rather than only equal strings
+- verification results:
+  - the expanded runtime test failed against the unguarded applications
+  - the expanded runtime test passes after the shared guards
+
+#### Milestone B: Guard all pipeline application outputs
+- status: done
+- hypothesis: one private helper can reject exact, lexical, symlink, and
+  hard-link aliases without adding a public API
+- files / symbols touched:
+  - `app/CliPaths.hh`
+  - `app/mk_sample.cc`
+  - `app/mk_dataset.cc`
+  - `app/mk_eventlist.cc`
+  - `app/mk_dist.cc`
+  - `app/mk_cov.cc`
+- expected behavior risk: low for valid commands; intentional rejection for
+  destructive invalid commands
+- verification commands:
+  - build all five application targets
+  - run the focused runtime CLI test
+- acceptance criteria:
+  - every output is checked against every input path known by its workflow
+  - `mk_sample` also checks raw ROOT paths discovered during shard scanning
+  - `mk_cov` uses the shared helper without changing its diagnostics
+- verification results:
+  - all five application targets build in `amarantin-dev`
+  - focused runtime CLI coverage passes
+
+#### Milestone C: Complete repository verification and publish
+- status: done
+- hypothesis: the shared guard should leave all valid pipeline and macro paths
+  unchanged
+- files / symbols touched:
+  - all files above
+- expected behavior risk: low
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - stacked covariance export smoke
+  - shell syntax and `git diff --check`
+- acceptance criteria:
+  - all configured tests pass
+  - no unrelated files are staged
+  - local and remote `main` match after push
+- verification results:
+  - full `amarantin-dev` build passed
+  - all 18 configured CTest tests passed in 228.76 seconds
+  - `tools/systematics-sbnfit-export-smoke.sh` passed
+  - shell syntax and `git diff --check` passed
+
+### 7. Public-surface check
+- compatibility impact:
+  - valid commands are unchanged
+  - commands that alias output to an input now fail before destructive I/O
+- migration note or explicit non-goal:
+  - migration: choose a distinct output path
+  - non-goal: make persistence classes infer workflow-level input relationships
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed:
+  - private path-normalisation and alias helpers from `mk_cov.cc`
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - application code and private helper: `+140 / -35`
+  - runtime regression: `+149 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- compare filesystem identity, not path strings
+- keep the helper private to `app/`
+- validate raw `mk_sample` ROOT inputs after shard discovery but before writing
+
+### 10. Stop conditions
+- stop after every pipeline CLI has the same destructive-output invariant
+- stop before transactional rewrites of otherwise valid multi-step outputs

@@ -75,6 +75,17 @@ capture_success() {
   fi
 }
 
+require_unchanged() {
+  local expected_path=$1
+  local actual_path=$2
+  local label=$3
+
+  if ! cmp -s "${expected_path}" "${actual_path}"; then
+    printf 'app_cli_parse_runtime_check: %s changed after rejected command\n' "${label}" >&2
+    exit 1
+  fi
+}
+
 write_minimal_sample_file() {
   local sample_path=$1
   local macro_path="${TMP_DIR}/write_minimal_sample.C"
@@ -144,6 +155,53 @@ EOF
   root -n -l -b -q "${macro_path}(\"${sample_path}\")"
 }
 
+write_minimal_input_file() {
+  local input_path=$1
+  local macro_path="${TMP_DIR}/write_minimal_input.C"
+
+  cat > "${macro_path}" <<'EOF'
+#include <stdexcept>
+
+#include "TFile.h"
+#include "TTree.h"
+
+void write_minimal_input(const char *path)
+{
+  TFile file(path, "RECREATE");
+  if (file.IsZombie())
+    throw std::runtime_error("failed to create minimal input file");
+
+  TTree subruns("SubRun", "");
+  Int_t run = 1;
+  Int_t subRun = 2;
+  Double_t pot = 1.0;
+  subruns.Branch("run", &run, "run/I");
+  subruns.Branch("subRun", &subRun, "subRun/I");
+  subruns.Branch("pot", &pot, "pot/D");
+  subruns.Fill();
+  subruns.Write();
+  file.Close();
+}
+EOF
+
+  root -n -l -b -q "${macro_path}(\"${input_path}\")"
+}
+
+write_run_db() {
+  local run_db_path=$1
+
+  python3 - "${run_db_path}" <<'PY'
+import sqlite3
+import sys
+
+connection = sqlite3.connect(sys.argv[1])
+connection.execute("CREATE TABLE runinfo(run INTEGER, subrun INTEGER, tortgt REAL)")
+connection.execute("INSERT INTO runinfo(run, subrun, tortgt) VALUES (1, 2, 1.0)")
+connection.commit()
+connection.close()
+PY
+}
+
 write_multi_cache_distribution_file() {
   local dist_path=$1
   local macro_path="${TMP_DIR}/write_multi_cache_distribution.C"
@@ -189,6 +247,7 @@ EOF
 }
 
 require_command root
+require_command python3
 require_binary "${BUILD_DIR}/bin/mk_sample"
 require_binary "${BUILD_DIR}/bin/mk_dataset"
 require_binary "${BUILD_DIR}/bin/mk_eventlist"
@@ -199,6 +258,36 @@ sample_log="${TMP_DIR}/mk_sample.log"
 capture_failure "${sample_log}" "${BUILD_DIR}/bin/mk_sample" --run-db
 grep -Fx "mk_sample: --run-db requires a path" "${sample_log}" >/dev/null
 [[ "$(grep -Fc 'mk_sample: --run-db requires a path' "${sample_log}")" == "1" ]]
+
+sample_list_collision="${TMP_DIR}/sample-list-collision.list"
+sample_list_collision_copy="${TMP_DIR}/sample-list-collision.list.copy"
+sample_list_collision_log="${TMP_DIR}/sample-list-collision.log"
+printf '/tmp/missing-input.root\n' > "${sample_list_collision}"
+cp "${sample_list_collision}" "${sample_list_collision_copy}"
+capture_failure "${sample_list_collision_log}" \
+  "${BUILD_DIR}/bin/mk_sample" \
+  "${sample_list_collision}" "${sample_list_collision}" data nominal numi fhc
+grep -Fx "mk_sample: sample list and output paths must differ" \
+  "${sample_list_collision_log}" >/dev/null
+require_unchanged "${sample_list_collision_copy}" "${sample_list_collision}" \
+  "mk_sample input list"
+
+sample_root_collision="${TMP_DIR}/sample-root-collision.root"
+sample_root_collision_copy="${TMP_DIR}/sample-root-collision.root.copy"
+sample_root_collision_list="${TMP_DIR}/sample-root-collision.list"
+sample_root_collision_run_db="${TMP_DIR}/sample-root-collision.run.db"
+sample_root_collision_log="${TMP_DIR}/sample-root-collision.log"
+write_minimal_input_file "${sample_root_collision}"
+write_run_db "${sample_root_collision_run_db}"
+printf '%s\n' "${sample_root_collision}" > "${sample_root_collision_list}"
+cp "${sample_root_collision}" "${sample_root_collision_copy}"
+capture_failure "${sample_root_collision_log}" \
+  "${BUILD_DIR}/bin/mk_sample" --run-db "${sample_root_collision_run_db}" \
+  "${sample_root_collision}" "${sample_root_collision_list}" data nominal numi fhc
+grep -Fx "mk_sample: input ROOT and output paths must differ" \
+  "${sample_root_collision_log}" >/dev/null
+require_unchanged "${sample_root_collision_copy}" "${sample_root_collision}" \
+  "mk_sample ROOT input"
 
 dataset_log="${TMP_DIR}/mk_dataset.log"
 capture_failure "${dataset_log}" "${BUILD_DIR}/bin/mk_dataset" --run
@@ -212,6 +301,40 @@ legacy_dataset_path="${TMP_DIR}/legacy.dataset.root"
 write_minimal_sample_file "${sample_path}"
 printf 'beam %s\n' "${sample_path}" > "${dataset_manifest}"
 
+dataset_manifest_collision="${TMP_DIR}/dataset-manifest-collision.manifest"
+dataset_manifest_collision_copy="${TMP_DIR}/dataset-manifest-collision.manifest.copy"
+dataset_manifest_collision_log="${TMP_DIR}/dataset-manifest-collision.log"
+printf 'beam %s\n' "${sample_path}" > "${dataset_manifest_collision}"
+cp "${dataset_manifest_collision}" "${dataset_manifest_collision_copy}"
+capture_failure "${dataset_manifest_collision_log}" \
+  "${BUILD_DIR}/bin/mk_dataset" --manifest "${dataset_manifest_collision}" \
+  "${dataset_manifest_collision}" context
+grep -Fx "mk_dataset: manifest and output paths must differ" \
+  "${dataset_manifest_collision_log}" >/dev/null
+require_unchanged "${dataset_manifest_collision_copy}" "${dataset_manifest_collision}" \
+  "mk_dataset manifest"
+
+dataset_sample_collision="${TMP_DIR}/dataset-sample-collision.root"
+dataset_sample_collision_copy="${TMP_DIR}/dataset-sample-collision.root.copy"
+dataset_sample_collision_output="${TMP_DIR}/dataset-sample-collision-output.root"
+dataset_sample_collision_manifest="${TMP_DIR}/dataset-sample-collision.manifest"
+dataset_sample_collision_log="${TMP_DIR}/dataset-sample-collision.log"
+cp "${sample_path}" "${dataset_sample_collision}"
+cp "${dataset_sample_collision}" "${dataset_sample_collision_copy}"
+ln -s "${dataset_sample_collision}" "${dataset_sample_collision_output}"
+printf 'beam %s\n' "${dataset_sample_collision}" > "${dataset_sample_collision_manifest}"
+capture_failure "${dataset_sample_collision_log}" \
+  "${BUILD_DIR}/bin/mk_dataset" --manifest "${dataset_sample_collision_manifest}" \
+  "${dataset_sample_collision_output}" context
+grep -Fx "mk_dataset: sample and output paths must differ" \
+  "${dataset_sample_collision_log}" >/dev/null
+require_unchanged "${dataset_sample_collision_copy}" "${dataset_sample_collision}" \
+  "mk_dataset sample"
+if [[ ! -L "${dataset_sample_collision_output}" ]]; then
+  printf 'app_cli_parse_runtime_check: mk_dataset replaced an aliased output symlink\n' >&2
+  exit 1
+fi
+
 dataset_native_log="${TMP_DIR}/mk_dataset_native.log"
 capture_success "${dataset_native_log}" \
   "${BUILD_DIR}/bin/mk_dataset" --run run1 --beam numi --polarity fhc \
@@ -224,6 +347,32 @@ capture_success "${dataset_legacy_log}" \
   "${BUILD_DIR}/bin/mk_dataset" --manifest "${dataset_manifest}" "${legacy_dataset_path}" context
 grep -F "mk_dataset: wrote ${legacy_dataset_path} with 1 logical samples from manifest ${dataset_manifest}" \
   "${dataset_legacy_log}" >/dev/null
+
+eventlist_dataset_collision="${TMP_DIR}/eventlist-dataset-collision.root"
+eventlist_dataset_collision_copy="${TMP_DIR}/eventlist-dataset-collision.root.copy"
+eventlist_dataset_collision_log="${TMP_DIR}/eventlist-dataset-collision.log"
+cp "${native_dataset_path}" "${eventlist_dataset_collision}"
+cp "${eventlist_dataset_collision}" "${eventlist_dataset_collision_copy}"
+capture_failure "${eventlist_dataset_collision_log}" \
+  "${BUILD_DIR}/bin/mk_eventlist" --selection 1 \
+  "${eventlist_dataset_collision}" "${eventlist_dataset_collision}"
+grep -Fx "mk_eventlist: dataset and output paths must differ" \
+  "${eventlist_dataset_collision_log}" >/dev/null
+require_unchanged "${eventlist_dataset_collision_copy}" "${eventlist_dataset_collision}" \
+  "mk_eventlist dataset"
+
+dist_eventlist_collision="${TMP_DIR}/dist-eventlist-collision.root"
+dist_eventlist_collision_copy="${TMP_DIR}/dist-eventlist-collision.root.copy"
+dist_eventlist_collision_log="${TMP_DIR}/dist-eventlist-collision.log"
+cp "${native_dataset_path}" "${dist_eventlist_collision}"
+cp "${dist_eventlist_collision}" "${dist_eventlist_collision_copy}"
+capture_failure "${dist_eventlist_collision_log}" \
+  "${BUILD_DIR}/bin/mk_dist" \
+  "${dist_eventlist_collision}" "${dist_eventlist_collision}" beam score 1 0 1
+grep -Fx "mk_dist: event list and output paths must differ" \
+  "${dist_eventlist_collision_log}" >/dev/null
+require_unchanged "${dist_eventlist_collision_copy}" "${dist_eventlist_collision}" \
+  "mk_dist event list"
 
 eventlist_log="${TMP_DIR}/mk_eventlist.log"
 capture_failure "${eventlist_log}" "${BUILD_DIR}/bin/mk_eventlist" --selection

@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "CliPaths.hh"
 #include "DistributionIO.hh"
 #include "EventListIO.hh"
 #include "Systematics.hh"
@@ -347,6 +348,13 @@ int main(int argc, char **argv)
     try
     {
         const CliOptions options = parse_args(argc, argv);
+        cli::require_distinct_output_path(
+            "mk_dist", options.output_path, "event list", options.eventlist_path);
+        if (options.use_manifest)
+        {
+            cli::require_distinct_output_path(
+                "mk_dist", options.output_path, "manifest", options.manifest_path);
+        }
 
         syst::CacheBuildOptions cache_options;
         cache_options.overwrite_existing = options.overwrite;

@@ -4,7 +4,6 @@
 #include <cstdio>
 #include <cstring>
 #include <exception>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -16,6 +15,7 @@
 
 #include <unistd.h>
 
+#include "CliPaths.hh"
 #include "DistributionIO.hh"
 
 #include <TFile.h>
@@ -210,39 +210,6 @@ namespace
         if (options.nominal_name.empty())
             throw std::runtime_error("mk_cov: nominal-name must not be empty");
         return options;
-    }
-
-    std::filesystem::path normalised_path(const std::string &path)
-    {
-        std::error_code error;
-        std::filesystem::path resolved = std::filesystem::weakly_canonical(path, error);
-        if (!error)
-            return resolved;
-
-        error.clear();
-        resolved = std::filesystem::absolute(path, error);
-        if (error)
-            throw std::runtime_error("mk_cov: failed to resolve path: " + path);
-        return resolved.lexically_normal();
-    }
-
-    bool paths_alias(const std::string &first, const std::string &second)
-    {
-        std::error_code error;
-        if (std::filesystem::equivalent(first, second, error))
-            return true;
-        return normalised_path(first) == normalised_path(second);
-    }
-
-    void validate_distinct_paths(const CliOptions &options)
-    {
-        if (paths_alias(options.input_path, options.output_path))
-            throw std::runtime_error("mk_cov: input and output paths must differ");
-        if (options.stacked_mode() &&
-            paths_alias(options.manifest_path, options.output_path))
-        {
-            throw std::runtime_error("mk_cov: manifest and output paths must differ");
-        }
     }
 
     std::string pick_cache_key(const DistributionIO &dist,
@@ -1317,7 +1284,13 @@ int main(int argc, char **argv)
     try
     {
         const CliOptions options = parse_args(argc, argv);
-        validate_distinct_paths(options);
+        cli::require_distinct_output_path(
+            "mk_cov", options.output_path, "input", options.input_path);
+        if (options.stacked_mode())
+        {
+            cli::require_distinct_output_path(
+                "mk_cov", options.output_path, "manifest", options.manifest_path);
+        }
 
         DistributionIO dist(options.input_path, DistributionIO::Mode::kRead);
         const std::vector<LoadedEntry> entries = load_entries(dist, options);
