@@ -78,6 +78,7 @@ namespace
         spectrum.sumw2 = {10.0, 20.0};
 
         spectrum.detector_source_labels = {"sce", "wiremod"};
+        spectrum.detector_sample_keys = {"signal-sce", "signal-wiremod"};
         spectrum.detector_shift_vectors = {
             1.0, 0.0,
             0.0, 1.0
@@ -115,6 +116,7 @@ namespace
         spectrum.sumw2 = {5.0, 7.0};
 
         spectrum.detector_source_labels = {"sce", "wiremodx"};
+        spectrum.detector_sample_keys = {"beam-bkg-sce", "beam-bkg-wiremodx"};
         spectrum.detector_shift_vectors = {
             2.0, 0.0,
             0.0, 3.0
@@ -318,6 +320,10 @@ fi
 
 if ! grep -q "matching family branch names" "${FAIL_LOG}"; then
   printf 'missing expected rejection message in %s\n' "${FAIL_LOG}" >&2
+  exit 1
+fi
+if [[ -e "${BAD_OUTPUT}" ]]; then
+  printf 'rejected stacked export left an output file at %s\n' "${BAD_OUTPUT}" >&2
   exit 1
 fi
 

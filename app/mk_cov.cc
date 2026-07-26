@@ -1,4 +1,8 @@
 #include <algorithm>
+#include <cerrno>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
 #include <exception>
 #include <fstream>
 #include <iostream>
@@ -6,7 +10,10 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include <unistd.h>
 
 #include "DistributionIO.hh"
 
@@ -35,11 +42,22 @@ namespace
         }
     };
 
-    struct MatrixComponent
+    struct CovarianceComponent
     {
         std::string label;
-        std::vector<double> absolute;
+        std::vector<double> absolute_covariance;
+        std::vector<float> fractional_covariance;
         bool diagonal_only = false;
+    };
+
+    struct PreparedCovarianceExport
+    {
+        int nbins = 0;
+        std::vector<double> total_absolute_covariance;
+        std::vector<float> total_fractional_covariance;
+        std::vector<CovarianceComponent> components;
+        std::vector<std::string> included_component_labels;
+        std::vector<std::string> approximate_component_labels;
     };
 
     struct ManifestRow
@@ -386,13 +404,13 @@ namespace
         return out;
     }
 
-    MatrixComponent component_from_shift_sources(const std::string &label,
-                                                 const std::vector<double> &shift_vectors,
-                                                 int source_count,
-                                                 const std::vector<double> &covariance,
-                                                 int nbins)
+    CovarianceComponent component_from_shift_sources(const std::string &label,
+                                                     const std::vector<double> &shift_vectors,
+                                                     int source_count,
+                                                     const std::vector<double> &covariance,
+                                                     int nbins)
     {
-        MatrixComponent component;
+        CovarianceComponent component;
         component.label = label;
 
         const std::size_t expected = static_cast<std::size_t>(nbins * nbins);
@@ -402,13 +420,13 @@ namespace
         }
         if (covariance.size() == expected)
         {
-            component.absolute = covariance;
+            component.absolute_covariance = covariance;
             return component;
         }
 
         if (source_count > 0 && !shift_vectors.empty())
         {
-            component.absolute = covariance_from_shift_vectors(
+            component.absolute_covariance = covariance_from_shift_vectors(
                 shift_vectors,
                 source_count,
                 nbins);
@@ -417,7 +435,7 @@ namespace
         return component;
     }
 
-    MatrixComponent component_from_detector(const DistributionIO::Spectrum &spectrum)
+    CovarianceComponent component_from_detector(const DistributionIO::Spectrum &spectrum)
     {
         return component_from_shift_sources("detector",
                                             spectrum.detector_shift_vectors,
@@ -426,7 +444,7 @@ namespace
                                             spectrum.spec.nbins);
     }
 
-    MatrixComponent component_from_genie_knobs(const DistributionIO::Spectrum &spectrum)
+    CovarianceComponent component_from_genie_knobs(const DistributionIO::Spectrum &spectrum)
     {
         return component_from_shift_sources("genie_knobs",
                                             spectrum.genie_knob_shift_vectors,
@@ -496,12 +514,12 @@ namespace
         return covariance;
     }
 
-    MatrixComponent component_from_family(const DistributionIO::UniverseFamily &family,
-                                          const std::vector<double> &nominal,
-                                          int nbins,
-                                          const std::string &label)
+    CovarianceComponent component_from_family(const DistributionIO::UniverseFamily &family,
+                                              const std::vector<double> &nominal,
+                                              int nbins,
+                                              const std::string &label)
     {
-        MatrixComponent component;
+        CovarianceComponent component;
         component.label = label;
 
         const std::size_t expected = static_cast<std::size_t>(nbins * nbins);
@@ -509,12 +527,12 @@ namespace
             throw std::runtime_error("mk_cov: " + label + " covariance payload is truncated");
         if (family.covariance.size() == expected)
         {
-            component.absolute = family.covariance;
+            component.absolute_covariance = family.covariance;
             return component;
         }
         if (family_has_exact_universes(family, nbins))
         {
-            component.absolute =
+            component.absolute_covariance =
                 covariance_from_family_universes(family, nominal, nbins, label);
             return component;
         }
@@ -526,20 +544,44 @@ namespace
         }
         if (family.sigma.size() == static_cast<std::size_t>(nbins))
         {
-            component.absolute = diagonal_matrix_from_sigma(family.sigma);
+            component.absolute_covariance = diagonal_matrix_from_sigma(family.sigma);
             component.diagonal_only = true;
         }
 
         return component;
     }
 
-    std::vector<float> fractional_matrix(const std::vector<double> &absolute,
-                                         const std::vector<double> &nominal)
+    std::vector<float> make_fractional_covariance(
+        const std::vector<double> &absolute_covariance,
+        const std::vector<double> &nominal)
     {
         const int nbins = static_cast<int>(nominal.size());
         const std::size_t expected = static_cast<std::size_t>(nbins * nbins);
-        if (absolute.size() != expected)
+        if (absolute_covariance.size() != expected)
             throw std::runtime_error("mk_cov: absolute covariance size does not match nominal bins");
+
+        double covariance_scale = 0.0;
+        for (const double value : absolute_covariance)
+        {
+            if (!std::isfinite(value))
+                throw std::runtime_error("mk_cov: absolute covariance contains a non-finite value");
+            covariance_scale = std::max(covariance_scale, std::fabs(value));
+        }
+
+        // A zero nominal bin requires a zero covariance row and column. Ignore
+        // only residue at floating-point roundoff scale relative to the matrix.
+        constexpr double relative_roundoff_tolerance = 1e-12;
+        const double zero_tolerance = relative_roundoff_tolerance * covariance_scale;
+
+        for (std::size_t bin = 0; bin < nominal.size(); ++bin)
+        {
+            if (!std::isfinite(nominal[bin]))
+            {
+                throw std::runtime_error(
+                    "mk_cov: nominal prediction contains a non-finite value at bin " +
+                    std::to_string(bin));
+            }
+        }
 
         std::vector<float> out(expected, 0.0f);
         for (int row = 0; row < nbins; ++row)
@@ -549,10 +591,10 @@ namespace
             {
                 const double col_nominal = nominal[static_cast<std::size_t>(col)];
                 const double absolute_value =
-                    absolute[static_cast<std::size_t>(row * nbins + col)];
+                    absolute_covariance[static_cast<std::size_t>(row * nbins + col)];
                 if (row_nominal == 0.0 || col_nominal == 0.0)
                 {
-                    if (absolute_value != 0.0)
+                    if (std::fabs(absolute_value) > zero_tolerance)
                     {
                         throw std::runtime_error(
                             "mk_cov: zero nominal bin prevents fractional covariance export at bins " +
@@ -561,9 +603,15 @@ namespace
                     continue;
                 }
 
-                out[static_cast<std::size_t>(row * nbins + col)] =
-                    static_cast<float>(absolute_value /
-                                       (row_nominal * col_nominal));
+                const float fractional_value =
+                    static_cast<float>(absolute_value / (row_nominal * col_nominal));
+                if (!std::isfinite(fractional_value))
+                {
+                    throw std::runtime_error(
+                        "mk_cov: fractional covariance is non-finite at bins " +
+                        std::to_string(row) + " and " + std::to_string(col));
+                }
+                out[static_cast<std::size_t>(row * nbins + col)] = fractional_value;
             }
         }
         return out;
@@ -819,11 +867,11 @@ namespace
         return nominal;
     }
 
-    MatrixComponent stacked_shift_component(const std::vector<LoadedEntry> &entries,
-                                           ShiftLaneKind kind,
-                                           const std::string &label)
+    CovarianceComponent stacked_shift_component(const std::vector<LoadedEntry> &entries,
+                                                ShiftLaneKind kind,
+                                                const std::string &label)
     {
-        MatrixComponent component;
+        CovarianceComponent component;
         component.label = label;
 
         std::vector<const LoadedEntry *> contributors;
@@ -839,21 +887,21 @@ namespace
         if (contributors.size() == 1)
         {
             const DistributionIO::Spectrum &spectrum = contributors.front()->spectrum;
-            const MatrixComponent local =
+            const CovarianceComponent local =
                 component_from_shift_sources(label,
                                              shift_vectors_for(spectrum, kind),
                                              shift_source_count_for(spectrum, kind),
                                              shift_covariance_for(spectrum, kind),
                                              spectrum.spec.nbins);
-            if (local.absolute.empty())
+            if (local.absolute_covariance.empty())
             {
                 throw std::runtime_error(
                     "mk_cov: contributing " + label +
                     " payload could not be converted into covariance");
             }
-            component.absolute = zero_matrix(total_nbins);
-            add_block_matrix_in_place(component.absolute,
-                                      local.absolute,
+            component.absolute_covariance = zero_matrix(total_nbins);
+            add_block_matrix_in_place(component.absolute_covariance,
+                                      local.absolute_covariance,
                                       total_nbins,
                                       contributors.front()->bin_offset,
                                       spectrum.spec.nbins,
@@ -887,7 +935,7 @@ namespace
             }
         }
 
-        component.absolute = zero_matrix(total_nbins);
+        component.absolute_covariance = zero_matrix(total_nbins);
         for (const auto &source_label : shared_labels)
         {
             std::vector<double> full_shift(static_cast<std::size_t>(total_nbins), 0.0);
@@ -904,16 +952,16 @@ namespace
                     full_shift[static_cast<std::size_t>(bin)] += partial[static_cast<std::size_t>(bin)];
             }
 
-            add_outer_product_in_place(component.absolute, full_shift, total_nbins);
+            add_outer_product_in_place(component.absolute_covariance, full_shift, total_nbins);
         }
 
         return component;
     }
 
-    MatrixComponent stacked_family_component(const std::vector<LoadedEntry> &entries,
-                                            FamilyKind kind)
+    CovarianceComponent stacked_family_component(const std::vector<LoadedEntry> &entries,
+                                                 FamilyKind kind)
     {
-        MatrixComponent component;
+        CovarianceComponent component;
         component.label = family_label(kind);
 
         std::vector<const LoadedEntry *> contributors;
@@ -929,20 +977,20 @@ namespace
         if (contributors.size() == 1)
         {
             const DistributionIO::Spectrum &spectrum = contributors.front()->spectrum;
-            const MatrixComponent local =
+            const CovarianceComponent local =
                 component_from_family(family_for(spectrum, kind),
                                       spectrum.nominal,
                                       spectrum.spec.nbins,
                                       component.label);
-            if (local.absolute.empty())
+            if (local.absolute_covariance.empty())
             {
                 throw std::runtime_error(
                     "mk_cov: contributing " + component.label +
                     " payload could not be converted into covariance");
             }
-            component.absolute = zero_matrix(total_nbins);
-            add_block_matrix_in_place(component.absolute,
-                                      local.absolute,
+            component.absolute_covariance = zero_matrix(total_nbins);
+            add_block_matrix_in_place(component.absolute_covariance,
+                                      local.absolute_covariance,
                                       total_nbins,
                                       contributors.front()->bin_offset,
                                       spectrum.spec.nbins,
@@ -988,7 +1036,7 @@ namespace
             }
         }
 
-        component.absolute = zero_matrix(total_nbins);
+        component.absolute_covariance = zero_matrix(total_nbins);
         const int n_variations = static_cast<int>(reference.n_variations);
         for (int universe = 0; universe < n_variations; ++universe)
         {
@@ -1000,10 +1048,10 @@ namespace
                 for (int bin = 0; bin < total_nbins; ++bin)
                     full_delta[static_cast<std::size_t>(bin)] += partial[static_cast<std::size_t>(bin)];
             }
-            add_outer_product_in_place(component.absolute, full_delta, total_nbins);
+            add_outer_product_in_place(component.absolute_covariance, full_delta, total_nbins);
         }
 
-        for (double &value : component.absolute)
+        for (double &value : component.absolute_covariance)
             value /= static_cast<double>(n_variations);
         return component;
     }
@@ -1078,51 +1126,116 @@ namespace
         tree.Write("stack_manifest");
     }
 
-    void write_component_outputs(const CliOptions &options,
-                                 const std::vector<double> &nominal,
-                                 const std::vector<MatrixComponent> &components,
-                                 std::vector<std::string> &included_components,
-                                 std::vector<std::string> &approximate_components)
+    PreparedCovarianceExport prepare_covariance_export(
+        const std::vector<double> &nominal,
+        std::vector<CovarianceComponent> components)
     {
-        const int nbins = static_cast<int>(nominal.size());
-        std::vector<double> total_absolute = zero_matrix(nbins);
-        for (const auto &component : components)
+        PreparedCovarianceExport prepared;
+        prepared.nbins = static_cast<int>(nominal.size());
+        prepared.components = std::move(components);
+
+        prepared.total_absolute_covariance = zero_matrix(prepared.nbins);
+        for (auto &component : prepared.components)
         {
-            if (component.absolute.empty())
+            if (component.absolute_covariance.empty())
                 continue;
 
-            add_matrix_in_place(total_absolute, component.absolute, nbins, component.label);
-            included_components.push_back(component.label);
+            add_matrix_in_place(prepared.total_absolute_covariance,
+                                component.absolute_covariance,
+                                prepared.nbins,
+                                component.label);
+            prepared.included_component_labels.push_back(component.label);
             if (component.diagonal_only)
-                approximate_components.push_back(component.label);
+                prepared.approximate_component_labels.push_back(component.label);
+
+            component.fractional_covariance =
+                make_fractional_covariance(component.absolute_covariance, nominal);
         }
 
-        const std::vector<float> total_fractional =
-            fractional_matrix(total_absolute, nominal);
+        prepared.total_fractional_covariance =
+            make_fractional_covariance(prepared.total_absolute_covariance, nominal);
+        return prepared;
+    }
 
-        TMatrixT<float> frac_covariance(nbins, nbins);
-        fill_matrix(frac_covariance, total_fractional);
+    void write_covariance_export(const CliOptions &options,
+                                 const PreparedCovarianceExport &prepared)
+    {
+        TMatrixT<float> frac_covariance(prepared.nbins, prepared.nbins);
+        fill_matrix(frac_covariance, prepared.total_fractional_covariance);
         frac_covariance.Write(options.matrix_name.c_str());
 
-        TMatrixT<double> abs_covariance(nbins, nbins);
-        fill_matrix(abs_covariance, total_absolute);
+        TMatrixT<double> abs_covariance(prepared.nbins, prepared.nbins);
+        fill_matrix(abs_covariance, prepared.total_absolute_covariance);
         abs_covariance.Write("abs_covariance");
 
-        for (const auto &component : components)
+        for (const auto &component : prepared.components)
         {
-            if (component.absolute.empty())
+            if (component.absolute_covariance.empty())
                 continue;
 
-            const std::vector<float> component_fractional =
-                fractional_matrix(component.absolute, nominal);
-
-            TMatrixT<double> component_absolute_matrix(nbins, nbins);
-            fill_matrix(component_absolute_matrix, component.absolute);
+            TMatrixT<double> component_absolute_matrix(prepared.nbins, prepared.nbins);
+            fill_matrix(component_absolute_matrix, component.absolute_covariance);
             component_absolute_matrix.Write((component.label + "_covariance").c_str());
 
-            TMatrixT<float> component_fractional_matrix(nbins, nbins);
-            fill_matrix(component_fractional_matrix, component_fractional);
+            TMatrixT<float> component_fractional_matrix(prepared.nbins, prepared.nbins);
+            fill_matrix(component_fractional_matrix, component.fractional_covariance);
             component_fractional_matrix.Write((component.label + "_frac_covariance").c_str());
+        }
+    }
+
+    void write_output_file(const CliOptions &options,
+                           const std::vector<LoadedEntry> &entries,
+                           const PreparedCovarianceExport &prepared)
+    {
+        const std::string temporary_path =
+            options.output_path + ".tmp." + std::to_string(getpid());
+        bool owns_temporary_file = false;
+
+        try
+        {
+            {
+                TFile output(temporary_path.c_str(), "CREATE");
+                if (output.IsZombie())
+                {
+                    throw std::runtime_error(
+                        "mk_cov: failed to create temporary output ROOT file: " +
+                        temporary_path);
+                }
+                owns_temporary_file = true;
+
+                if (options.stacked_mode())
+                {
+                    write_stacked_nominal_histogram(entries, options);
+                    write_stack_manifest(entries);
+                }
+                else
+                {
+                    write_single_nominal_histogram(entries.front().spectrum, options);
+                }
+                write_covariance_export(options, prepared);
+
+                output.Write();
+                if (output.TestBit(TFile::kWriteError))
+                    throw std::runtime_error("mk_cov: failed to write output ROOT file");
+                output.Close();
+                if (output.TestBit(TFile::kWriteError))
+                    throw std::runtime_error("mk_cov: failed to close output ROOT file cleanly");
+            }
+
+            if (std::rename(temporary_path.c_str(), options.output_path.c_str()) != 0)
+            {
+                const int error_number = errno;
+                throw std::runtime_error(
+                    "mk_cov: failed to publish output ROOT file: " +
+                    std::string(std::strerror(error_number)));
+            }
+            owns_temporary_file = false;
+        }
+        catch (...)
+        {
+            if (owns_temporary_file)
+                std::remove(temporary_path.c_str());
+            throw;
         }
     }
 }
@@ -1136,18 +1249,11 @@ int main(int argc, char **argv)
         DistributionIO dist(options.input_path, DistributionIO::Mode::kRead);
         const std::vector<LoadedEntry> entries = load_entries(dist, options);
 
-        TFile output(options.output_path.c_str(), "RECREATE");
-        if (output.IsZombie())
-            throw std::runtime_error("mk_cov: failed to open output ROOT file");
-
-        std::vector<MatrixComponent> components;
+        std::vector<CovarianceComponent> components;
         std::vector<double> nominal;
         if (options.stacked_mode())
         {
             nominal = stacked_nominal(entries);
-            write_stacked_nominal_histogram(entries, options);
-            write_stack_manifest(entries);
-
             components.push_back(stacked_shift_component(entries,
                                                          ShiftLaneKind::kDetector,
                                                          "detector"));
@@ -1168,8 +1274,6 @@ int main(int argc, char **argv)
                 throw std::runtime_error("mk_cov: nominal payload size does not match cached nbins");
 
             nominal = spectrum.nominal;
-            write_single_nominal_histogram(spectrum, options);
-
             components.push_back(component_from_detector(spectrum));
             components.push_back(component_from_genie_knobs(spectrum));
             components.push_back(component_from_family(spectrum.genie, spectrum.nominal, nbins, "genie"));
@@ -1177,16 +1281,9 @@ int main(int argc, char **argv)
             components.push_back(component_from_family(spectrum.reint, spectrum.nominal, nbins, "reint"));
         }
 
-        std::vector<std::string> included_components;
-        std::vector<std::string> approximate_components;
-        write_component_outputs(options,
-                                nominal,
-                                components,
-                                included_components,
-                                approximate_components);
-
-        output.Write();
-        output.Close();
+        const PreparedCovarianceExport prepared =
+            prepare_covariance_export(nominal, std::move(components));
+        write_output_file(options, entries, prepared);
 
         if (options.stacked_mode())
         {
@@ -1205,10 +1302,10 @@ int main(int argc, char **argv)
                       << " as " << options.matrix_name << "\n";
         }
 
-        if (!included_components.empty())
+        if (!prepared.included_component_labels.empty())
         {
             std::cout << "mk_cov: included components:";
-            for (const auto &label : included_components)
+            for (const auto &label : prepared.included_component_labels)
                 std::cout << " " << label;
             std::cout << "\n";
         }
@@ -1216,10 +1313,10 @@ int main(int argc, char **argv)
         {
             std::cout << "mk_cov: no systematic covariance payloads were present; wrote zero covariance matrices\n";
         }
-        if (!approximate_components.empty())
+        if (!prepared.approximate_component_labels.empty())
         {
             std::cout << "mk_cov: diagonal-only fallback used for:";
-            for (const auto &label : approximate_components)
+            for (const auto &label : prepared.approximate_component_labels)
                 std::cout << " " << label;
             std::cout << "\n";
         }
