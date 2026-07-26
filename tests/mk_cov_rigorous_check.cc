@@ -129,13 +129,15 @@ namespace
     int run_mk_cov(const std::string &mk_cov_path,
                    const std::filesystem::path &dist_path,
                    const std::filesystem::path &output_path,
-                   const std::filesystem::path &log_path)
+                   const std::filesystem::path &log_path,
+                   const std::vector<std::string> &extra_args = {})
     {
-        const std::string command =
-            shell_quote(mk_cov_path) + " " +
-            shell_quote(dist_path.string()) + " beam " +
-            shell_quote(output_path.string()) +
-            " >" + shell_quote(log_path.string()) + " 2>&1";
+        std::string command = shell_quote(mk_cov_path);
+        for (const auto &arg : extra_args)
+            command += " " + shell_quote(arg);
+        command += " " + shell_quote(dist_path.string()) + " beam " +
+                   shell_quote(output_path.string()) +
+                   " >" + shell_quote(log_path.string()) + " 2>&1";
         const int status = std::system(command.c_str());
         if (status == -1)
             fail("failed to launch mk_cov");
@@ -208,22 +210,92 @@ int main(int argc, char **argv)
                  read_text(roundoff_log_path));
         }
 
-        TFile output(roundoff_output_path.string().c_str(), "READ");
-        require(!output.IsZombie(), "failed to open roundoff export");
-        auto *fractional = must_get<TMatrixT<float>>(output, "frac_covariance");
-        auto *absolute = must_get<TMatrixT<double>>(output, "abs_covariance");
-        auto *detector_fractional =
-            must_get<TMatrixT<float>>(output, "detector_frac_covariance");
-        require(fractional->GetNrows() == 2 && fractional->GetNcols() == 2,
-                "roundoff export dimensions should match the cached spectrum");
-        require(std::fabs((*fractional)(0, 0)) < 1e-12,
-                "unsupported roundoff entry should export as zero fractional covariance");
-        require(std::fabs((*fractional)(1, 1) - 1.0f) < 1e-6,
-                "supported fractional covariance entry should be preserved");
-        require(std::fabs((*detector_fractional)(0, 0)) < 1e-12,
-                "component roundoff entry should export as zero fractional covariance");
-        require(std::fabs((*absolute)(0, 0) - 1e-16) < 1e-28,
-                "absolute covariance roundoff entry should remain available");
+        {
+            TFile output(roundoff_output_path.string().c_str(), "READ");
+            require(!output.IsZombie(), "failed to open roundoff export");
+            auto *fractional = must_get<TMatrixT<float>>(output, "frac_covariance");
+            auto *absolute = must_get<TMatrixT<double>>(output, "abs_covariance");
+            auto *detector_fractional =
+                must_get<TMatrixT<float>>(output, "detector_frac_covariance");
+            require(fractional->GetNrows() == 2 && fractional->GetNcols() == 2,
+                    "roundoff export dimensions should match the cached spectrum");
+            require(std::fabs((*fractional)(0, 0)) < 1e-12,
+                    "unsupported roundoff entry should export as zero fractional covariance");
+            require(std::fabs((*fractional)(1, 1) - 1.0f) < 1e-6,
+                    "supported fractional covariance entry should be preserved");
+            require(std::fabs((*detector_fractional)(0, 0)) < 1e-12,
+                    "component roundoff entry should export as zero fractional covariance");
+            require(std::fabs((*absolute)(0, 0) - 1e-16) < 1e-28,
+                    "absolute covariance roundoff entry should remain available");
+        }
+
+        const std::uintmax_t original_dist_size =
+            std::filesystem::file_size(roundoff_dist_path);
+        const std::filesystem::path path_collision_log_path =
+            temp.path / "path-collision.log";
+        require(run_mk_cov(mk_cov_path,
+                           roundoff_dist_path,
+                           roundoff_dist_path,
+                           path_collision_log_path) != 0,
+                "mk_cov should reject an output path that aliases its input");
+        require(read_text(path_collision_log_path).find(
+                    "input and output paths must differ") != std::string::npos,
+                "path-collision rejection should explain the failure");
+        require(std::filesystem::file_size(roundoff_dist_path) == original_dist_size,
+                "path-collision rejection should preserve the input file");
+        {
+            DistributionIO preserved(roundoff_dist_path.string(), DistributionIO::Mode::kRead);
+            require(preserved.has("beam", "shape"),
+                    "path-collision rejection should preserve the input cache");
+        }
+
+        const std::filesystem::path matrix_name_output_path =
+            temp.path / "matrix-name-collision.cov.root";
+        const std::filesystem::path matrix_name_log_path =
+            temp.path / "matrix-name-collision.log";
+        require(run_mk_cov(mk_cov_path,
+                           roundoff_dist_path,
+                           matrix_name_output_path,
+                           matrix_name_log_path,
+                           {"--matrix-name", "abs_covariance"}) != 0,
+                "mk_cov should reject a matrix name reserved by another output object");
+        require(read_text(matrix_name_log_path).find(
+                    "duplicate output object name: abs_covariance") != std::string::npos,
+                "matrix-name collision should explain the failure");
+        require(!std::filesystem::exists(matrix_name_output_path),
+                "matrix-name collision should not create an output file");
+
+        const std::filesystem::path nominal_name_output_path =
+            temp.path / "nominal-name-collision.cov.root";
+        const std::filesystem::path nominal_name_log_path =
+            temp.path / "nominal-name-collision.log";
+        require(run_mk_cov(mk_cov_path,
+                           roundoff_dist_path,
+                           nominal_name_output_path,
+                           nominal_name_log_path,
+                           {"--nominal-name", "frac_covariance"}) != 0,
+                "mk_cov should reject matching nominal and matrix names");
+        require(read_text(nominal_name_log_path).find(
+                    "duplicate output object name: frac_covariance") != std::string::npos,
+                "nominal-name collision should explain the failure");
+        require(!std::filesystem::exists(nominal_name_output_path),
+                "nominal-name collision should not create an output file");
+
+        const std::filesystem::path invalid_name_output_path =
+            temp.path / "invalid-name.cov.root";
+        const std::filesystem::path invalid_name_log_path =
+            temp.path / "invalid-name.log";
+        require(run_mk_cov(mk_cov_path,
+                           roundoff_dist_path,
+                           invalid_name_output_path,
+                           invalid_name_log_path,
+                           {"--matrix-name", "frac_covariance;1"}) != 0,
+                "mk_cov should reject ROOT cycle syntax in an output object name");
+        require(read_text(invalid_name_log_path).find(
+                    "matrix-name must not contain '/' or ';'") != std::string::npos,
+                "invalid ROOT object name should explain the failure");
+        require(!std::filesystem::exists(invalid_name_output_path),
+                "invalid ROOT object name should not create an output file");
 
         const std::filesystem::path non_finite_dist_path =
             temp.path / "non-finite.dists.root";

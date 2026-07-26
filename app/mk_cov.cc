@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstring>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -209,6 +210,39 @@ namespace
         if (options.nominal_name.empty())
             throw std::runtime_error("mk_cov: nominal-name must not be empty");
         return options;
+    }
+
+    std::filesystem::path normalised_path(const std::string &path)
+    {
+        std::error_code error;
+        std::filesystem::path resolved = std::filesystem::weakly_canonical(path, error);
+        if (!error)
+            return resolved;
+
+        error.clear();
+        resolved = std::filesystem::absolute(path, error);
+        if (error)
+            throw std::runtime_error("mk_cov: failed to resolve path: " + path);
+        return resolved.lexically_normal();
+    }
+
+    bool paths_alias(const std::string &first, const std::string &second)
+    {
+        std::error_code error;
+        if (std::filesystem::equivalent(first, second, error))
+            return true;
+        return normalised_path(first) == normalised_path(second);
+    }
+
+    void validate_distinct_paths(const CliOptions &options)
+    {
+        if (paths_alias(options.input_path, options.output_path))
+            throw std::runtime_error("mk_cov: input and output paths must differ");
+        if (options.stacked_mode() &&
+            paths_alias(options.manifest_path, options.output_path))
+        {
+            throw std::runtime_error("mk_cov: manifest and output paths must differ");
+        }
     }
 
     std::string pick_cache_key(const DistributionIO &dist,
@@ -1157,6 +1191,44 @@ namespace
         return prepared;
     }
 
+    void validate_root_key_name(const std::string &option_name,
+                                const std::string &name)
+    {
+        if (name.find_first_of("/;") != std::string::npos)
+        {
+            throw std::runtime_error(
+                "mk_cov: " + option_name + " must not contain '/' or ';'");
+        }
+    }
+
+    void validate_output_object_names(const CliOptions &options,
+                                      const PreparedCovarianceExport &prepared)
+    {
+        validate_root_key_name("matrix-name", options.matrix_name);
+        validate_root_key_name("nominal-name", options.nominal_name);
+
+        std::set<std::string> output_names;
+        const auto register_name = [&output_names](const std::string &name)
+        {
+            if (!output_names.insert(name).second)
+                throw std::runtime_error("mk_cov: duplicate output object name: " + name);
+        };
+
+        register_name(options.matrix_name);
+        register_name(options.nominal_name);
+        register_name("abs_covariance");
+        if (options.stacked_mode())
+            register_name("stack_manifest");
+        for (const auto &component : prepared.components)
+        {
+            if (component.absolute_covariance.empty())
+                continue;
+
+            register_name(component.label + "_covariance");
+            register_name(component.label + "_frac_covariance");
+        }
+    }
+
     void write_covariance_export(const CliOptions &options,
                                  const PreparedCovarianceExport &prepared)
     {
@@ -1245,6 +1317,7 @@ int main(int argc, char **argv)
     try
     {
         const CliOptions options = parse_args(argc, argv);
+        validate_distinct_paths(options);
 
         DistributionIO dist(options.input_path, DistributionIO::Mode::kRead);
         const std::vector<LoadedEntry> entries = load_entries(dist, options);
@@ -1283,6 +1356,7 @@ int main(int argc, char **argv)
 
         const PreparedCovarianceExport prepared =
             prepare_covariance_export(nominal, std::move(components));
+        validate_output_object_names(options, prepared);
         write_output_file(options, entries, prepared);
 
         if (options.stacked_mode())

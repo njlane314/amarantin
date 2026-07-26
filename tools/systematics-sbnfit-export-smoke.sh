@@ -43,6 +43,8 @@ BAD_MANIFEST="${TMP_DIR}/stacked-bad.manifest"
 GOOD_OUTPUT="${TMP_DIR}/stacked-good.root"
 BAD_OUTPUT="${TMP_DIR}/stacked-bad.root"
 FAIL_LOG="${TMP_DIR}/stacked-bad.log"
+PATH_COLLISION_LOG="${TMP_DIR}/stacked-path-collision.log"
+GOOD_MANIFEST_COPY="${TMP_DIR}/stacked-good.manifest.copy"
 
 cat >"${SOURCE}" <<'EOF'
 #include <cmath>
@@ -309,6 +311,23 @@ EOF
   --manifest "${GOOD_MANIFEST}" \
   "${DIST_PATH}" \
   "${GOOD_OUTPUT}"
+
+cp "${GOOD_MANIFEST}" "${GOOD_MANIFEST_COPY}"
+if "${BUILD_DIR}/bin/mk_cov" \
+  --manifest "${GOOD_MANIFEST}" \
+  "${DIST_PATH}" \
+  "${GOOD_MANIFEST}" >"${PATH_COLLISION_LOG}" 2>&1; then
+  printf 'expected stacked export over its manifest to fail\n' >&2
+  exit 1
+fi
+if ! grep -q "manifest and output paths must differ" "${PATH_COLLISION_LOG}"; then
+  printf 'missing path-collision rejection in %s\n' "${PATH_COLLISION_LOG}" >&2
+  exit 1
+fi
+if ! cmp -s "${GOOD_MANIFEST}" "${GOOD_MANIFEST_COPY}"; then
+  printf 'rejected stacked export modified its manifest\n' >&2
+  exit 1
+fi
 
 if "${BUILD_DIR}/bin/mk_cov" \
   --manifest "${BAD_MANIFEST}" \
