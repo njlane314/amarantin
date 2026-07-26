@@ -75,6 +75,17 @@ capture_success() {
   fi
 }
 
+run_with_file_size_limit() {
+  local block_limit=$1
+  shift
+
+  (
+    trap '' XFSZ
+    ulimit -f "${block_limit}"
+    "$@"
+  ) 2>&1 | cat
+}
+
 require_unchanged() {
   local expected_path=$1
   local actual_path=$2
@@ -94,6 +105,38 @@ require_no_temporary_output() {
     printf 'app_cli_parse_runtime_check: %s left a temporary output\n' "${label}" >&2
     exit 1
   fi
+}
+
+require_sample_output_path() {
+  local sample_path=$1
+  local expected_output_path=$2
+  local macro_path="${TMP_DIR}/require_sample_output_path.C"
+
+  cat > "${macro_path}" <<'EOF'
+#include <stdexcept>
+#include <string>
+
+#include "TFile.h"
+#include "TNamed.h"
+
+void require_sample_output_path(const char *sample_path,
+                                const char *expected_output_path)
+{
+  TFile file(sample_path, "READ");
+  if (file.IsZombie())
+    throw std::runtime_error("failed to open sample file");
+
+  const auto *recorded_output =
+      dynamic_cast<TNamed *>(file.Get("meta/output_path"));
+  if (!recorded_output)
+    throw std::runtime_error("sample file has no meta/output_path");
+  if (std::string(recorded_output->GetTitle()) != expected_output_path)
+    throw std::runtime_error("sample file records the wrong output path");
+}
+EOF
+
+  root -n -l -b -q \
+    "${macro_path}(\"${sample_path}\",\"${expected_output_path}\")"
 }
 
 write_minimal_input_file() {
@@ -267,6 +310,40 @@ capture_success "${sample_build_log}" \
   "${BUILD_DIR}/bin/mk_sample" --run-db "${sample_root_collision_run_db}" \
   --sample beam --manifest "${sample_manifest}" \
   "${sample_path}" data nominal numi fhc
+require_sample_output_path "${sample_path}" "${sample_path}"
+
+sample_write_failure_output="${TMP_DIR}/sample-write-failure.root"
+sample_write_failure_expected="${TMP_DIR}/sample-write-failure.root.expected"
+sample_write_failure_log="${TMP_DIR}/sample-write-failure.log"
+cp "${sample_path}" "${sample_write_failure_output}"
+cp "${sample_write_failure_output}" "${sample_write_failure_expected}"
+capture_failure "${sample_write_failure_log}" run_with_file_size_limit 1 \
+  "${BUILD_DIR}/bin/mk_sample" --run-db "${sample_root_collision_run_db}" \
+  --sample beam --manifest "${sample_manifest}" \
+  "${sample_write_failure_output}" data nominal numi fhc
+grep -Fx "mk_sample: SampleIO: failed to write: ${sample_write_failure_output}" \
+  "${sample_write_failure_log}" >/dev/null
+require_unchanged "${sample_write_failure_expected}" \
+  "${sample_write_failure_output}" \
+  "mk_sample existing output after write failure"
+require_no_temporary_output "${sample_write_failure_output}" \
+  "mk_sample existing output write failure"
+
+sample_failed_new_output="${TMP_DIR}/sample-failed-new-output.root"
+sample_failed_new_output_log="${TMP_DIR}/sample-failed-new-output.log"
+capture_failure "${sample_failed_new_output_log}" run_with_file_size_limit 1 \
+  "${BUILD_DIR}/bin/mk_sample" --run-db "${sample_root_collision_run_db}" \
+  --sample beam --manifest "${sample_manifest}" \
+  "${sample_failed_new_output}" data nominal numi fhc
+grep -Fx "mk_sample: SampleIO: failed to write: ${sample_failed_new_output}" \
+  "${sample_failed_new_output_log}" >/dev/null
+if [[ -e "${sample_failed_new_output}" ]]; then
+  printf 'app_cli_parse_runtime_check: mk_sample left a partial output after write failure\n' >&2
+  exit 1
+fi
+require_no_temporary_output "${sample_failed_new_output}" \
+  "mk_sample new output write failure"
+
 printf 'beam %s\n' "${sample_path}" > "${dataset_manifest}"
 
 dataset_manifest_collision="${TMP_DIR}/dataset-manifest-collision.manifest"

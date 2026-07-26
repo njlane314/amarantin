@@ -245,21 +245,29 @@ double SampleIO::compute_normalisation(double subrun_pot_sum,
 
 void SampleIO::write(const std::string &output_path) const
 {
+    write(output_path, output_path);
+}
+
+void SampleIO::write(const std::string &storage_path,
+                     const std::string &recorded_output_path) const
+{
     if (!built_)
         throw std::runtime_error("SampleIO::write: sample has not been successfully built or read");
     if (input_paths_.empty())
         throw std::runtime_error("SampleIO::write: input_paths_ is empty");
-    if (output_path.empty())
+    if (storage_path.empty())
         throw std::runtime_error("SampleIO::write: output_path is empty");
+    if (recorded_output_path.empty())
+        throw std::runtime_error("SampleIO::write: recorded_output_path is empty");
 
-    std::unique_ptr<TFile> f(TFile::Open(output_path.c_str(), "RECREATE"));
+    std::unique_ptr<TFile> f(TFile::Open(storage_path.c_str(), "RECREATE"));
     if (!f || f->IsZombie())
-        throw std::runtime_error("SampleIO: failed to create: " + output_path);
+        throw std::runtime_error("SampleIO: failed to create: " + recorded_output_path);
 
     try
     {
         TDirectory *meta = utils::must_dir(f.get(), "meta", true);
-        utils::write_named(meta, "output_path", output_path);
+        utils::write_named(meta, "output_path", recorded_output_path);
         meta->cd();
 
         TTree part_t("input_paths", "");
@@ -314,11 +322,15 @@ void SampleIO::write(const std::string &output_path) const
             shards_[i].write(utils::must_subdir(pr, "partition_" + std::to_string(i), true, "part"));
 
         f->Write();
+        const bool write_failed = f->TestBit(TFile::kWriteError);
         f->Close();
+        if (write_failed || f->TestBit(TFile::kWriteError))
+            throw std::runtime_error("SampleIO: failed to write: " + recorded_output_path);
     }
     catch (...)
     {
-        f->Close();
+        if (f->IsOpen())
+            f->Close();
         throw;
     }
 }

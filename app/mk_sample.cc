@@ -328,7 +328,13 @@ int main(int argc, char **argv)
                      options.polarity,
                      options.run_db_path);
         validate_root_input_paths(options.output_path, sample);
-        sample.write(options.output_path);
+        cli::write_file_atomically(
+            options.output_path,
+            "mk_sample: failed to publish output ROOT file",
+            [&](const std::string &temporary_output_path)
+            {
+                sample.write(temporary_output_path, options.output_path);
+            });
 
         std::cout << "mk_sample: wrote " << options.output_path;
         if (options.use_manifest)

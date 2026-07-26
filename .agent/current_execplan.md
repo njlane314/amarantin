@@ -5960,3 +5960,151 @@ add only the cache-copy step required by update semantics.
   compatibility are verified
 - stop before adding cross-process cache writer locking or changing public I/O
   APIs
+
+## ExecPlan Addendum: Publish Sample Files Atomically
+
+### 1. Objective
+Prevent a failed `mk_sample` write from replacing an existing output or leaving
+a partial new ROOT file, while preserving the requested final path in
+`meta/output_path`.
+
+### 2. Constraints
+- Preserve valid CLI behavior and the existing one-argument `SampleIO::write`
+  interface.
+- Preserve the installed SampleIO header and ROOT object layout by default.
+- Keep publication orchestration in `app/`; keep `io/` persistence-only.
+- Report the requested output path rather than an internal temporary path in
+  persisted metadata and diagnostics.
+- Leave analysis-facing sample rules and unrelated local fixtures unchanged.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+The shared atomic publisher should own staging cleanup and rename. SampleIO
+needs only enough persistence API to distinguish the storage path from the path
+recorded in its metadata.
+
+### 4. System map
+- `app/mk_sample.cc`
+- `app/CliPaths.hh`
+- `io/SampleIO.hh`
+- `io/SampleIO.cc`
+- `tests/app_cli_parse_runtime_check.sh`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- reuse `cli::write_file_atomically(...)`; do not add a sample-specific
+  transaction type
+
+#### boundary sharpening
+- keep ROOT serialization in SampleIO and final-path publication in `mk_sample`
+
+#### stale scaffolding
+- centralize SampleIO write validation and implementation in the new two-path
+  overload; retain the one-path overload only as the compatibility entry point
+
+### 6. Milestones
+
+#### Milestone A: Prove destructive sample write failure
+- status: done
+- hypothesis: a real filesystem write failure can truncate an existing sample
+  because `mk_sample` opens the final path directly
+- files / symbols touched:
+  - `tests/app_cli_parse_runtime_check.sh`
+- expected behavior risk: none; regression only
+- verification commands:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - run `app_cli_parse_runtime_check` against the published binaries
+- acceptance criteria:
+  - constrain `mk_sample` with a process file-size limit
+  - prove a valid seeded output is not preserved by the published binary
+  - cover both existing-output and new-output failure cases
+- verification results:
+  - shell syntax and tracked-file diff checks passed
+  - ROOT reported a file-size-limit write failure against the published binary
+  - the published `mk_sample` nevertheless returned success and announced the
+    truncated seeded output as written
+
+#### Milestone B: Stage SampleIO output and detect ROOT write errors
+- status: done
+- hypothesis: writing to a sibling temporary path while recording the final
+  path protects publication without changing persisted metadata
+- files / symbols touched:
+  - `app/mk_sample.cc`
+  - `io/SampleIO.hh`
+  - `io/SampleIO.cc`
+- expected behavior risk: medium; SampleIO is an installed API and ROOT error
+  state must be checked before publication
+- verification commands:
+  - build `IO` and `mk_sample`
+  - run `io_rigorous_check`
+  - run `app_cli_parse_runtime_check`
+- acceptance criteria:
+  - the one-path write API remains source-compatible
+  - a two-path overload separates physical storage from recorded output path
+  - ROOT write or close errors throw before the staged file can be renamed
+  - failed writes preserve existing output and remove temporary files
+  - successful files record the requested final path
+- verification results:
+  - `IO` and `mk_sample` build in the Docker verification tree
+  - the focused runtime suite passes for existing and new write failures
+  - successful sample metadata records the requested final path
+  - `io_rigorous_check` passes, including the existing one-path write API
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification will catch persistence-layout, metadata, and
+  downstream sample compatibility regressions
+- files / symbols touched:
+  - all files above
+- expected behavior risk: medium
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - shell syntax and `git diff --check`
+- acceptance criteria:
+  - every configured test passes
+  - all newly added names and API semantics are reviewed
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 176.28 seconds
+  - `mk_sample`, `mk_dataset`, and `mk_eventlist` help smoke checks passed
+  - shell syntax, tracked-file diff checks, and the complete code review passed
+  - both one-path and two-path SampleIO write symbols are exported
+
+### 7. Public-surface check
+- compatibility impact: add an overload to the installed SampleIO interface;
+  keep the existing signature and behavior for direct callers
+- migration note or explicit non-goal: no caller migration is required; the
+  overload exists only for workflows that stage a file under another path
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - application and persistence code: `+26 / -6`
+  - runtime regression: `+77 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- force a real write failure rather than add a test-only CLI branch
+- use a same-directory temporary file so publication remains one rename
+- keep user-visible diagnostics and persisted metadata on the requested path
+- do not update the analysis-memory document because sample selection, fit
+  structure, and training-snapshot requirements do not change
+
+### 10. Stop conditions
+- stop after write-failure atomicity and final-path metadata are verified by
+  focused and full tests
+- stop before adding cross-process writer locking or changing sample analysis
+  semantics

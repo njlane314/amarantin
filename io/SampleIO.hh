@@ -38,6 +38,8 @@ public:
                const std::string &run_db_path = "");
     void read(const std::string &path);
     void write(const std::string &output_path) const;
+    void write(const std::string &storage_path,
+               const std::string &recorded_output_path) const;
     DatasetIO::Sample to_dataset_sample() const;
 
     static std::string default_run_db_path();

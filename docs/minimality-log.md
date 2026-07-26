@@ -3750,3 +3750,66 @@
   path inside the ROOT file, so it needs a separate API-compatible design
 - cache publication is atomic for one process but does not serialize concurrent
   writers targeting the same output
+
+---
+
+## Current milestone
+- status: done
+- subsystem: atomic sample output publication
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep `io/`
+  persistence-only, and add abstractions only when they delete complexity
+
+## What changed
+- made `mk_sample` write to a same-directory temporary ROOT file and publish it
+  only after SampleIO closes without a ROOT write error
+- added a compatible SampleIO overload that separates the physical storage
+  path from the final path recorded in `meta/output_path`
+- added regressions for preserving an existing sample, omitting a failed new
+  sample, cleaning temporary files, and retaining final-path metadata
+
+## Why this is simpler
+- `mk_sample` now uses the same grep-visible atomic publisher as the other
+  one-shot pipeline writers
+- SampleIO remains responsible for ROOT persistence and exposes only the path
+  distinction required by staged publication
+- a real process file-size limit tests write-error handling without a test-only
+  CLI branch
+
+## Verification
+- focused checks:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - build `IO` and `mk_sample`
+  - run `app_cli_parse_runtime_check`
+  - run `io_rigorous_check`
+- results:
+  - the published binary logged ROOT write failures but incorrectly returned
+    success after truncating its final output
+  - the updated targets build
+  - focused failure and metadata coverage passes
+  - IO rigorous coverage passes
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 176.28 seconds
+  - CLI help smoke checks, shell syntax, and tracked-file diff checks passed
+  - the complete code and installed-symbol review found no blocking issue
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - application and persistence code: `+26 / -6`
+  - runtime regression: `+77 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- preserve the one-argument SampleIO write API and add a two-path overload
+- name the overload's physical destination `storage_path` and its persisted
+  value `recorded_output_path`
+- check ROOT's write-error bit before and after close, before publication
+- leave analysis-memory unchanged because sample rules, fit structure, and
+  training-snapshot requirements do not change
+
+## Remaining hotspots
+- cache publication is atomic for one process but does not serialize concurrent
+  writers targeting the same output
