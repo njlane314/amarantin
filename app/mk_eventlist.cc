@@ -161,6 +161,7 @@ int main(int argc, char **argv)
             {
                 EventListIO event_list(temporary_output_path, EventListIO::Mode::kWrite);
                 ana::build_event_list(dataset, event_list, build_config);
+                event_list.close();
             });
 
         std::cout << "mk_eventlist: wrote " << options.output_path

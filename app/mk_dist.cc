@@ -419,6 +419,7 @@ int main(int argc, char **argv)
                 copy_existing_cache(options.output_path, temporary_output_path);
                 DistributionIO distfile(temporary_output_path, DistributionIO::Mode::kUpdate);
                 syst::build_systematics_cache(event_list, distfile, cache_options);
+                distfile.close();
             });
 
         if (options.use_manifest)

@@ -97,6 +97,23 @@ run_with_file_size_limit() {
   ) 2>&1 | cat
 }
 
+# Bash expresses RLIMIT_FSIZE in 1024-byte blocks.
+file_size_limit_blocks_for() {
+  local path=$1
+  local byte_count
+  byte_count=$(wc -c < "${path}")
+  printf '%d\n' "$(( (byte_count + 1023) / 1024 ))"
+}
+
+file_size_limit_blocks_below() {
+  local path=$1
+  local byte_count
+  local block_count
+  byte_count=$(wc -c < "${path}")
+  block_count=$(( (byte_count - 1) / 1024 ))
+  printf '%d\n' "$(( block_count > 0 ? block_count : 1 ))"
+}
+
 wait_for_temporary_output() {
   local temporary_path=$1
   local process_id=$2
@@ -477,6 +494,36 @@ capture_success "${dataset_legacy_log}" \
 grep -F "mk_dataset: wrote ${legacy_dataset_path} with 1 logical samples from manifest ${dataset_manifest}" \
   "${dataset_legacy_log}" >/dev/null
 
+dataset_write_failure_output="${TMP_DIR}/dataset-write-failure.root"
+dataset_write_failure_expected="${TMP_DIR}/dataset-write-failure.root.expected"
+dataset_write_failure_log="${TMP_DIR}/dataset-write-failure.log"
+cp "${native_dataset_path}" "${dataset_write_failure_output}"
+cp "${dataset_write_failure_output}" "${dataset_write_failure_expected}"
+capture_failure "${dataset_write_failure_log}" run_with_file_size_limit 1 \
+  "${BUILD_DIR}/bin/mk_dataset" --run run1 --beam numi --polarity fhc \
+  --manifest "${dataset_manifest}" "${dataset_write_failure_output}"
+grep -Fx "mk_dataset: DatasetIO: failed to write output file" \
+  "${dataset_write_failure_log}" >/dev/null
+require_unchanged "${dataset_write_failure_expected}" \
+  "${dataset_write_failure_output}" \
+  "mk_dataset existing output after write failure"
+require_no_temporary_output "${dataset_write_failure_output}" \
+  "mk_dataset existing output write failure"
+
+dataset_failed_write_output="${TMP_DIR}/dataset-failed-write-output.root"
+dataset_failed_write_output_log="${TMP_DIR}/dataset-failed-write-output.log"
+capture_failure "${dataset_failed_write_output_log}" run_with_file_size_limit 1 \
+  "${BUILD_DIR}/bin/mk_dataset" --run run1 --beam numi --polarity fhc \
+  --manifest "${dataset_manifest}" "${dataset_failed_write_output}"
+grep -Fx "mk_dataset: DatasetIO: failed to write output file" \
+  "${dataset_failed_write_output_log}" >/dev/null
+if [[ -e "${dataset_failed_write_output}" ]]; then
+  printf 'app_cli_parse_runtime_check: mk_dataset left a partial output after write failure\n' >&2
+  exit 1
+fi
+require_no_temporary_output "${dataset_failed_write_output}" \
+  "mk_dataset new output write failure"
+
 dataset_late_failure_manifest="${TMP_DIR}/dataset-late-failure.manifest"
 dataset_late_failure_missing_sample="${TMP_DIR}/missing.sample.root"
 dataset_late_failure_output="${TMP_DIR}/dataset-late-failure.root"
@@ -555,6 +602,41 @@ capture_success "${eventlist_seed_log}" \
   "${eventlist_late_failure_output}" "${native_dataset_path}"
 grep -Fx "mk_eventlist: wrote ${eventlist_late_failure_output} from dataset ${native_dataset_path}" \
   "${eventlist_seed_log}" >/dev/null
+
+eventlist_write_failure_output="${TMP_DIR}/eventlist-write-failure.root"
+eventlist_write_failure_expected="${TMP_DIR}/eventlist-write-failure.root.expected"
+eventlist_write_failure_log="${TMP_DIR}/eventlist-write-failure.log"
+cp "${eventlist_late_failure_output}" "${eventlist_write_failure_output}"
+cp "${eventlist_write_failure_output}" "${eventlist_write_failure_expected}"
+eventlist_write_failure_block_limit=$(file_size_limit_blocks_below \
+  "${eventlist_write_failure_output}")
+capture_failure "${eventlist_write_failure_log}" \
+  run_with_file_size_limit "${eventlist_write_failure_block_limit}" \
+  "${BUILD_DIR}/bin/mk_eventlist" --selection 1 \
+  "${eventlist_write_failure_output}" "${native_dataset_path}"
+grep -Fx "mk_eventlist: EventListIO: failed to write output file" \
+  "${eventlist_write_failure_log}" >/dev/null
+require_unchanged "${eventlist_write_failure_expected}" \
+  "${eventlist_write_failure_output}" \
+  "mk_eventlist existing output after write failure"
+require_no_temporary_output "${eventlist_write_failure_output}" \
+  "mk_eventlist existing output write failure"
+
+eventlist_failed_write_output="${TMP_DIR}/eventlist-failed-write-output.root"
+eventlist_failed_write_output_log="${TMP_DIR}/eventlist-failed-write-output.log"
+capture_failure "${eventlist_failed_write_output_log}" \
+  run_with_file_size_limit "${eventlist_write_failure_block_limit}" \
+  "${BUILD_DIR}/bin/mk_eventlist" --selection 1 \
+  "${eventlist_failed_write_output}" "${native_dataset_path}"
+grep -Fx "mk_eventlist: EventListIO: failed to write output file" \
+  "${eventlist_failed_write_output_log}" >/dev/null
+if [[ -e "${eventlist_failed_write_output}" ]]; then
+  printf 'app_cli_parse_runtime_check: mk_eventlist left a partial output after write failure\n' >&2
+  exit 1
+fi
+require_no_temporary_output "${eventlist_failed_write_output}" \
+  "mk_eventlist new output write failure"
+
 cp "${eventlist_late_failure_output}" "${eventlist_late_failure_expected}"
 capture_failure "${eventlist_late_failure_log}" \
   "${BUILD_DIR}/bin/mk_eventlist" --selection 1 \
@@ -647,6 +729,40 @@ capture_failure "${dist_successful_update_cov_log}" \
   "${dist_late_failure_output}" beam "${TMP_DIR}/dist-successful-update.cov.root"
 grep -Fx "mk_cov: sample has multiple cached distributions; pass --cache-key" \
   "${dist_successful_update_cov_log}" >/dev/null
+
+dist_write_failure_output="${TMP_DIR}/dist-write-failure.root"
+dist_write_failure_expected="${TMP_DIR}/dist-write-failure.root.expected"
+dist_write_failure_log="${TMP_DIR}/dist-write-failure.log"
+cp "${dist_late_failure_output}" "${dist_write_failure_output}"
+cp "${dist_write_failure_output}" "${dist_write_failure_expected}"
+dist_write_failure_block_limit=$(file_size_limit_blocks_for \
+  "${dist_write_failure_output}")
+capture_failure "${dist_write_failure_log}" \
+  run_with_file_size_limit "${dist_write_failure_block_limit}" \
+  "${BUILD_DIR}/bin/mk_dist" \
+  "${dist_write_failure_output}" "${eventlist_late_failure_output}" \
+  beam selection_pass 2 0 2
+grep -Fx "mk_dist: DistributionIO: failed to write output file" \
+  "${dist_write_failure_log}" >/dev/null
+require_unchanged "${dist_write_failure_expected}" "${dist_write_failure_output}" \
+  "mk_dist existing output after write failure"
+require_no_temporary_output "${dist_write_failure_output}" \
+  "mk_dist existing output write failure"
+
+dist_failed_write_output="${TMP_DIR}/dist-failed-write-output.root"
+dist_failed_write_output_log="${TMP_DIR}/dist-failed-write-output.log"
+capture_failure "${dist_failed_write_output_log}" run_with_file_size_limit 1 \
+  "${BUILD_DIR}/bin/mk_dist" \
+  "${dist_failed_write_output}" "${eventlist_late_failure_output}" \
+  beam selection_pass 2 0 2
+grep -Fx "mk_dist: DistributionIO: failed to write output file" \
+  "${dist_failed_write_output_log}" >/dev/null
+if [[ -e "${dist_failed_write_output}" ]]; then
+  printf 'app_cli_parse_runtime_check: mk_dist left a partial output after write failure\n' >&2
+  exit 1
+fi
+require_no_temporary_output "${dist_failed_write_output}" \
+  "mk_dist new output write failure"
 
 dist_concurrent_output="${TMP_DIR}/dist-concurrent.root"
 dist_concurrent_seed_log="${TMP_DIR}/dist-concurrent-seed.log"

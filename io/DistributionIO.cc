@@ -554,12 +554,19 @@ DistributionIO::DistributionIO(const std::string &path, Mode mode)
 
 DistributionIO::~DistributionIO()
 {
-    if (file_)
+    try
     {
-        file_->Close();
-        delete file_;
-        file_ = nullptr;
+        close();
     }
+    catch (...)
+    {
+    }
+}
+
+void DistributionIO::close()
+{
+    if (!utils::close_root_file(file_, false))
+        throw std::runtime_error("DistributionIO: failed to write output file");
 }
 
 void DistributionIO::require_open_() const
@@ -620,6 +627,8 @@ void DistributionIO::flush()
     if (mode_ == Mode::kRead)
         return;
     file_->Write(nullptr, TObject::kOverwrite);
+    if (file_->TestBit(TFile::kWriteError))
+        throw std::runtime_error("DistributionIO: failed to write output file");
 }
 
 std::vector<std::string> DistributionIO::top_level_keys() const

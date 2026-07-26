@@ -3877,3 +3877,70 @@
 ## Remaining hotspots
 - broader repository diagnostics remain ongoing; no other current writer reads
   and republishes existing output state
+
+---
+
+## Current milestone
+- status: done
+- subsystem: checked ROOT file finalization
+- design rule from `DESIGN.md`: keep ROOT persistence in `io/`, filesystem
+  publication in `app/`, and abstractions only where they delete complexity
+
+## What changed
+- added explicit idempotent `close()` methods to DatasetIO, EventListIO, and
+  DistributionIO while keeping destructors best-effort and non-throwing
+- centralized TFile ownership release plus pre/post-close write-error checks in
+  the existing internal ROOT utility header
+- made each atomic writer callback close successfully before publication
+- made EventListIO and DistributionIO flush report ROOT write errors immediately
+- added real file-size-limit regressions for existing and new outputs across all
+  three writer CLIs
+
+## Why this is simpler
+- app workflows state one explicit persistence boundary instead of inferring
+  success from a destructor that cannot throw
+- one internal helper owns pointer nulling, close, deletion, and error-bit
+  inspection for all three classes
+- destructors call the same idempotent close path and only suppress errors where
+  C++ destruction semantics require it
+
+## Verification
+- focused checks:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - build `IO`, `mk_dataset`, `mk_eventlist`, `mk_dist`, and
+    `io_rigorous_check`
+  - run `app_cli_parse_runtime_check`
+  - run `io_rigorous_check` and `systematics_rigorous_check`
+- results:
+  - the published `mk_dataset` logged ROOT write failures but returned success
+  - all six checked-finalization regressions pass after the fix
+  - existing outputs remain byte-identical, failed new outputs are absent, and
+    temporary files are cleaned
+  - direct idempotent-close, I/O, and systematics coverage passes
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 211.42 seconds
+  - shell syntax and tracked-file diff checks passed
+  - all three additive close symbols are exported from the installed library
+  - the complete code and lifetime review found no blocking issue
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - app and persistence implementation: `+62 / -12`
+  - runtime and direct I/O regressions: `+122 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- keep destructors non-throwing and make explicit close the checked boundary
+- preserve DatasetIO's historical pre-close write and avoid adding duplicate
+  writes to EventListIO or DistributionIO
+- report generic class-level write diagnostics so internal staging paths do not
+  become user-facing API
+- keep explicit close additive for existing direct callers
+
+## Remaining hotspots
+- broader repository diagnostics remain ongoing; writable app paths now either
+  check ROOT finalization directly or use SampleIO's checked writer

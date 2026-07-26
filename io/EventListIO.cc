@@ -198,12 +198,19 @@ EventListIO::EventListIO(const std::string &path, Mode mode)
 
 EventListIO::~EventListIO()
 {
-    if (file_)
+    try
     {
-        file_->Close();
-        delete file_;
-        file_ = nullptr;
+        close();
     }
+    catch (...)
+    {
+    }
+}
+
+void EventListIO::close()
+{
+    if (!utils::close_root_file(file_, false))
+        throw std::runtime_error("EventListIO: failed to write output file");
 }
 
 void EventListIO::require_open_() const
@@ -298,6 +305,8 @@ void EventListIO::flush()
     if (mode_ == Mode::kRead)
         return;
     file_->Write(nullptr, TObject::kOverwrite);
+    if (file_->TestBit(TFile::kWriteError))
+        throw std::runtime_error("EventListIO: failed to write output file");
 }
 
 std::string EventListIO::file_uuid() const

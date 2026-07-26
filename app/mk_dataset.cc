@@ -601,6 +601,7 @@ int main(int argc, char **argv)
 
                         dataset.add_sample(sample_arg.key, entry);
                     }
+                    dataset.close();
                 });
 
             std::cout << "mk_dataset: wrote " << options.output_path
@@ -646,6 +647,7 @@ int main(int argc, char **argv)
                         ana::apply_sample_defs(defs, logical.key, entry);
                     dataset.add_sample(logical.key, entry);
                 }
+                dataset.close();
             });
 
         std::cout << "mk_dataset: wrote " << options.output_path

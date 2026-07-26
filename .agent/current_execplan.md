@@ -6258,3 +6258,159 @@ current cache, building requested entries, and renaming the staged file.
   full verification pass
 - stop before redesigning DistributionIO transactions or adding distributed
   locking beyond local POSIX advisory semantics
+
+## ExecPlan Addendum: Reject Silent ROOT Finalization Failures
+
+### 1. Objective
+Prevent `mk_dataset`, `mk_eventlist`, and `mk_dist` from publishing staged ROOT
+files after their persistence classes observe an underlying write or close
+failure.
+
+### 2. Constraints
+- Preserve valid CLI behavior and ROOT layouts.
+- Keep destructors non-throwing and safe for existing callers.
+- Preserve installed classes and add only compatible explicit finalization.
+- Keep filesystem publication in `app/` and ROOT state checks in `io/`.
+- Reuse real operating-system write limits rather than test-only branches.
+- Leave sample, fit, and training-snapshot semantics unchanged.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep `io/` persistence-only
+- keep workflows in `app/`
+- add abstractions only when they delete complexity
+
+Each atomic app callback must explicitly close its writable persistence object
+and receive any ROOT write error before the callback returns for rename.
+
+### 4. System map
+- `io/bits/RootUtils.hh`
+- `io/DatasetIO.hh`
+- `io/DatasetIO.cc`
+- `io/EventListIO.hh`
+- `io/EventListIO.cc`
+- `io/DistributionIO.hh`
+- `io/DistributionIO.cc`
+- `app/mk_dataset.cc`
+- `app/mk_eventlist.cc`
+- `app/mk_dist.cc`
+- `plot/macro/cache_systematics.C`
+- `tests/app_cli_parse_runtime_check.sh`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- centralize TFile ownership release and post-close error inspection in the
+  existing internal ROOT utility header
+
+#### boundary sharpening
+- make explicit `close()` the throwing finalization boundary; destructors only
+  provide best-effort no-throw cleanup
+
+#### stale scaffolding
+- do not add app-local TFile inspection or duplicate temporary cleanup paths
+
+### 6. Milestones
+
+#### Milestone A: Prove silent finalization failures
+- status: done
+- hypothesis: a process file-size limit causes ROOT write errors while the
+  published dataset, event-list, and distribution CLIs still report success
+- files / symbols touched:
+  - `tests/app_cli_parse_runtime_check.sh`
+- expected behavior risk: none; regression only
+- verification commands:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - run `app_cli_parse_runtime_check` against the published binaries
+- acceptance criteria:
+  - force real late writes to exceed `RLIMIT_FSIZE`
+  - cover existing-output preservation and failed-new-output omission
+  - require class-specific checked-finalization diagnostics
+- verification results:
+  - shell syntax and tracked-file diff checks passed
+  - ROOT reported a file-size-limit write failure in the staged DatasetIO file
+  - the published `mk_dataset` nevertheless returned success and replaced the
+    requested output
+  - source inspection confirmed EventListIO and DistributionIO use the same
+    unchecked destructor-only finalization pattern
+
+#### Milestone B: Add checked explicit close paths
+- status: done
+- hypothesis: public idempotent `close()` methods can report ROOT error state
+  while non-throwing destructors preserve compatibility
+- files / symbols touched:
+  - I/O classes, internal ROOT utility, and writer call sites above
+- expected behavior risk: medium; file ownership and destructor behavior change
+- verification commands:
+  - build `IO`, `mk_dataset`, `mk_eventlist`, and `mk_dist`
+  - run `io_rigorous_check`
+  - run `app_cli_parse_runtime_check`
+  - run `systematics_rigorous_check`
+- acceptance criteria:
+  - writable close checks errors both before and after TFile close
+  - explicit close releases ownership even when it throws
+  - destructors remain no-throw and idempotent after explicit close
+  - atomic callbacks close successfully before rename
+  - failed writes preserve existing outputs and leave no staged files
+- verification results:
+  - `IO`, all three writer apps, and `io_rigorous_check` build
+  - all existing/new forced-write failure cases pass with byte preservation,
+    failed-output omission, and temporary cleanup
+  - explicit close is covered as idempotent for all three installed classes
+  - `io_rigorous_check` and `systematics_rigorous_check` pass
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full downstream coverage will catch lifetime and persistence
+  regressions from explicit finalization
+- files / symbols touched:
+  - all files above
+- expected behavior risk: medium
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - shell syntax and `git diff --check`
+- acceptance criteria:
+  - every configured test passes
+  - public names and diagnostics are reviewed
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 211.42 seconds
+  - shell syntax and tracked-file diff checks passed
+  - the installed library exports all three additive close symbols
+  - the complete code, lifetime, naming, and regression review found no
+    blocking issue
+
+### 7. Public-surface check
+- compatibility impact: add idempotent `close()` methods to three installed I/O
+  classes; existing destructor-based callers remain source-compatible
+- migration note or explicit non-goal: atomic writer apps and the writable
+  cache macro migrate now; other valid direct callers may adopt checked close
+  when they need failure reporting
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - app and persistence implementation: `+62 / -12`
+  - runtime and direct I/O regressions: `+122 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- do not throw from destructors
+- check the ROOT write-error bit before and after close
+- null the owned pointer before reporting a close failure so repeated cleanup is
+  safe
+- use generic class diagnostics that do not expose app staging paths
+- do not update analysis memory because analysis-facing contracts do not change
+
+### 10. Stop conditions
+- stop after all three writer classes reject forced finalization failures and
+  focused plus full verification pass
+- stop before redesigning persistence ownership beyond explicit close semantics

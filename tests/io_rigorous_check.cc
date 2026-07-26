@@ -668,6 +668,8 @@ namespace
         {
             DatasetIO dataset(dataset_path.string(), "io-rigorous");
             dataset.add_sample("beam", sample.to_dataset_sample());
+            dataset.close();
+            dataset.close();
         }
 
         DatasetIO dataset(dataset_path.string());
@@ -766,6 +768,8 @@ namespace
             delete subrun_tree;
 
             eventlist.flush();
+            eventlist.close();
+            eventlist.close();
         }
 
         EventListIO eventlist(eventlist_path.string(), EventListIO::Mode::kRead);
@@ -841,6 +845,8 @@ namespace
             dist.write_metadata(DistributionIO::Metadata{"beam.eventlist.root", "", 2});
             dist.write("beam", "shape", spectrum);
             dist.flush();
+            dist.close();
+            dist.close();
         }
 
         DistributionIO dist(dist_path.string(), DistributionIO::Mode::kRead);

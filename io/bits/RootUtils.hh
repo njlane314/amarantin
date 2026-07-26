@@ -4,17 +4,34 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <TDirectory.h>
+#include <TFile.h>
 #include <TKey.h>
 #include <TNamed.h>
 #include <TParameter.h>
 
 namespace utils
 {
+    inline bool close_root_file(TFile *&file, bool write_before_close)
+    {
+        if (!file)
+            return true;
+
+        std::unique_ptr<TFile> owned_file(file);
+        file = nullptr;
+
+        if (write_before_close)
+            owned_file->Write();
+        const bool write_failed = owned_file->TestBit(TFile::kWriteError);
+        owned_file->Close();
+        return !write_failed && !owned_file->TestBit(TFile::kWriteError);
+    }
+
     inline std::string lower(std::string s)
     {
         std::transform(s.begin(), s.end(), s.begin(),

@@ -469,12 +469,19 @@ DatasetIO::DatasetIO(const std::string &path, const std::string &context)
 
 DatasetIO::~DatasetIO()
 {
-    if (file_)
+    try
     {
-        if (write_) file_->Write();
-        file_->Close();
-        delete file_;
+        close();
     }
+    catch (...)
+    {
+    }
+}
+
+void DatasetIO::close()
+{
+    if (!utils::close_root_file(file_, write_))
+        throw std::runtime_error("DatasetIO: failed to write output file");
 }
 
 void DatasetIO::require_open_() const

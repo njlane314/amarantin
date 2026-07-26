@@ -116,6 +116,7 @@ public:
     void write_metadata(const Metadata &metadata);
     std::string file_uuid() const;
     int content_revision() const;
+    void close();
     void flush();
     std::vector<std::string> top_level_keys() const;
 
