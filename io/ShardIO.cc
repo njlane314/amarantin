@@ -143,13 +143,14 @@ ShardIO ShardIO::read(TDirectory *d)
         if (!t) throw std::runtime_error("ShardIO: missing root_files tree in part/" + std::string(d->GetName()));
 
         std::string *root_file = nullptr;
-        t->SetBranchAddress("root_file", &root_file);
+        utils::CheckedTreeReader reader(*t, "ShardIO");
+        reader.bind_branch("root_file", &root_file);
 
         const Long64_t n = t->GetEntries();
         out.files_.reserve(static_cast<size_t>(n));
         for (Long64_t i = 0; i < n; ++i)
         {
-            t->GetEntry(i);
+            reader.read_entry(i);
             if (!root_file) throw std::runtime_error("ShardIO: root_files missing root_file in part/" + std::string(d->GetName()));
             out.files_.push_back(*root_file);
         }
@@ -162,18 +163,19 @@ ShardIO ShardIO::read(TDirectory *d)
         Int_t run = 0;
         Int_t subrun = 0;
         Double_t generated_exposure = 0.0;
-        t->SetBranchAddress("run", &run);
-        t->SetBranchAddress("subrun", &subrun);
+        utils::CheckedTreeReader reader(*t, "ShardIO");
+        reader.bind_branch("run", &run);
+        reader.bind_branch("subrun", &subrun);
         const bool have_generated_exposure = t->GetBranch("generated_exposure") != nullptr;
         if (have_generated_exposure)
-            t->SetBranchAddress("generated_exposure", &generated_exposure);
+            reader.bind_branch("generated_exposure", &generated_exposure);
 
         const Long64_t n = t->GetEntries();
         out.generated_exposures_.reserve(static_cast<size_t>(n));
         out.subruns_.reserve(static_cast<size_t>(n));
         for (Long64_t i = 0; i < n; ++i)
         {
-            t->GetEntry(i);
+            reader.read_entry(i);
             out.subruns_.emplace_back(static_cast<int>(run), static_cast<int>(subrun));
             RunSubrunExposure entry;
             entry.run = static_cast<int>(run);
@@ -275,15 +277,16 @@ void ShardIO::scan(const std::vector<std::string> &files)
     Double_t pot_per_gate = 0.0;
     Long64_t n_beam_gates = 0;
 
-    chain.SetBranchAddress("run", &run);
-    chain.SetBranchAddress("subRun", &subrun);
+    utils::CheckedTreeReader reader(chain, "ShardIO");
+    reader.bind_branch("run", &run);
+    reader.bind_branch("subRun", &subrun);
     if (exposure_mode == ExposureMode::kPot)
     {
         if (!chain.GetBranch("pot"))
         {
             throw std::runtime_error("ShardIO: SubRun tree is missing pot after selecting the pot exposure layout.");
         }
-        chain.SetBranchAddress("pot", &pot);
+        reader.bind_branch("pot", &pot);
     }
     else
     {
@@ -292,8 +295,8 @@ void ShardIO::scan(const std::vector<std::string> &files)
             throw std::runtime_error(
                 "ShardIO: SubRun tree is missing pot_per_gate or n_beam_gates after selecting the fallback exposure layout.");
         }
-        chain.SetBranchAddress("pot_per_gate", &pot_per_gate);
-        chain.SetBranchAddress("n_beam_gates", &n_beam_gates);
+        reader.bind_branch("pot_per_gate", &pot_per_gate);
+        reader.bind_branch("n_beam_gates", &n_beam_gates);
     }
 
     const Long64_t n = chain.GetEntries();
@@ -303,7 +306,7 @@ void ShardIO::scan(const std::vector<std::string> &files)
 
     for (Long64_t i = 0; i < n; ++i)
     {
-        chain.GetEntry(i);
+        reader.read_entry(i);
         const double generated_exposure =
             (exposure_mode == ExposureMode::kPot)
                 ? static_cast<double>(pot)

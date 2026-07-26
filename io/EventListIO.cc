@@ -85,18 +85,19 @@ namespace
         Double_t generated_exposure = 0.0;
         Double_t target_exposure = 0.0;
         Double_t normalisation = 1.0;
-        tree->SetBranchAddress("run", &run);
-        tree->SetBranchAddress("subrun", &subrun);
-        tree->SetBranchAddress("generated_exposure", &generated_exposure);
-        tree->SetBranchAddress("target_exposure", &target_exposure);
-        tree->SetBranchAddress("normalisation", &normalisation);
+        utils::CheckedTreeReader reader(*tree, "EventListIO");
+        reader.bind_branch("run", &run);
+        reader.bind_branch("subrun", &subrun);
+        reader.bind_branch("generated_exposure", &generated_exposure);
+        reader.bind_branch("target_exposure", &target_exposure);
+        reader.bind_branch("normalisation", &normalisation);
 
         std::vector<DatasetIO::RunSubrunNormalisation> entries;
         const Long64_t n = tree->GetEntries();
         entries.reserve(static_cast<std::size_t>(n));
         for (Long64_t i = 0; i < n; ++i)
         {
-            tree->GetEntry(i);
+            reader.read_entry(i);
 
             DatasetIO::RunSubrunNormalisation entry;
             entry.run = static_cast<int>(run);

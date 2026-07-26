@@ -419,13 +419,14 @@ void SampleIO::read(const std::string &path)
             if (!t) throw std::runtime_error("SampleIO: missing input_paths tree in meta");
 
             std::string *input_path = nullptr;
-            t->SetBranchAddress("input_path", &input_path);
+            utils::CheckedTreeReader reader(*t, "SampleIO");
+            reader.bind_branch("input_path", &input_path);
 
             const Long64_t n = t->GetEntries();
             input_paths.reserve(static_cast<size_t>(n));
             for (Long64_t i = 0; i < n; ++i)
             {
-                t->GetEntry(i);
+                reader.read_entry(i);
                 if (!input_path)
                     throw std::runtime_error("SampleIO: input_paths missing input_path");
                 input_paths.push_back(*input_path);
@@ -458,17 +459,18 @@ void SampleIO::read(const std::string &path)
             Double_t generated_exposure = 0.0;
             Double_t target_exposure = 0.0;
             Double_t normalisation = 1.0;
-            normalisation_t->SetBranchAddress("run", &run);
-            normalisation_t->SetBranchAddress("subrun", &subrun);
-            normalisation_t->SetBranchAddress("generated_exposure", &generated_exposure);
-            normalisation_t->SetBranchAddress("target_exposure", &target_exposure);
-            normalisation_t->SetBranchAddress("normalisation", &normalisation);
+            utils::CheckedTreeReader reader(*normalisation_t, "SampleIO");
+            reader.bind_branch("run", &run);
+            reader.bind_branch("subrun", &subrun);
+            reader.bind_branch("generated_exposure", &generated_exposure);
+            reader.bind_branch("target_exposure", &target_exposure);
+            reader.bind_branch("normalisation", &normalisation);
 
             const Long64_t n = normalisation_t->GetEntries();
             run_subrun_normalisations_.reserve(static_cast<size_t>(n));
             for (Long64_t i = 0; i < n; ++i)
             {
-                normalisation_t->GetEntry(i);
+                reader.read_entry(i);
                 run_subrun_normalisations_.push_back(
                     DatasetIO::RunSubrunNormalisation{
                         static_cast<int>(run),

@@ -7036,3 +7036,152 @@ From `DESIGN.md`:
   covariance output
 - stop before changing universe decoding, covariance normalization, or cache
   persistence
+
+## ExecPlan Addendum: Check Persistence Tree Reads
+
+### 1. Objective
+Prevent production readers in `io/` from turning missing or incompatible ROOT
+branches and failed entry reads into plausible default metadata, exposure, or
+normalisation values.
+
+### 2. Constraints
+- Keep `io/` persistence-only and preserve every public signature and on-disk
+  schema.
+- Preserve explicitly optional and legacy branches at their current call sites.
+- Accept non-negative ROOT conversion statuses; reject missing or incompatible
+  bindings with reader, tree, branch, and status context.
+- Reject negative `GetEntry(...)` results with reader, tree, and entry context.
+- Release only branch addresses established by the checked reader.
+- Do not change analysis rules, cache mathematics, or macro-only inspection
+  helpers.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep `io/` persistence-only
+- prefer one direct helper when it deletes repeated failure handling
+- keep control flow flat and easy to grep
+
+### 4. System map
+- `io/bits/RootUtils.hh`
+- `io/DatasetIO.cc`
+- `io/EventListIO.cc`
+- `io/SampleIO.cc`
+- `io/ShardIO.cc`
+- `io/DistributionIO.cc`
+- `tests/io_rigorous_check.cc`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### repeated boundary handling
+- one checked reader owns binding validation, entry-read validation, and address
+  cleanup for every production `io/` tree loop
+
+#### silent defaults
+- replace ROOT stderr plus initialized scalar/null pointer values with contextual
+  exceptions
+
+#### lifetime ownership
+- release only addresses successfully established by the reader on every exit
+  path
+
+### 6. Milestones
+
+#### Milestone A: Prove malformed normalisation returns a plausible scale
+- status: done
+- hypothesis: an `Int_t normalisation` branch cannot bind to the expected
+  `Double_t`, but `DatasetIO::Sample::read(...)` returns the row with its default
+  scale `1.0`
+- files / symbols touched:
+  - `tests/io_rigorous_check.cc`
+- expected behavior risk: none; regression only
+- verification commands:
+  - build `io_rigorous_check` against published `IO`
+  - run `io_rigorous_check`
+- acceptance criteria:
+  - the malformed file retains a valid sample and row count
+  - reading must throw with tree and branch context
+  - the regression fails against current `main`
+- verification results:
+  - warning-enabled `io_rigorous_check` target builds against published `IO`
+  - regression fails against published `IO`: ROOT reports `Double_t` versus
+    `Int_t` for `normalisation`, but `DatasetIO::Sample::read(...)` returns
+    without throwing
+
+#### Milestone B: Check all production persistence tree loops
+- status: done
+- hypothesis: one scope-owned reader removes every unchecked production binding
+  and entry read without changing valid round trips
+- files / symbols touched:
+  - all `io/` files above
+  - persistence documentation if the contract needs clarification
+- expected behavior risk: medium; optional legacy fields and valid conversions
+  must remain accepted
+- verification commands:
+  - build `IO` and `io_rigorous_check`
+  - run `io_rigorous_check`
+  - run real pipeline and systematics cache tests
+- acceptance criteria:
+  - no raw production `SetBranchAddress(...)` or `GetEntry(...)` call remains in
+    `io/*.cc`
+  - failures identify reader, tree, branch or entry, and ROOT status
+  - branch addresses are released after success and exceptions
+  - valid sample, dataset, event-list, distribution, and shard round trips pass
+- verification results:
+  - warning-enabled `IO` and `io_rigorous_check` targets build
+  - `rg` finds no raw `SetBranchAddress(...)` or `GetEntry(...)` calls in
+    production `io/*.cc`
+  - `io_rigorous_check` passes, including the incompatible normalisation case
+  - `testroot_pipeline_smoke`, `systematics_rigorous_check`, and
+    `macro_analysis_smoke` pass with the checked reader
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification catches CLI, macro, cache, and downstream
+  compatibility regressions
+- files / symbols touched:
+  - all files above
+- expected behavior risk: medium
+- verification commands:
+  - full warning-enabled Docker build
+  - complete configured CTest suite
+  - required shell checks and `git diff --check`
+- acceptance criteria:
+  - all configured tests pass
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - exact-final warning-enabled Docker build passes
+  - all 18 configured tests pass in 320.49 seconds
+  - required shell syntax checks and `git diff --check` pass
+  - final code, naming, deletion, ownership, optional-schema, diagnostics, and
+    module-boundary review finds no blocking issue
+
+### 7. Public-surface check
+- compatibility impact: no API, CLI, or persisted-schema change; malformed
+  persisted tree inputs become hard errors
+- migration note or explicit non-goal: macro-only readers remain inspection
+  utilities and are out of scope
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - production persistence implementation and internal helper: `+153 / -83`
+  - malformed-file regression: `+73 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- centralize mechanics in internal `RootUtils.hh`; retain format-specific branch
+  optionality at each persistence reader
+- accept non-negative ROOT conversion statuses and reject negative errors
+- `.agent/analysis/ccnumu_hyperon.md` does not change because no sample rule,
+  fit structure, or training-snapshot requirement changed
+
+### 10. Stop conditions
+- stop after all production `io/*.cc` tree reads fail contextually on unusable
+  branches/entries while valid round trips preserve output
+- stop before changing ROOT schemas, analysis policy, or macro inspection code

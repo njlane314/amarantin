@@ -7,6 +7,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <TDirectory.h>
@@ -14,9 +15,68 @@
 #include <TKey.h>
 #include <TNamed.h>
 #include <TParameter.h>
+#include <TTree.h>
 
 namespace utils
 {
+    class CheckedTreeReader
+    {
+    public:
+        CheckedTreeReader(TTree &tree, std::string context)
+            : tree_(tree), context_(std::move(context))
+        {
+        }
+
+        ~CheckedTreeReader()
+        {
+            for (TBranch *branch : bound_branches_)
+                tree_.ResetBranchAddress(branch);
+        }
+
+        CheckedTreeReader(const CheckedTreeReader &) = delete;
+        CheckedTreeReader &operator=(const CheckedTreeReader &) = delete;
+
+        template <typename Address>
+        void bind_branch(const std::string &branch_name, Address address)
+        {
+            TBranch *bound_branch = nullptr;
+            const int binding_status =
+                tree_.SetBranchAddress(branch_name.c_str(), address, &bound_branch);
+            if (binding_status < 0)
+            {
+                throw std::runtime_error(
+                    context_ + ": tree " + tree_.GetName() + ", branch " + branch_name +
+                    " cannot be read with the persisted type (ROOT status " +
+                    std::to_string(binding_status) + ")");
+            }
+            if (!bound_branch)
+            {
+                throw std::runtime_error(
+                    context_ + ": ROOT did not return branch " + branch_name +
+                    " from tree " + tree_.GetName());
+            }
+
+            bound_branches_.push_back(bound_branch);
+        }
+
+        void read_entry(Long64_t entry)
+        {
+            const int bytes_read = tree_.GetEntry(entry);
+            if (bytes_read < 0)
+            {
+                throw std::runtime_error(
+                    context_ + ": tree " + tree_.GetName() + ", entry " +
+                    std::to_string(entry) + " could not be read (ROOT result " +
+                    std::to_string(bytes_read) + ")");
+            }
+        }
+
+    private:
+        TTree &tree_;
+        std::string context_;
+        std::vector<TBranch *> bound_branches_;
+    };
+
     inline bool close_root_file(TFile *&file, bool write_before_close)
     {
         if (!file)

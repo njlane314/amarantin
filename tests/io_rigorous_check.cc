@@ -187,6 +187,36 @@ namespace
         file.Close();
     }
 
+    void replace_dataset_normalisation_branch_with_int(const std::filesystem::path &path)
+    {
+        TFile file(path.string().c_str(), "UPDATE");
+        if (file.IsZombie())
+            fail("failed to reopen dataset for normalisation corruption");
+
+        TDirectory *sample_dir = file.GetDirectory("sample/beam");
+        if (!sample_dir)
+            fail("missing beam sample directory for normalisation corruption");
+
+        sample_dir->cd();
+        sample_dir->Delete("run_subrun_normalisation;*");
+
+        TTree tree("run_subrun_normalisation", "");
+        Int_t run = 1;
+        Int_t subrun = 2;
+        Double_t generated_exposure = 10.0;
+        Double_t target_exposure = 20.0;
+        Int_t normalisation = 7;
+        tree.Branch("run", &run, "run/I");
+        tree.Branch("subrun", &subrun, "subrun/I");
+        tree.Branch("generated_exposure", &generated_exposure, "generated_exposure/D");
+        tree.Branch("target_exposure", &target_exposure, "target_exposure/D");
+        tree.Branch("normalisation", &normalisation, "normalisation/I");
+        tree.Fill();
+        tree.Write("run_subrun_normalisation", TObject::kOverwrite);
+        file.Write();
+        file.Close();
+    }
+
     TempDir make_temp_dir()
     {
         const std::string templ =
@@ -817,6 +847,48 @@ namespace
             "DatasetIO malformed sample sibling");
     }
 
+    void test_dataset_rejects_incompatible_normalisation_branch()
+    {
+        const TempDir temp = make_temp_dir();
+        const std::filesystem::path dataset_path = temp.path / "bad-normalisation.dataset.root";
+
+        DatasetIO::Sample sample;
+        sample.sample = "beam";
+        sample.origin = DatasetIO::Sample::Origin::kOverlay;
+        sample.variation = DatasetIO::Sample::Variation::kNominal;
+        sample.beam = DatasetIO::Sample::Beam::kNuMI;
+        sample.polarity = DatasetIO::Sample::Polarity::kFHC;
+        sample.normalisation_mode = "run_subrun_pot";
+        sample.subrun_pot_sum = 10.0;
+        sample.db_tortgt_pot_sum = 20.0;
+        sample.normalisation = 2.0;
+
+        DatasetIO::RunSubrunNormalisation row;
+        row.run = 1;
+        row.subrun = 2;
+        row.generated_exposure = 10.0;
+        row.target_exposure = 20.0;
+        row.normalisation = 2.0;
+        sample.run_subrun_normalisations.push_back(row);
+
+        {
+            DatasetIO dataset(dataset_path.string(), "io-rigorous");
+            dataset.add_sample("beam", sample);
+            dataset.close();
+        }
+
+        replace_dataset_normalisation_branch_with_int(dataset_path);
+
+        require_throws(
+            [&]()
+            {
+                DatasetIO malformed(dataset_path.string());
+                (void)malformed.sample("beam");
+            },
+            "tree run_subrun_normalisation, branch normalisation",
+            "DatasetIO should reject an incompatible normalisation branch");
+    }
+
     void test_eventlist_keys_reject_malformed_sample_siblings()
     {
         const TempDir temp = make_temp_dir();
@@ -1018,6 +1090,7 @@ int main()
         test_shard_scan_tracks_files_and_exposure();
         test_shard_scan_rejects_mixed_layouts();
         test_sample_dataset_and_eventlist_roundtrip();
+        test_dataset_rejects_incompatible_normalisation_branch();
         test_dataset_keys_reject_malformed_sample_siblings();
         test_eventlist_keys_reject_malformed_sample_siblings();
         test_distribution_roundtrip_and_rebinning();

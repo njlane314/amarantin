@@ -4194,3 +4194,56 @@
 ## Remaining hotspots
 - broader repository diagnostics remain ongoing; systematics calculation now
   rejects semantically incompatible inputs and returns no borrowed ROOT state
+
+---
+
+## Current milestone
+- status: done
+- subsystem: checked production persistence tree reads
+- design rule from `DESIGN.md`: use one internal helper only when it deletes
+  repeated failure and lifetime handling
+
+## What changed
+- added a malformed-dataset regression that preserves the sample and row shape
+  but changes the persisted `normalisation` leaf from `Double_t` to `Int_t`
+- replaced every raw production persistence binding and entry read with one
+  scope-owned checked reader
+- retained optional legacy branch checks at their format-specific call sites
+
+## Why this is simpler
+- one checked reader will own binding, entry-read, and branch-address cleanup
+  mechanics while each format keeps its current optionality policy
+
+## Verification
+- the focused target builds against published `IO`
+- the regression proves the unchecked reader logs ROOT's type mismatch but does
+  not throw, leaving the initialized scale available as plausible data
+- the warning-enabled focused target builds after the fix
+- `rg` finds no raw production persistence tree bindings or entry reads
+- `io_rigorous_check`, `testroot_pipeline_smoke`,
+  `systematics_rigorous_check`, and `macro_analysis_smoke` pass
+- the exact-final warning-enabled Docker build passes
+- all 18 configured CTest tests pass in 320.49 seconds
+- required shell syntax checks and `git diff --check` pass
+- final code, naming, deletion, ownership, optional-schema, diagnostics, and
+  boundary review finds no blocking issue
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - production persistence implementation and internal helper: `+153 / -83`
+  - malformed-file regression: `+73 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- preserve non-negative ROOT conversions and reject negative statuses
+- preserve optional legacy branches at their format-specific read sites
+- leave `.agent/analysis/ccnumu_hyperon.md` unchanged because analysis-facing
+  rules, fit structure, and training-snapshot requirements are unchanged
+
+## Remaining hotspots
+- broader repository diagnostics remain ongoing; production persistence readers
+  now reject unusable branches and negative ROOT entry reads contextually

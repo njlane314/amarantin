@@ -741,71 +741,72 @@ DistributionIO::Spectrum DistributionIO::read(const std::string &sample_key,
     std::vector<double> *reint_eigenmodes = nullptr;
     std::vector<double> *reint_universe_histograms = nullptr;
 
-    payload->SetBranchAddress("nominal", &nominal);
-    payload->SetBranchAddress("sumw2", &sumw2);
+    utils::CheckedTreeReader reader(*payload, "DistributionIO");
+    reader.bind_branch("nominal", &nominal);
+    reader.bind_branch("sumw2", &sumw2);
     if (payload->GetBranch("detector_source_labels"))
-        payload->SetBranchAddress("detector_source_labels", &detector_source_labels);
+        reader.bind_branch("detector_source_labels", &detector_source_labels);
     if (payload->GetBranch("detector_sample_keys"))
-        payload->SetBranchAddress("detector_sample_keys", &detector_sample_keys);
+        reader.bind_branch("detector_sample_keys", &detector_sample_keys);
     if (payload->GetBranch("detector_shift_vectors"))
-        payload->SetBranchAddress("detector_shift_vectors", &detector_shift_vectors);
+        reader.bind_branch("detector_shift_vectors", &detector_shift_vectors);
     if (payload->GetBranch("detector_source_count"))
-        payload->SetBranchAddress("detector_source_count", &detector_source_count);
+        reader.bind_branch("detector_source_count", &detector_source_count);
     if (payload->GetBranch("detector_covariance"))
-        payload->SetBranchAddress("detector_covariance", &detector_covariance);
+        reader.bind_branch("detector_covariance", &detector_covariance);
     if (payload->GetBranch("genie_knob_source_labels"))
-        payload->SetBranchAddress("genie_knob_source_labels", &genie_knob_source_labels);
+        reader.bind_branch("genie_knob_source_labels", &genie_knob_source_labels);
     if (payload->GetBranch("genie_knob_shift_vectors"))
-        payload->SetBranchAddress("genie_knob_shift_vectors", &genie_knob_shift_vectors);
+        reader.bind_branch("genie_knob_shift_vectors", &genie_knob_shift_vectors);
     if (payload->GetBranch("genie_knob_source_count"))
-        payload->SetBranchAddress("genie_knob_source_count", &genie_knob_source_count);
+        reader.bind_branch("genie_knob_source_count", &genie_knob_source_count);
     if (payload->GetBranch("genie_knob_covariance"))
-        payload->SetBranchAddress("genie_knob_covariance", &genie_knob_covariance);
+        reader.bind_branch("genie_knob_covariance", &genie_knob_covariance);
     if (payload->GetBranch("detector_template_count"))
-        payload->SetBranchAddress("detector_template_count", &detector_template_count);
+        reader.bind_branch("detector_template_count", &detector_template_count);
     if (payload->GetBranch("detector_down"))
-        payload->SetBranchAddress("detector_down", &detector_down);
+        reader.bind_branch("detector_down", &detector_down);
     if (payload->GetBranch("detector_up"))
-        payload->SetBranchAddress("detector_up", &detector_up);
+        reader.bind_branch("detector_up", &detector_up);
     if (payload->GetBranch("detector_templates"))
-        payload->SetBranchAddress("detector_templates", &detector_templates);
-    payload->SetBranchAddress("total_down", &total_down);
-    payload->SetBranchAddress("total_up", &total_up);
+        reader.bind_branch("detector_templates", &detector_templates);
+    reader.bind_branch("total_down", &total_down);
+    reader.bind_branch("total_up", &total_up);
 
-    payload->SetBranchAddress("genie_branch_name", &genie_branch_name);
-    payload->SetBranchAddress("genie_n_variations", &genie_n_variations);
-    payload->SetBranchAddress("genie_eigen_rank", &genie_eigen_rank);
-    payload->SetBranchAddress("genie_sigma", &genie_sigma);
-    payload->SetBranchAddress("genie_covariance", &genie_covariance);
-    payload->SetBranchAddress("genie_eigenvalues", &genie_eigenvalues);
-    payload->SetBranchAddress("genie_eigenmodes", &genie_eigenmodes);
+    reader.bind_branch("genie_branch_name", &genie_branch_name);
+    reader.bind_branch("genie_n_variations", &genie_n_variations);
+    reader.bind_branch("genie_eigen_rank", &genie_eigen_rank);
+    reader.bind_branch("genie_sigma", &genie_sigma);
+    reader.bind_branch("genie_covariance", &genie_covariance);
+    reader.bind_branch("genie_eigenvalues", &genie_eigenvalues);
+    reader.bind_branch("genie_eigenmodes", &genie_eigenmodes);
     if (payload->GetBranch("genie_universe_histograms"))
-        payload->SetBranchAddress("genie_universe_histograms", &genie_universe_histograms);
+        reader.bind_branch("genie_universe_histograms", &genie_universe_histograms);
 
-    payload->SetBranchAddress("flux_branch_name", &flux_branch_name);
-    payload->SetBranchAddress("flux_n_variations", &flux_n_variations);
-    payload->SetBranchAddress("flux_eigen_rank", &flux_eigen_rank);
-    payload->SetBranchAddress("flux_sigma", &flux_sigma);
-    payload->SetBranchAddress("flux_covariance", &flux_covariance);
-    payload->SetBranchAddress("flux_eigenvalues", &flux_eigenvalues);
-    payload->SetBranchAddress("flux_eigenmodes", &flux_eigenmodes);
+    reader.bind_branch("flux_branch_name", &flux_branch_name);
+    reader.bind_branch("flux_n_variations", &flux_n_variations);
+    reader.bind_branch("flux_eigen_rank", &flux_eigen_rank);
+    reader.bind_branch("flux_sigma", &flux_sigma);
+    reader.bind_branch("flux_covariance", &flux_covariance);
+    reader.bind_branch("flux_eigenvalues", &flux_eigenvalues);
+    reader.bind_branch("flux_eigenmodes", &flux_eigenmodes);
     if (payload->GetBranch("flux_universe_histograms"))
-        payload->SetBranchAddress("flux_universe_histograms", &flux_universe_histograms);
+        reader.bind_branch("flux_universe_histograms", &flux_universe_histograms);
 
-    payload->SetBranchAddress("reint_branch_name", &reint_branch_name);
-    payload->SetBranchAddress("reint_n_variations", &reint_n_variations);
-    payload->SetBranchAddress("reint_eigen_rank", &reint_eigen_rank);
-    payload->SetBranchAddress("reint_sigma", &reint_sigma);
-    payload->SetBranchAddress("reint_covariance", &reint_covariance);
-    payload->SetBranchAddress("reint_eigenvalues", &reint_eigenvalues);
-    payload->SetBranchAddress("reint_eigenmodes", &reint_eigenmodes);
+    reader.bind_branch("reint_branch_name", &reint_branch_name);
+    reader.bind_branch("reint_n_variations", &reint_n_variations);
+    reader.bind_branch("reint_eigen_rank", &reint_eigen_rank);
+    reader.bind_branch("reint_sigma", &reint_sigma);
+    reader.bind_branch("reint_covariance", &reint_covariance);
+    reader.bind_branch("reint_eigenvalues", &reint_eigenvalues);
+    reader.bind_branch("reint_eigenmodes", &reint_eigenmodes);
     if (payload->GetBranch("reint_universe_histograms"))
-        payload->SetBranchAddress("reint_universe_histograms", &reint_universe_histograms);
+        reader.bind_branch("reint_universe_histograms", &reint_universe_histograms);
 
     if (payload->GetEntries() <= 0)
         throw std::runtime_error("DistributionIO: empty payload for sample/cache: " +
                                  sample_key + "/" + cache_key);
-    payload->GetEntry(0);
+    reader.read_entry(0);
 
     spectrum.nominal = nominal ? *nominal : std::vector<double>{};
     spectrum.sumw2 = sumw2 ? *sumw2 : std::vector<double>{};

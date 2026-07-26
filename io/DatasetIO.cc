@@ -65,12 +65,13 @@ namespace
         Int_t run = 0;
         Int_t subrun = 0;
         Double_t generated_exposure = 0.0;
-        tree->SetBranchAddress("run", &run);
-        tree->SetBranchAddress("subrun", &subrun);
+        utils::CheckedTreeReader reader(*tree, "DatasetIO");
+        reader.bind_branch("run", &run);
+        reader.bind_branch("subrun", &subrun);
 
         const bool have_generated_exposure = tree->GetBranch("generated_exposure") != nullptr;
         if (have_generated_exposure)
-            tree->SetBranchAddress("generated_exposure", &generated_exposure);
+            reader.bind_branch("generated_exposure", &generated_exposure);
 
         const Long64_t n = tree->GetEntries();
         std::vector<DatasetIO::RunSubrunExposure> exposures;
@@ -80,7 +81,7 @@ namespace
 
         for (Long64_t i = 0; i < n; ++i)
         {
-            tree->GetEntry(i);
+            reader.read_entry(i);
             if (run_subruns_out)
                 run_subruns_out->emplace_back(static_cast<int>(run), static_cast<int>(subrun));
 
@@ -132,18 +133,19 @@ namespace
         Double_t generated_exposure = 0.0;
         Double_t target_exposure = 0.0;
         Double_t normalisation = 1.0;
-        tree->SetBranchAddress("run", &run);
-        tree->SetBranchAddress("subrun", &subrun);
-        tree->SetBranchAddress("generated_exposure", &generated_exposure);
-        tree->SetBranchAddress("target_exposure", &target_exposure);
-        tree->SetBranchAddress("normalisation", &normalisation);
+        utils::CheckedTreeReader reader(*tree, "DatasetIO");
+        reader.bind_branch("run", &run);
+        reader.bind_branch("subrun", &subrun);
+        reader.bind_branch("generated_exposure", &generated_exposure);
+        reader.bind_branch("target_exposure", &target_exposure);
+        reader.bind_branch("normalisation", &normalisation);
 
         const Long64_t n = tree->GetEntries();
         std::vector<DatasetIO::RunSubrunNormalisation> out;
         out.reserve(static_cast<size_t>(n));
         for (Long64_t i = 0; i < n; ++i)
         {
-            tree->GetEntry(i);
+            reader.read_entry(i);
             DatasetIO::RunSubrunNormalisation entry;
             entry.run = static_cast<int>(run);
             entry.subrun = static_cast<int>(subrun);
@@ -381,13 +383,14 @@ DatasetIO::Sample DatasetIO::Sample::read(TDirectory *d)
         if (t)
         {
             std::string *root_file = nullptr;
-            t->SetBranchAddress("root_file", &root_file);
+            utils::CheckedTreeReader reader(*t, "DatasetIO");
+            reader.bind_branch("root_file", &root_file);
 
             const Long64_t n = t->GetEntries();
             s.root_files.reserve(static_cast<size_t>(n));
             for (Long64_t i = 0; i < n; ++i)
             {
-                t->GetEntry(i);
+                reader.read_entry(i);
                 if (!root_file) throw std::runtime_error("DatasetIO: root_files missing root_file");
                 s.root_files.push_back(*root_file);
             }
