@@ -3813,3 +3813,67 @@
 ## Remaining hotspots
 - cache publication is atomic for one process but does not serialize concurrent
   writers targeting the same output
+
+---
+
+## Current milestone
+- status: done
+- subsystem: serialized distribution cache updates
+- design rule from `DESIGN.md`: keep workflows in `app/`, keep persistence in
+  `io/`, and add abstractions only when they delete complexity
+
+## What changed
+- added an app-private output lock held across the complete DistributionIO
+  copy, mutation, and atomic publication transaction
+- switched only `mk_dist` read-modify-write publication to the serialized
+  helper; full-replacement writers remain independent
+- added a forced-overlap regression that stops a stale writer, completes or
+  blocks a second writer, then verifies both distinct cache entries survive
+- documented the intentionally persistent adjacent lock sidecar
+
+## Why this is simpler
+- `mk_dist` names one `cli::update_file_atomically(...)` operation instead of
+  owning descriptor, retry, unlock, and exception branches
+- DistributionIO remains persistence-only and gains no transaction API
+- `flock` releases ownership on process exit, so no PID files or stale-owner
+  recovery protocol is required
+
+## Verification
+- focused checks:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - build `mk_dist`
+  - run `app_cli_parse_runtime_check`
+  - run `systematics_rigorous_check`
+- results:
+  - the optimized regression fails against a clean `019a6a7` build because the
+    fast writer's `selection_pass` distribution is lost
+  - the lock-aware runtime suite retains both writers' entries and cleans all
+    temporary files
+  - `mk_dist` and focused systematics coverage pass
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 192.21 seconds
+  - the final symmetric concurrency rerun retained both writers' branches
+  - shell syntax, tracked-file diff checks, and the full code review passed
+  - a host macOS C syntax probe accepted the POSIX lock API
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - app-private implementation: `+62 / -1`
+  - runtime regression: `+142 / -0`
+  - user documentation: `+4 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- serialize only DistributionIO read-modify-write updates
+- use an adjacent advisory-lock sidecar and retain its inode after unlock
+- retry interrupted lock acquisition and rely on descriptor lifetime for
+  exception and process-exit release
+- use real processes and `SIGSTOP` rather than a test-only synchronization hook
+
+## Remaining hotspots
+- broader repository diagnostics remain ongoing; no other current writer reads
+  and republishes existing output state

@@ -429,6 +429,10 @@ Reading the cache inputs from left to right:
     sample and histogram request
   * `--no-overwrite` preserves existing matching cache entries
 
+Concurrent updates to the same output are serialized through an adjacent
+`output.dists.root.lock` sidecar. The empty sidecar is intentionally retained
+and does not by itself indicate that an updater is active.
+
 Conceptually this builds two systematic lanes and merges them in one
 `DistributionIO` payload:
 

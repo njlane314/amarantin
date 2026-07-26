@@ -6108,3 +6108,153 @@ recorded in its metadata.
   focused and full tests
 - stop before adding cross-process writer locking or changing sample analysis
   semantics
+
+## ExecPlan Addendum: Serialize Distribution Cache Updates
+
+### 1. Objective
+Prevent concurrent `mk_dist` processes targeting the same DistributionIO file
+from publishing stale copies that discard another successful cache update.
+
+### 2. Constraints
+- Preserve valid `mk_dist` CLI and cache-update behavior.
+- Keep cross-process coordination in the app-private filesystem boundary.
+- Keep DistributionIO persistence-only and leave installed APIs unchanged.
+- Do not serialize full-replacement writers that do not read current output.
+- Use process-exit-safe coordination without stale-owner recovery logic.
+- Leave unrelated local fixtures untouched.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+The lock must cover the complete read-modify-write transaction: copying the
+current cache, building requested entries, and renaming the staged file.
+
+### 4. System map
+- `app/CliPaths.hh`
+- `app/mk_dist.cc`
+- `tests/app_cli_parse_runtime_check.sh`
+- `USAGE`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- expose one app-private atomic-update helper rather than open, lock, cleanup,
+  and unlock branches in `mk_dist`
+
+#### boundary sharpening
+- distinguish full-file atomic writes from serialized read-modify-write updates
+
+#### stale scaffolding
+- no lock-file deletion path; keeping the sidecar inode avoids splitting queued
+  and newly arriving writers across different locks
+
+### 6. Milestones
+
+#### Milestone A: Prove a lost concurrent update
+- status: done
+- hypothesis: stopping one writer after it copies the cache, completing a
+  second writer, then resuming the first will erase the second writer's entry
+- files / symbols touched:
+  - `tests/app_cli_parse_runtime_check.sh`
+- expected behavior risk: none; regression only
+- verification commands:
+  - `bash -n tests/app_cli_parse_runtime_check.sh`
+  - run `app_cli_parse_runtime_check` against the published binaries
+- acceptance criteria:
+  - use real concurrent `mk_dist` processes and real DistributionIO content
+  - force a deterministic stale-copy publication order without test-only CLI
+    behavior
+  - prove the second writer's branch is absent after the published binary wins
+    with the stale first copy
+- verification results:
+  - shell syntax and tracked-file diff checks passed
+  - the fast writer completed while the stale writer was stopped
+  - after the stale writer resumed and published, the ROOT assertion failed
+    because the fast writer's `selection_pass` distribution was missing
+
+#### Milestone B: Serialize copy-on-write updates
+- status: done
+- hypothesis: a POSIX advisory lock on a stable adjacent sidecar makes the
+  second updater copy only after the first updater publishes
+- files / symbols touched:
+  - `app/CliPaths.hh`
+  - `app/mk_dist.cc`
+- expected behavior risk: medium; blocking and lock lifetime must remain
+  exception-safe
+- verification commands:
+  - build `mk_dist`
+  - run `app_cli_parse_runtime_check`
+  - run `systematics_rigorous_check`
+- acceptance criteria:
+  - acquire the output lock before choosing or copying a temporary file
+  - hold the lock through successful rename or failure cleanup
+  - release automatically on exceptions and process exit
+  - preserve entries from both concurrent writers
+  - leave no temporary files after either writer completes
+- verification results:
+  - `mk_dist` builds in the Docker verification tree
+  - the optimized overlap regression still fails deterministically against a
+    clean `019a6a7` build and passes with serialized updates
+  - both concurrent writers retain their distinct distributions
+  - failed-update and temporary-cleanup coverage remains green
+  - `systematics_rigorous_check` passes
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification will catch CLI, filesystem, and cache-layout
+  regressions from serialized updates
+- files / symbols touched:
+  - all files above
+- expected behavior risk: medium
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - shell syntax and `git diff --check`
+- acceptance criteria:
+  - every configured test passes
+  - the lock implementation handles `EINTR` and exception cleanup
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - full Docker build passed
+  - all 18 configured CTest tests passed in 192.21 seconds
+  - the final symmetric concurrency rerun retained both writers' branches
+  - shell syntax and tracked-file diff checks passed
+  - a host macOS C syntax probe accepted `open`, `O_CLOEXEC`, and `flock`
+  - the complete code and test review found no blocking issue
+
+### 7. Public-surface check
+- compatibility impact: no installed API or CLI change; one adjacent `.lock`
+  sidecar persists for each DistributionIO output updated by `mk_dist`
+- migration note or explicit non-goal: no migration; cross-host filesystems
+  that do not implement POSIX advisory locks are not given a weaker fallback
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - app-private implementation: `+62 / -1`
+  - runtime regression: `+142 / -0`
+  - user documentation: `+4 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- serialize only read-modify-write cache updates, not unrelated full replacements
+- use `flock` so process exit releases ownership without PID recovery
+- keep the lock sidecar instead of unlinking it after unlock
+- force the regression with `SIGSTOP` after the first staged copy appears
+- do not update analysis memory because sample rules, fit structure, and
+  training-snapshot requirements do not change
+
+### 10. Stop conditions
+- stop after two forced-overlap writers retain both updates and focused plus
+  full verification pass
+- stop before redesigning DistributionIO transactions or adding distributed
+  locking beyond local POSIX advisory semantics

@@ -411,7 +411,7 @@ int main(int argc, char **argv)
         }
 
         EventListIO event_list(options.eventlist_path, EventListIO::Mode::kRead);
-        cli::write_file_atomically(
+        cli::update_file_atomically(
             options.output_path,
             "mk_dist: failed to publish output ROOT file",
             [&](const std::string &temporary_output_path)

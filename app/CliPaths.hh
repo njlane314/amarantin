@@ -8,11 +8,59 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
+#include <fcntl.h>
+#include <sys/file.h>
 #include <unistd.h>
 
 namespace cli
 {
+    namespace detail
+    {
+        class OutputFileLock
+        {
+        public:
+            explicit OutputFileLock(const std::string &output_path)
+                : lock_path_(output_path + ".lock"),
+                  descriptor_(::open(lock_path_.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0666))
+            {
+                if (descriptor_ < 0)
+                {
+                    throw std::runtime_error(
+                        "failed to open output lock: " + lock_path_ + ": " +
+                        std::strerror(errno));
+                }
+
+                while (::flock(descriptor_, LOCK_EX) != 0)
+                {
+                    if (errno == EINTR)
+                        continue;
+
+                    const int error_number = errno;
+                    ::close(descriptor_);
+                    descriptor_ = -1;
+                    throw std::runtime_error(
+                        "failed to acquire output lock: " + lock_path_ + ": " +
+                        std::strerror(error_number));
+                }
+            }
+
+            ~OutputFileLock()
+            {
+                if (descriptor_ >= 0)
+                    ::close(descriptor_);
+            }
+
+            OutputFileLock(const OutputFileLock &) = delete;
+            OutputFileLock &operator=(const OutputFileLock &) = delete;
+
+        private:
+            std::string lock_path_;
+            int descriptor_ = -1;
+        };
+    }
+
     inline std::filesystem::path normalised_path(const std::string &path)
     {
         std::error_code error;
@@ -94,6 +142,19 @@ namespace cli
             std::remove(temporary_path.c_str());
             throw;
         }
+    }
+
+    template <class UpdateTemporaryFile>
+    inline void update_file_atomically(const std::string &output_path,
+                                       const char *publish_error_prefix,
+                                       UpdateTemporaryFile update_temporary_file)
+    {
+        // Read-modify-write callbacks must start from the latest published file.
+        const detail::OutputFileLock output_lock(output_path);
+        write_file_atomically(
+            output_path,
+            publish_error_prefix,
+            std::move(update_temporary_file));
     }
 }
 

@@ -10,8 +10,19 @@ else
   readonly BUILD_DIR="${ROOT_DIR}/${BUILD_DIR_INPUT}"
 fi
 readonly TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/amarantin-app-cli.XXXXXX")
+declare -a BACKGROUND_PIDS=()
 
 cleanup() {
+  local process_id
+  for process_id in "${BACKGROUND_PIDS[@]}"; do
+    if kill -0 "${process_id}" 2>/dev/null; then
+      kill -CONT "${process_id}" 2>/dev/null || true
+      kill "${process_id}" 2>/dev/null || true
+    fi
+  done
+  for process_id in "${BACKGROUND_PIDS[@]}"; do
+    wait "${process_id}" 2>/dev/null || true
+  done
   rm -rf "${TMP_DIR}"
 }
 trap cleanup EXIT
@@ -84,6 +95,47 @@ run_with_file_size_limit() {
     ulimit -f "${block_limit}"
     "$@"
   ) 2>&1 | cat
+}
+
+wait_for_temporary_output() {
+  local temporary_path=$1
+  local process_id=$2
+  local log_path=$3
+  local attempts=0
+
+  while (( attempts < 500 )); do
+    if [[ -e "${temporary_path}" ]]; then
+      return
+    fi
+    if ! kill -0 "${process_id}" 2>/dev/null; then
+      wait "${process_id}" 2>/dev/null || true
+      printf 'app_cli_parse_runtime_check: writer exited before creating %s\n' \
+        "${temporary_path}" >&2
+      cat "${log_path}" >&2
+      exit 1
+    fi
+    sleep 0.01
+    attempts=$((attempts + 1))
+  done
+
+  printf 'app_cli_parse_runtime_check: timed out waiting for %s\n' \
+    "${temporary_path}" >&2
+  exit 1
+}
+
+wait_for_successful_process() {
+  local process_id=$1
+  local log_path=$2
+  local label=$3
+  local status=0
+
+  wait "${process_id}" || status=$?
+  if [[ ${status} -ne 0 ]]; then
+    printf 'app_cli_parse_runtime_check: %s exited with status %d\n' \
+      "${label}" "${status}" >&2
+    cat "${log_path}" >&2
+    exit 1
+  fi
 }
 
 require_unchanged() {
@@ -249,6 +301,38 @@ void write_multi_cache_distribution(const char *path)
 EOF
 
   root -n -l -b -q "${macro_path}(\"${dist_path}\")"
+}
+
+require_distribution_branch() {
+  local dist_path=$1
+  local sample_key=$2
+  local branch_expr=$3
+  local macro_path="${TMP_DIR}/require_distribution_branch.C"
+
+  cat > "${macro_path}" <<EOF
+#include <stdexcept>
+#include <string>
+
+#include "${ROOT_DIR}/io/DistributionIO.hh"
+
+R__LOAD_LIBRARY(${BUILD_DIR}/lib/libIO.so)
+
+void require_distribution_branch(const char *dist_path,
+                                 const char *sample_key,
+                                 const char *branch_expr)
+{
+  DistributionIO distributions(dist_path, DistributionIO::Mode::kRead);
+  for (const auto &cache_key : distributions.dist_keys(sample_key))
+  {
+    if (distributions.read(sample_key, cache_key).spec.branch_expr == branch_expr)
+      return;
+  }
+  throw std::runtime_error("distribution branch is missing");
+}
+EOF
+
+  root -n -l -b -q \
+    "${macro_path}(\"${dist_path}\",\"${sample_key}\",\"${branch_expr}\")"
 }
 
 require_command root
@@ -563,6 +647,64 @@ capture_failure "${dist_successful_update_cov_log}" \
   "${dist_late_failure_output}" beam "${TMP_DIR}/dist-successful-update.cov.root"
 grep -Fx "mk_cov: sample has multiple cached distributions; pass --cache-key" \
   "${dist_successful_update_cov_log}" >/dev/null
+
+dist_concurrent_output="${TMP_DIR}/dist-concurrent.root"
+dist_concurrent_seed_log="${TMP_DIR}/dist-concurrent-seed.log"
+dist_concurrent_slow_manifest="${TMP_DIR}/dist-concurrent-slow.manifest"
+dist_concurrent_slow_log="${TMP_DIR}/dist-concurrent-slow.log"
+dist_concurrent_fast_log="${TMP_DIR}/dist-concurrent-fast.log"
+capture_success "${dist_concurrent_seed_log}" \
+  "${BUILD_DIR}/bin/mk_dist" \
+  "${dist_concurrent_output}" "${eventlist_late_failure_output}" \
+  beam topological_score 2 0 1
+: > "${dist_concurrent_slow_manifest}"
+for ((nbins = 2; nbins <= 101; ++nbins)); do
+  printf 'beam software_trigger %d 0 2 1\n' "${nbins}" \
+    >> "${dist_concurrent_slow_manifest}"
+done
+
+"${BUILD_DIR}/bin/mk_dist" --manifest "${dist_concurrent_slow_manifest}" \
+  "${dist_concurrent_output}" "${eventlist_late_failure_output}" \
+  >"${dist_concurrent_slow_log}" 2>&1 &
+dist_concurrent_slow_pid=$!
+BACKGROUND_PIDS=("${dist_concurrent_slow_pid}")
+dist_concurrent_slow_temporary="${dist_concurrent_output}.tmp.${dist_concurrent_slow_pid}"
+wait_for_temporary_output "${dist_concurrent_slow_temporary}" \
+  "${dist_concurrent_slow_pid}" "${dist_concurrent_slow_log}"
+kill -STOP "${dist_concurrent_slow_pid}"
+
+"${BUILD_DIR}/bin/mk_dist" \
+  "${dist_concurrent_output}" "${eventlist_late_failure_output}" \
+  beam selection_pass 2 0 2 >"${dist_concurrent_fast_log}" 2>&1 &
+dist_concurrent_fast_pid=$!
+BACKGROUND_PIDS+=("${dist_concurrent_fast_pid}")
+dist_concurrent_fast_temporary="${dist_concurrent_output}.tmp.${dist_concurrent_fast_pid}"
+dist_concurrent_fast_advanced=false
+for ((attempt = 0; attempt < 200; ++attempt)); do
+  if [[ -e "${dist_concurrent_fast_temporary}" ]] || \
+     ! kill -0 "${dist_concurrent_fast_pid}" 2>/dev/null; then
+    dist_concurrent_fast_advanced=true
+    break
+  fi
+  sleep 0.01
+done
+
+if [[ "${dist_concurrent_fast_advanced}" == true ]]; then
+  wait_for_successful_process "${dist_concurrent_fast_pid}" \
+    "${dist_concurrent_fast_log}" "fast concurrent mk_dist writer"
+fi
+kill -CONT "${dist_concurrent_slow_pid}"
+wait_for_successful_process "${dist_concurrent_slow_pid}" \
+  "${dist_concurrent_slow_log}" "slow concurrent mk_dist writer"
+if [[ "${dist_concurrent_fast_advanced}" != true ]]; then
+  wait_for_successful_process "${dist_concurrent_fast_pid}" \
+    "${dist_concurrent_fast_log}" "fast concurrent mk_dist writer"
+fi
+BACKGROUND_PIDS=()
+require_distribution_branch "${dist_concurrent_output}" beam software_trigger
+require_distribution_branch "${dist_concurrent_output}" beam selection_pass
+require_no_temporary_output "${dist_concurrent_output}" \
+  "concurrent mk_dist update"
 
 eventlist_log="${TMP_DIR}/mk_eventlist.log"
 capture_failure "${eventlist_log}" "${BUILD_DIR}/bin/mk_eventlist" --selection
