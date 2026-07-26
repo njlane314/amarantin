@@ -77,6 +77,9 @@ style.
   - orthogonality is enforced event-by-event from truth, not from upstream
     sample labels
   - missing truth fields required for orthogonality are a hard failure
+  - every ROOT file in one logical sample must expose compatible event and
+    subrun tree branch names and persisted types; cross-shard schema drift is a
+    hard failure before `TChain` selection or cloning
 - workflow implication:
   - this repo owns the sample-orthogonality logic and should apply it before
     downstream dataset / event-list / training-snapshot production

@@ -641,7 +641,7 @@ cp "${eventlist_late_failure_output}" "${eventlist_late_failure_expected}"
 capture_failure "${eventlist_late_failure_log}" \
   "${BUILD_DIR}/bin/mk_eventlist" --selection 1 \
   "${eventlist_late_failure_output}" "${eventlist_failure_dataset}"
-grep -Fx "mk_eventlist: ana::build_event_list: failed to clone event tree structure" \
+grep -Fx "mk_eventlist: ana::build_event_list: sample z_bad input file ${eventlist_missing_tree_input} is missing tree EventSelectionFilter" \
   "${eventlist_late_failure_log}" >/dev/null
 require_unchanged "${eventlist_late_failure_expected}" "${eventlist_late_failure_output}" \
   "mk_eventlist existing output after late sample failure"
@@ -653,7 +653,7 @@ eventlist_failed_new_output_log="${TMP_DIR}/eventlist-failed-new-output.log"
 capture_failure "${eventlist_failed_new_output_log}" \
   "${BUILD_DIR}/bin/mk_eventlist" --selection 1 \
   "${eventlist_failed_new_output}" "${eventlist_failure_dataset}"
-grep -Fx "mk_eventlist: ana::build_event_list: failed to clone event tree structure" \
+grep -Fx "mk_eventlist: ana::build_event_list: sample z_bad input file ${eventlist_missing_tree_input} is missing tree EventSelectionFilter" \
   "${eventlist_failed_new_output_log}" >/dev/null
 if [[ -e "${eventlist_failed_new_output}" ]]; then
   printf 'app_cli_parse_runtime_check: mk_eventlist left a partial output after late sample failure\n' >&2

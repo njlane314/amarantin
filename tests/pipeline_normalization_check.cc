@@ -503,6 +503,184 @@ namespace
         require(saw_expected_failure,
                 "build_event_list should reject event trees missing helper-cut inputs");
     }
+
+    struct McFixtureSchema
+    {
+        bool include_sigma0_flag = true;
+        bool include_subrun_pot = true;
+        bool count_strange_as_float = false;
+    };
+
+    void write_mc_schema_fixture(const std::string &path,
+                                 int subrun,
+                                 const McFixtureSchema &schema)
+    {
+        TFile file(path.c_str(), "RECREATE");
+        if (file.IsZombie())
+            fail("failed to create MC schema fixture: " + path);
+
+        {
+            file.cd();
+            TTree event_tree("EventSelectionFilter", "");
+            Int_t run = 1;
+            Int_t subRun = subrun;
+            Int_t selected = 1;
+            Int_t software_trigger = 1;
+            Int_t num_slices = 1;
+            Float_t topological_score = 0.2f;
+            Int_t in_reco_fiducial = 1;
+            Int_t sel_muon = 1;
+            Int_t count_strange = 0;
+            Float_t count_strange_float = 0.0f;
+            Int_t int_ccnc = 0;
+            Bool_t is_nu_mu_cc = kTRUE;
+            Bool_t nu_vtx_in_fv = kTRUE;
+            Bool_t truth_has_strange_fs = kFALSE;
+            Bool_t truth_has_fs_lambda0 = kFALSE;
+            Bool_t truth_has_fs_sigma0 = kFALSE;
+            Bool_t truth_has_g4_lambda0 = kFALSE;
+            Bool_t truth_has_g4_lambda0_from_sigma0 = kFALSE;
+            std::vector<float> truth_fs_lambda0_p;
+            std::vector<float> truth_fs_sigma0_p;
+
+            event_tree.Branch("run", &run, "run/I");
+            event_tree.Branch("subRun", &subRun, "subRun/I");
+            event_tree.Branch("selected", &selected, "selected/I");
+            event_tree.Branch("software_trigger", &software_trigger, "software_trigger/I");
+            event_tree.Branch("num_slices", &num_slices, "num_slices/I");
+            event_tree.Branch("topological_score", &topological_score, "topological_score/F");
+            event_tree.Branch("in_reco_fiducial", &in_reco_fiducial, "in_reco_fiducial/I");
+            event_tree.Branch("sel_muon", &sel_muon, "sel_muon/I");
+            if (schema.count_strange_as_float)
+            {
+                event_tree.Branch("count_strange", &count_strange_float, "count_strange/F");
+            }
+            else
+            {
+                event_tree.Branch("count_strange", &count_strange, "count_strange/I");
+            }
+            event_tree.Branch("int_ccnc", &int_ccnc, "int_ccnc/I");
+            event_tree.Branch("is_nu_mu_cc", &is_nu_mu_cc, "is_nu_mu_cc/O");
+            event_tree.Branch("nu_vtx_in_fv", &nu_vtx_in_fv, "nu_vtx_in_fv/O");
+            event_tree.Branch("truth_has_strange_fs", &truth_has_strange_fs,
+                              "truth_has_strange_fs/O");
+            event_tree.Branch("truth_has_fs_lambda0", &truth_has_fs_lambda0,
+                              "truth_has_fs_lambda0/O");
+            if (schema.include_sigma0_flag)
+            {
+                event_tree.Branch("truth_has_fs_sigma0", &truth_has_fs_sigma0,
+                                  "truth_has_fs_sigma0/O");
+            }
+            event_tree.Branch("truth_has_g4_lambda0", &truth_has_g4_lambda0,
+                              "truth_has_g4_lambda0/O");
+            event_tree.Branch("truth_has_g4_lambda0_from_sigma0",
+                              &truth_has_g4_lambda0_from_sigma0,
+                              "truth_has_g4_lambda0_from_sigma0/O");
+            event_tree.Branch("truth_fs_lambda0_p", &truth_fs_lambda0_p);
+            event_tree.Branch("truth_fs_sigma0_p", &truth_fs_sigma0_p);
+            event_tree.Fill();
+            event_tree.Write("EventSelectionFilter", TObject::kOverwrite);
+        }
+
+        {
+            file.cd();
+            TTree subrun_tree("SubRun", "");
+            Int_t run = 1;
+            Int_t subRun = subrun;
+            Double_t pot = 1.0e12;
+            subrun_tree.Branch("run", &run, "run/I");
+            subrun_tree.Branch("subRun", &subRun, "subRun/I");
+            if (schema.include_subrun_pot)
+                subrun_tree.Branch("pot", &pot, "pot/D");
+            subrun_tree.Fill();
+            subrun_tree.Write("SubRun", TObject::kOverwrite);
+        }
+
+        file.Write();
+        file.Close();
+    }
+
+    void require_cross_shard_schema_rejection(
+        const McFixtureSchema &mismatched_schema,
+        const std::string &expected_branch,
+        const std::string &expected_difference)
+    {
+        const TempDir tmp = make_temp_dir();
+        const std::string complete_path = (tmp.path / "complete.root").string();
+        const std::string mismatched_path = (tmp.path / "mismatched.root").string();
+        const std::string dataset_path = (tmp.path / "dataset.root").string();
+        const std::string eventlist_path = (tmp.path / "eventlist.root").string();
+
+        write_mc_schema_fixture(complete_path, 0, McFixtureSchema{});
+        write_mc_schema_fixture(mismatched_path, 1, mismatched_schema);
+
+        DatasetIO::Sample sample;
+        sample.sample = "overlay";
+        sample.origin = DatasetIO::Sample::Origin::kOverlay;
+        sample.variation = DatasetIO::Sample::Variation::kNominal;
+        sample.beam = DatasetIO::Sample::Beam::kNuMI;
+        sample.polarity = DatasetIO::Sample::Polarity::kFHC;
+        sample.normalisation_mode = "run_subrun_pot";
+        sample.root_files = {complete_path, mismatched_path};
+        sample.run_subrun_normalisations = {
+            {1, 0, 1.0e12, 1.0e12, 1.0},
+            {1, 1, 1.0e12, 1.0e12, 1.0},
+        };
+
+        {
+            DatasetIO dataset(dataset_path, "pipeline_schema_rejection_check");
+            dataset.add_sample("overlay", sample);
+            dataset.close();
+        }
+
+        DatasetIO dataset(dataset_path);
+        EventListIO eventlist(eventlist_path, EventListIO::Mode::kWrite);
+        ana::BuildConfig config;
+        config.event_tree_name = "EventSelectionFilter";
+        config.subrun_tree_name = "SubRun";
+        config.selection_expr = "selected != 0";
+        config.selection_name = "raw";
+
+        bool rejected_mismatched_schema = false;
+        try
+        {
+            ana::build_event_list(dataset, eventlist, config);
+        }
+        catch (const std::exception &error)
+        {
+            const std::string message = error.what();
+            require(message.find("schema") != std::string::npos,
+                    "cross-shard rejection should identify a schema mismatch");
+            require(message.find(mismatched_path) != std::string::npos,
+                    "cross-shard rejection should identify the mismatched file");
+            require(message.find(expected_branch) != std::string::npos,
+                    "cross-shard rejection should identify the divergent branch");
+            require(message.find(expected_difference) != std::string::npos,
+                    "cross-shard rejection should identify the schema difference");
+            rejected_mismatched_schema = true;
+        }
+
+        require(rejected_mismatched_schema,
+                "build_event_list should reject a later shard with a different tree schema");
+    }
+
+    void run_cross_shard_schema_rejection_checks()
+    {
+        McFixtureSchema missing_event_branch;
+        missing_event_branch.include_sigma0_flag = false;
+        require_cross_shard_schema_rejection(
+            missing_event_branch, "truth_has_fs_sigma0", "missing branch");
+
+        McFixtureSchema missing_subrun_branch;
+        missing_subrun_branch.include_subrun_pot = false;
+        require_cross_shard_schema_rejection(
+            missing_subrun_branch, "pot", "missing branch");
+
+        McFixtureSchema changed_event_branch_type;
+        changed_event_branch_type.count_strange_as_float = true;
+        require_cross_shard_schema_rejection(
+            changed_event_branch_type, "count_strange", "different persisted type");
+    }
 }
 
 int main()
@@ -511,6 +689,7 @@ int main()
     {
         run_normalization_check();
         run_missing_cut_inputs_rejection_check();
+        run_cross_shard_schema_rejection_checks();
         std::cout << "pipeline_normalization_check=ok\n";
         return 0;
     }

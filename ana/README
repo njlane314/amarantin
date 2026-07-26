@@ -32,6 +32,8 @@ EventListBuild.hh
   DatasetIO -> EventListIO translation entry point. It resolves event-level
   `__w_norm__`, `__w_cv__`, `__w__`, and `__w2__` from the embedded
   DatasetIO run/subrun normalization surface plus the event-tree CV weights.
+  Before chaining, it validates that every input ROOT file has matching event
+  and subrun branch names and persisted types; schema drift is a hard error.
 
 SampleDef.hh
   Defines ana::SampleDef plus read_sample_defs(...) and

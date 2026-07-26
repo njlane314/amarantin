@@ -4013,3 +4013,65 @@
 ## Remaining hotspots
 - broader repository diagnostics remain ongoing; snapshot publication now has
   direct success, rollback, preservation, and cleanup coverage
+
+---
+
+## Current milestone
+- status: done
+- subsystem: cross-shard event-list schema validation
+- design rule from `DESIGN.md`: validate analysis inputs once, then drive flat
+  event-list construction from that authoritative surface
+
+## What changed
+- added one per-file preflight that validates both event and subrun tree schemas
+  before selection or cloning
+- replaced first-tree-only branch discovery with the validated event columns
+- added synthetic regressions for a missing event branch, missing subrun branch,
+  and changed persisted branch type in later shards
+- preserved ROOT current-directory state during validation file opens
+
+## Why this is simpler
+- one schema preflight will replace first-tree assumptions in preview, formula,
+  and clone setup
+- each source file is opened once for both tree checks; the separate preview
+  `TChain` and duplicate first-tree branch scan are gone
+
+## Verification
+- focused checks:
+  - build `Ana`, `pipeline_normalization_check`, and `testroot_pipeline_check`
+  - run `pipeline_normalization_check`
+  - run `testroot_pipeline_smoke`
+- results:
+  - the regression fails against published `main` because a later shard missing
+    `truth_has_fs_sigma0` is accepted
+  - all three synthetic schema-rejection cases pass after the fix
+  - exact final `testroot_pipeline_smoke` passes in 68.82 seconds
+  - the full Docker build passes without warnings
+  - all 18 configured CTest tests pass in 205.44 seconds
+  - the full CLI runtime test accepts the earlier, contextual missing-tree error
+    while retaining existing/new output rollback checks
+  - required shell syntax checks and `git diff --check` pass
+  - final schema, naming, ROOT-state, and boundary review finds no blocking issue
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- docs/build artifacts removed: 0
+- approximate LOC delta:
+  - event-list implementation: `+137 / -35`
+  - synthetic regression: `+179 / -0`
+  - runtime diagnostic regression: `+2 / -2`
+  - analysis and user documentation: `+5 / -0`
+  - plus tracking-log updates
+
+## Decisions
+- reject heterogeneous event and subrun schemas instead of synthesizing missing
+  branches or accepting stale `TChain` values
+- compare branch names and persisted class/leaf signatures independent of order
+- keep schema validation in `ana/` because it protects selection and cloning,
+  not the persisted DatasetIO format
+
+## Remaining hotspots
+- broader repository diagnostics remain ongoing; event-list construction now
+  rejects cross-shard tree drift before formula or clone processing

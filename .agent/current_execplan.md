@@ -6564,3 +6564,152 @@ a staged copy and publish only after checked ROOT close succeeds.
 - stop after failed replacements preserve the original tree and successful
   sample/merged paths pass focused plus full verification
 - stop before changing snapshot schema or training sample rules
+
+## ExecPlan Addendum: Reject Cross-Shard Tree Schema Drift
+
+### 1. Objective
+Prevent `ana::build_event_list(...)` from silently processing later ROOT files
+whose event or subrun tree schema differs from the first file in the logical
+sample.
+
+### 2. Constraints
+- Preserve selected rows, weights, truth categories, and cut branches for
+  homogeneous input samples.
+- Treat a missing tree or mismatched branch surface in any input file as a hard
+  preflight failure.
+- Keep analysis orchestration in `ana/` and persistence in `io/`.
+- Preserve installed headers, CMake targets, and CLI invocation shapes.
+- Do not broaden this milestone into general ROOT corruption recovery.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep `ana/` focused on event-list construction and selection
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+One schema preflight should replace first-tree assumptions in selection setup,
+cut setup, and `TChain::CloneTree(...)` input handling.
+
+### 4. System map
+- `ana/EventListBuild.cc`
+- `tests/pipeline_normalization_check.cc`
+- `.agent/analysis/ccnumu_hyperon.md`
+- `ana/README`
+- `.agent/current_execplan.md`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### wrapper collapse
+- replace the preview `TChain` plus later first-tree branch scan with one
+  per-file schema preflight that also returns the available columns
+
+#### boundary sharpening
+- reject heterogeneous source trees before selection formulas or copied output
+  depend on stale `TChain` branch state
+
+#### stale scaffolding
+- remove first-tree-only branch discovery once validated columns are available
+
+### 6. Milestones
+
+#### Milestone A: Prove later-shard validation bypass
+- status: done
+- hypothesis: a second event tree missing a truth field is accepted because all
+  required-branch checks inspect only the first `TChain` tree
+- files / symbols touched:
+  - `tests/pipeline_normalization_check.cc`
+- expected behavior risk: none; regression only
+- verification commands:
+  - build `pipeline_normalization_check` against the published Ana library
+  - run `pipeline_normalization_check`
+- acceptance criteria:
+  - create two otherwise valid MC shards
+  - omit one mandatory truth branch only from the second event tree
+  - require event-list construction to reject the heterogeneous sample
+- verification results:
+  - the regression builds against the published Ana library
+  - `pipeline_normalization_check` fails because a second MC shard missing
+    `truth_has_fs_sigma0` is accepted without an exception
+
+#### Milestone B: Preflight every source tree schema
+- status: done
+- hypothesis: one exact schema pass prevents stale branches while deleting the
+  separate preview-chain branch-discovery path
+- files / symbols touched:
+  - `ana/EventListBuild.cc`
+  - analysis-facing documentation
+- expected behavior risk: medium; valid chained ntuple schemas must remain
+  accepted and diagnostics must identify the mismatching file
+- verification commands:
+  - build `Ana` and `pipeline_normalization_check`
+  - run `pipeline_normalization_check`
+  - run `testroot_pipeline_smoke`
+- acceptance criteria:
+  - inspect every event and subrun tree before chain processing
+  - compare branch names and persisted type signatures independent of order
+  - reject missing trees and schema drift with sample, tree, and file context
+  - use the validated event columns for cut construction
+- verification results:
+  - `Ana` and `pipeline_normalization_check` build without warnings
+  - missing later-shard event and subrun branches are rejected with the sample,
+    tree, file, and divergent branch in the diagnostic
+  - a same-name branch with a changed persisted type is rejected
+  - `pipeline_normalization_check` passes in 2.13 seconds
+  - exact final `testroot_pipeline_smoke` passes in 68.82 seconds
+  - validation preserves ROOT current-directory state
+
+#### Milestone C: Review, verify, and publish
+- status: done
+- hypothesis: full verification will catch valid fixture, macro, and installed
+  workflow regressions
+- files / symbols touched:
+  - all files above
+- expected behavior risk: medium
+- verification commands:
+  - full Docker build
+  - complete configured CTest suite
+  - required shell syntax checks and `git diff --check`
+- acceptance criteria:
+  - all configured tests pass
+  - the final implementation has no duplicate schema scans or vague names
+  - no unrelated file is staged
+  - local and remote `main` match after push
+- verification results:
+  - full Docker build passes without warnings
+  - all 18 configured CTest tests pass in 205.44 seconds
+  - the improved missing-tree diagnostic passes the full CLI runtime test while
+    existing and new output rollback checks remain intact
+  - all required shell syntax checks and `git diff --check` pass
+  - final schema, naming, ROOT-state, and boundary review finds no blocking issue
+
+### 7. Public-surface check
+- compatibility impact: no installed signature or CLI change; malformed mixed
+  schemas that previously produced undefined or stale rows become hard errors
+- migration note or explicit non-goal: producers must emit one compatible tree
+  schema per logical sample; automatic branch synthesis is out of scope
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0
+- shell branches removed: 0
+- stale docs removed: 0
+- approximate LOC delta:
+  - event-list implementation: `+137 / -35`
+  - synthetic regression: `+179 / -0`
+  - runtime diagnostic regression: `+2 / -2`
+  - analysis and user documentation: `+5 / -0`
+  - plus tracking-log updates
+
+### 9. Decision log
+- prioritize this over path-alias hardening because stale truth values can alter
+  orthogonality and measurement categories
+- validate complete branch signatures, not only the currently required subset,
+  because `CloneTree` copies the complete first-tree surface
+- update analysis memory because this makes the per-shard hard-failure contract
+  explicit
+
+### 10. Stop conditions
+- stop after both event and subrun schema drift reject before chain processing
+  and homogeneous real/synthetic pipelines pass
+- stop before changing the physics selection or adding missing-branch defaults

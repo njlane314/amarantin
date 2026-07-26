@@ -14,6 +14,9 @@
 #include <vector>
 
 #include <TChain.h>
+#include <TBranch.h>
+#include <TDirectory.h>
+#include <TFile.h>
 #include <TObjArray.h>
 #include <TTree.h>
 #include <TTreeFormula.h>
@@ -64,17 +67,27 @@ namespace
     }
 
     std::string analysis_selection_expression(const DatasetIO::Sample &sample,
-                                              TChain &chain,
+                                              const std::vector<std::string> &available_columns,
                                               const ana::SampleSelectionRule &rule)
     {
         if (!rule.expression)
             return "";
 
-        if (!rule.required_branch || chain.GetBranch(rule.required_branch))
+        const auto has_column = [&](const char *name)
+        {
+            for (const auto &column : available_columns)
+            {
+                if (column == name)
+                    return true;
+            }
+            return false;
+        };
+
+        if (!rule.required_branch || has_column(rule.required_branch))
             return rule.expression;
 
         if (std::string(rule.required_branch) == "count_strange" &&
-            chain.GetBranch(strange_truth_branch_name()))
+            has_column(strange_truth_branch_name()))
         {
             const std::string fallback = fallback_sample_selection_expression(sample);
             if (!fallback.empty())
@@ -89,12 +102,12 @@ namespace
     }
 
     std::string build_selection_expression(const DatasetIO::Sample &sample,
-                                           TChain &chain,
+                                           const std::vector<std::string> &available_columns,
                                            const std::string &selection_expr)
     {
         const ana::SampleSelectionRule rule = ana::sample_selection_rule(sample);
         const std::string analysis_expr =
-            analysis_selection_expression(sample, chain, rule);
+            analysis_selection_expression(sample, available_columns, rule);
         if (analysis_expr.empty())
             return selection_expr;
 
@@ -104,25 +117,57 @@ namespace
         return "(" + selection_expr + ") && (" + analysis_expr + ")";
     }
 
-    std::vector<std::string> branch_names(TTree *tree)
+    using BranchSchema = std::map<std::string, std::string>;
+
+    struct TreeSchemaReference
     {
-        std::vector<std::string> names;
+        std::string tree_name;
+        BranchSchema branches;
+        std::string file_path;
+        bool initialized = false;
+    };
+
+    BranchSchema branch_schema(TTree *tree)
+    {
+        BranchSchema schema;
         if (!tree)
-            return names;
+            return schema;
 
         TObjArray *branches = tree->GetListOfBranches();
         if (!branches)
-            return names;
+            return schema;
 
         const int n = branches->GetEntries();
-        names.reserve(static_cast<std::size_t>(n));
         for (int i = 0; i < n; ++i)
         {
-            TObject *obj = branches->At(i);
-            if (obj)
-                names.emplace_back(obj->GetName());
+            const TBranch *branch = dynamic_cast<const TBranch *>(branches->At(i));
+            if (!branch)
+                continue;
+
+            const std::string signature =
+                std::string(branch->GetClassName()) + "\n" + branch->GetTitle();
+            schema.emplace(branch->GetName(), signature);
         }
-        return names;
+        return schema;
+    }
+
+    std::string schema_difference(const BranchSchema &expected,
+                                  const BranchSchema &actual)
+    {
+        for (const auto &entry : expected)
+        {
+            const auto found = actual.find(entry.first);
+            if (found == actual.end())
+                return "missing branch " + entry.first;
+            if (found->second != entry.second)
+                return "branch " + entry.first + " has a different persisted type";
+        }
+        for (const auto &entry : actual)
+        {
+            if (expected.find(entry.first) == expected.end())
+                return "unexpected branch " + entry.first;
+        }
+        return "unknown branch difference";
     }
 
     std::unique_ptr<TTreeFormula> make_cut_formula(const char *name,
@@ -182,6 +227,77 @@ namespace
         if (!sample.sample.empty())
             return sample.sample;
         return "<unknown sample>";
+    }
+
+    void validate_tree_schema(TFile &input,
+                              const std::string &path,
+                              const std::string &sample_name,
+                              TreeSchemaReference &reference)
+    {
+        TTree *tree = dynamic_cast<TTree *>(input.Get(reference.tree_name.c_str()));
+        if (!tree)
+        {
+            throw std::runtime_error(
+                "ana::build_event_list: sample " + sample_name + " input file " + path +
+                " is missing tree " + reference.tree_name);
+        }
+
+        const BranchSchema actual_schema = branch_schema(tree);
+        if (!reference.initialized)
+        {
+            reference.branches = actual_schema;
+            reference.file_path = path;
+            reference.initialized = true;
+            return;
+        }
+        if (actual_schema != reference.branches)
+        {
+            throw std::runtime_error(
+                "ana::build_event_list: tree schema mismatch for sample " + sample_name +
+                ", tree " + reference.tree_name + ", input file " + path +
+                " relative to " + reference.file_path + ": " +
+                schema_difference(reference.branches, actual_schema));
+        }
+    }
+
+    std::vector<std::string> validate_input_tree_schemas(
+        const std::string &sample_key,
+        const DatasetIO::Sample &sample,
+        const std::string &event_tree_name,
+        const std::string &subrun_tree_name)
+    {
+        if (sample.root_files.empty())
+        {
+            throw std::runtime_error(
+                "ana::build_event_list: sample " + sample_context(sample_key, sample) +
+                " has no input ROOT files");
+        }
+
+        const std::string sample_name = sample_context(sample_key, sample);
+        TreeSchemaReference event_schema;
+        event_schema.tree_name = event_tree_name;
+        TreeSchemaReference subrun_schema;
+        subrun_schema.tree_name = subrun_tree_name;
+        for (const auto &path : sample.root_files)
+        {
+            TDirectory::TContext directory_context;
+            std::unique_ptr<TFile> input(TFile::Open(path.c_str(), "READ"));
+            if (!input || input->IsZombie())
+            {
+                throw std::runtime_error(
+                    "ana::build_event_list: failed to open input ROOT file for sample " +
+                    sample_name + ": " + path);
+            }
+
+            validate_tree_schema(*input, path, sample_name, event_schema);
+            validate_tree_schema(*input, path, sample_name, subrun_schema);
+        }
+
+        std::vector<std::string> columns;
+        columns.reserve(event_schema.branches.size());
+        for (const auto &entry : event_schema.branches)
+            columns.push_back(entry.first);
+        return columns;
     }
 
     std::map<RunSubrunKey, DatasetIO::RunSubrunNormalisation>
@@ -390,6 +506,7 @@ namespace
                                               const DatasetIO::Sample &sample,
                                               const std::string &event_tree_name,
                                               const std::string &selection_expr,
+                                              const std::vector<std::string> &available_columns,
                                               const cuts::Config &cuts_config,
                                               const ana::SignalDefinition &signal_definition)
     {
@@ -401,7 +518,7 @@ namespace
             throw std::runtime_error("ana::build_event_list: no input trees found for event tree " + event_tree_name);
 
         const std::string effective_selection_expr =
-            build_selection_expression(sample, chain, selection_expr);
+            build_selection_expression(sample, available_columns, selection_expr);
         std::unique_ptr<TTreeFormula> selection(new TTreeFormula("eventlist_selection",
                                                                  effective_selection_expr.c_str(),
                                                                  &chain));
@@ -415,13 +532,6 @@ namespace
         selected->SetName("selected");
         selected->SetTitle("Selected event list");
 
-        TTree *first_tree = chain.GetTree();
-        if (!first_tree)
-        {
-            chain.LoadTree(0);
-            first_tree = chain.GetTree();
-        }
-        const std::vector<std::string> available_columns = branch_names(first_tree);
         std::unique_ptr<TTreeFormula> pass_trigger_formula =
             make_cut_formula("eventlist_pass_trigger",
                              cuts::Preset::kTrigger,
@@ -808,25 +918,16 @@ namespace ana
         for (const auto &key : dataset.sample_keys())
         {
             const DatasetIO::Sample sample = dataset.sample(key);
-
-            TChain preview_chain(config.event_tree_name.c_str());
-            for (const auto &path : sample.root_files)
-                preview_chain.Add(path.c_str());
-            if (preview_chain.GetNtrees() == 0)
-                throw std::runtime_error("ana::build_event_list: no input trees found for event tree " + config.event_tree_name);
+            const std::vector<std::string> event_columns =
+                validate_input_tree_schemas(
+                    key, sample, config.event_tree_name, config.subrun_tree_name);
 
             std::string effective_selection_expr = config.selection_expr;
             if (!config.selection_name.empty() && config.selection_name != "raw")
             {
-                TTree *preview_tree = preview_chain.GetTree();
-                if (!preview_tree)
-                {
-                    preview_chain.LoadTree(0);
-                    preview_tree = preview_chain.GetTree();
-                }
                 effective_selection_expr = cuts::expression(cuts::preset_from_string(config.selection_name),
                                                             sample,
-                                                            branch_names(preview_tree),
+                                                            event_columns,
                                                             cuts_config);
             }
 
@@ -835,6 +936,7 @@ namespace ana
                                    sample,
                                    config.event_tree_name,
                                    effective_selection_expr,
+                                   event_columns,
                                    cuts_config,
                                    signal_definition);
             std::unique_ptr<TTree> subruns =
