@@ -35,34 +35,12 @@
     syst_dir += "/syst";
     TString lib_dir = build_dir;
     lib_dir += "/lib";
-
-    auto load_repo_library = [&](const char *stem)
-    {
-        TString so_path = lib_dir;
-        so_path += "/lib";
-        so_path += stem;
-        so_path += ".so";
-
-        TString dylib_path = lib_dir;
-        dylib_path += "/lib";
-        dylib_path += stem;
-        dylib_path += ".dylib";
-
-        if (!gSystem->AccessPathName(so_path.Data()))
-        {
-            gSystem->Load(so_path.Data());
-            return;
-        }
-
-        if (!gSystem->AccessPathName(dylib_path.Data()))
-        {
-            gSystem->Load(dylib_path.Data());
-            return;
-        }
-
-        // Keep the failure noisy if neither platform-specific library exists.
-        gSystem->Load(so_path.Data());
-    };
+    TString library_extension = ".";
+    library_extension += gSystem->GetSoExt();
+    TString io_library_path = lib_dir + "/libIO" + library_extension;
+    TString ana_library_path = lib_dir + "/libAna" + library_extension;
+    TString plot_library_path = lib_dir + "/libPlot" + library_extension;
+    TString syst_library_path = lib_dir + "/libSyst" + library_extension;
 
     gInterpreter->AddIncludePath(io_dir.Data());
     gInterpreter->AddIncludePath(ana_dir.Data());
@@ -73,10 +51,10 @@
     gInterpreter->AddIncludePath(io_macro_dir.Data());
     gInterpreter->AddIncludePath(syst_dir.Data());
     gSystem->AddDynamicPath(lib_dir.Data());
-    load_repo_library("IO");
-    load_repo_library("Ana");
-    load_repo_library("Plot");
-    load_repo_library("Syst");
+    gSystem->Load(io_library_path.Data());
+    gSystem->Load(ana_library_path.Data());
+    gSystem->Load(plot_library_path.Data());
+    gSystem->Load(syst_library_path.Data());
 
     gInterpreter->Declare(R"cpp(
         #include <algorithm>

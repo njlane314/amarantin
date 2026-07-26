@@ -159,7 +159,11 @@ PY
 run_macro_capture() {
   local log_path=$1
   shift
-  AMARANTIN_BUILD_DIR="${BUILD_DIR}" bash "${ROOT_DIR}/tools/run-macro" "$@" >"${log_path}" 2>&1
+  if ! AMARANTIN_BUILD_DIR="${BUILD_DIR}" \
+    bash "${ROOT_DIR}/tools/run-macro" "$@" >"${log_path}" 2>&1; then
+    cat "${log_path}" >&2
+    return 1
+  fi
 }
 
 check_truth_has_strange_split() {

@@ -142,7 +142,9 @@ namespace
         options.fMode = "RECREATE";
         options.fOverwriteIfExists = false;
         options.fLazy = true;
-        options.fCompressionAlgorithm = ROOT::kLZ4;
+        options.fCompressionAlgorithm =
+            static_cast<ROOT::RDF::RSnapshotOptions::ECAlgo>(
+                ROOT::RCompressionSetting::EAlgorithm::kLZ4);
         options.fCompressionLevel = 1;
         options.fAutoFlush = -50LL * 1024 * 1024;
         options.fSplitLevel = 0;

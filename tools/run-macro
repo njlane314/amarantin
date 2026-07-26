@@ -204,4 +204,4 @@ build_invocation() {
 
 invocation=
 build_invocation "${macro_path}" "$@"
-exec root -l -q "${ROOTLOGON_PATH}" "${invocation}"
+exec root -n -l -q "${ROOTLOGON_PATH}" "${invocation}"
