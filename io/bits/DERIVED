@@ -15,9 +15,9 @@ small framework-owned set of helper columns. The snapshot helpers in `ana`
 can then produce flat training trees from those selected event lists.
 
 The main bin-wise persistent object is DistributionIO.
-The downstream handoff does not require a repo-local persisted channel object.
-`~/programs/collie` consumes cached `DistributionIO` entries directly or the
-optional covariance views exported by `mk_cov`.
+The optional `mk_collie` application converts a complete `DistributionIO`
+model into native Collie channel files. `mk_cov` remains the independent
+covariance-view export.
 
 In the current code layout:
 
@@ -38,7 +38,10 @@ In the current code layout:
 
   mk_cov
     exports covariance views from cached `DistributionIO` entries for
-    downstream use in `~/programs/collie`
+    downstream consumers
+
+  mk_collie
+    exports native channel files for `~/programs/collie`
 
 Framework-owned column naming rule
 ----------------------------------

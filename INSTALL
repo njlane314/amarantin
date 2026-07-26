@@ -35,6 +35,7 @@ Executables
   * mk_eventlist
   * mk_dist
   * mk_cov
+  * mk_collie (optional)
 
 Prerequisites
 -------------
@@ -43,9 +44,11 @@ Required
   * C++17 compiler
   * ROOT
   * SQLite3 development files
+  * Eigen3
 
 Optional
   * nlohmann_json headers or package
+  * an installed Collie 0.4 CMake package for `mk_collie`
 
 ROOT may be provided either as a CMake package via `ROOT_DIR` or via
 `root-config` on `PATH`.
@@ -77,6 +80,7 @@ Build only selected targets
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
   cmake --build build --target mk_cov
+  cmake --build build --target mk_collie  # optional enabled build
 
 Install
 -------
@@ -137,6 +141,19 @@ Applications
 
     cmake -S . -B build -DAMARANTIN_BUILD_APP=OFF
 
+  To build the native Collie exporter, first build and install the sibling
+  checkout, then expose that prefix to Amarantin:
+
+    cmake -S "$HOME/programs/collie" -B "$HOME/programs/collie/build" \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX="$HOME/programs/collie/install"
+    cmake --build "$HOME/programs/collie/build" --parallel
+    cmake --install "$HOME/programs/collie/build"
+    cmake -S . -B build \
+      -DAMARANTIN_BUILD_COLLIE_EXPORT=ON \
+      -DCMAKE_PREFIX_PATH="$HOME/programs/collie/install"
+    cmake --build build --target mk_collie
+
 Runtime note for systematics cache builds
 -----------------------------------------
 `mk_dist` accepts `--genie-knobs` to persist the optional paired
@@ -161,6 +178,7 @@ Typical installed outputs are:
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_eventlist
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_dist
   ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_cov
+  ${prefix}/${CMAKE_INSTALL_BINDIR}/mk_collie  # optional
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libIO.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libAna.<shared-library>
   ${prefix}/${CMAKE_INSTALL_LIBDIR}/libSyst.<shared-library>
@@ -219,10 +237,10 @@ render, and the analyzer inspection macros on those real outputs.
 
 Downstream fit note
 -------------------
-This CMake project no longer builds a native fitter. Use the cached
-`DistributionIO` outputs or `mk_cov` exports from `amarantin` as inputs to the
-sibling `~/programs/collie` checkout when a fit or limit calculation is
-needed.
+This CMake project no longer builds a native fitter. The optional `mk_collie`
+application converts a complete `DistributionIO` model into native channel
+files for the sibling `~/programs/collie` checkout; `mk_cov` remains the
+separate SBNFit-style covariance export.
 
 A focused stacked-export smoke, once the ROOT build is available, is:
 

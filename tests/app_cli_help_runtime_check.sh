@@ -68,4 +68,10 @@ cov_log="${TMP_DIR}/mk_cov.log"
 capture_success "${cov_log}" "${BUILD_DIR}/bin/mk_cov" --help
 grep -F "usage: mk_cov " "${cov_log}" >/dev/null
 
+if [[ -x "${BUILD_DIR}/bin/mk_collie" ]]; then
+  collie_log="${TMP_DIR}/mk_collie.log"
+  capture_success "${collie_log}" "${BUILD_DIR}/bin/mk_collie" --help
+  grep -F "usage: mk_collie " "${collie_log}" >/dev/null
+fi
+
 printf 'app_cli_help_runtime_check=ok\n'

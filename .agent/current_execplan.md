@@ -7185,3 +7185,183 @@ From `DESIGN.md`:
 - stop after all production `io/*.cc` tree reads fail contextually on unusable
   branches/entries while valid round trips preserve output
 - stop before changing ROOT schemas, analysis policy, or macro inspection code
+
+## ExecPlan Addendum: Native `collie` Export
+
+### 1. Objective
+Add one explicit application-level interface that converts a reviewed
+multi-channel `DistributionIO` model into native `collie` input files without
+adding a `collie` dependency to any installed `amarantin` library.
+
+### 2. Constraints
+- Keep `io/` persistence-only and leave its public API and schema unchanged.
+- Build the exporter only when explicitly enabled and resolve `collie` through
+  its installed CMake package, never a hard-coded sibling source path.
+- Keep channel/process assembly explicit in one line-oriented manifest.
+- Preserve correlations by shared source labels and joint multisim modes;
+  reject unavailable cross-process correlation information instead of assuming
+  a block-diagonal model.
+- Encode MC statistical uncertainty exactly once as explicit per-bin
+  nuisances.
+- Publish complete channel sets atomically and validate each native file by
+  loading it through `collie` before publication.
+
+### 3. Design anchor
+From `DESIGN.md`:
+- keep workflows in `app/`
+- prefer plain data and namespace functions
+- add abstractions only when they delete complexity
+
+### 4. System map
+- `CMakeLists.txt`
+- `app/CMakeLists.txt`
+- `app/mk_collie.cc`
+- `app/mk_dist.cc`
+- `tests/CMakeLists.txt`
+- `tests/collie_export_rigorous_check.cc`
+- `.agent/analysis/ccnumu_hyperon.md`
+- `ana/ccnumu_hyperon_measurement_contract.json`
+- `COMMANDS`
+- `INSTALL`
+- `USAGE`
+- `io/bits/DERIVED`
+- `docs/repo-internals.puml`
+- `docs/minimality-log.md`
+
+### 5. Candidate simplifications
+
+#### fit boundary
+- replace the undocumented cache hand-wave with one concrete command that
+  writes files accepted directly by `collie validate`, `fit`, and `limit`
+
+#### dependency boundary
+- keep all `collie` types inside one optional executable instead of introducing
+  another installed adapter library
+
+#### model description
+- use two manifest directives, `process` and `rate`, rather than a fit-object
+  class hierarchy or JSON schema
+
+### 6. Milestones
+
+#### Milestone A: Export a strict native multi-channel model
+- status: done
+- hypothesis: one direct CLI can map cached data, signal, and background
+  spectra into one native CollieIO file per channel while keeping core builds
+  independent
+- files / symbols touched:
+  - root and application CMake
+  - `app/mk_collie.cc`
+  - `app/mk_dist.cc`
+- expected behavior risk: medium; foreign writer semantics, process roles, and
+  correlated nuisance signs must be exact
+- verification commands:
+  - build and install `collie` under ignored `.build/`
+  - configure with `AMARANTIN_BUILD_COLLIE_EXPORT=ON`
+  - build `mk_collie`
+- acceptance criteria:
+  - default builds do not search for or link `collie`
+  - enabled builds use `find_package(Collie CONFIG REQUIRED)`
+  - no `collie` code enters `io/`, `ana/`, `syst/`, or `plot/`
+  - malformed manifests and inconsistent channel inputs fail closed
+- verification results:
+  - the default configuration completed without finding Collie, built cleanly,
+    and passed all 18 configured tests in 209.37 seconds
+  - the enabled configuration found only `Collie::IO` plus Eigen, built
+    `mk_collie`, and left every installed library independent of Collie
+  - strict manifest, binning, process-role, source-payload, covariance,
+    nuisance-name, MC-stat, and output-path validation is enforced before
+    publication
+
+#### Milestone B: Prove native round trip and correlation preservation
+- status: done
+- hypothesis: loading generated files through `CollieChannel`,
+  `CollieMasspoint`, and `CollieDistribution` exposes the same observed bins,
+  process templates, and shared nuisance covariance
+- files / symbols touched:
+  - `tests/CMakeLists.txt`
+  - `tests/collie_export_rigorous_check.cc`
+- expected behavior risk: medium
+- verification commands:
+  - build and run `collie_export_rigorous_check`
+  - run `collie validate --strict` on generated fixtures
+- acceptance criteria:
+  - two channels share one signal name and correlated nuisance names
+  - reconstructed cross-channel covariance matches the cached universes
+  - MC-stat nuisances remain process/channel/bin local
+  - a multi-process family without retained universes is rejected
+- verification results:
+  - `collie_export_rigorous_check` passes after writing and reopening two native
+    channel files through Collie's public I/O API
+  - the regression proves process names and yields, zero native histogram-stat
+    errors, lognormal parameter conversion, labeled detector / GENIE-knob
+    effects, local MC stat, and exact cross-channel multisim covariance
+  - the emitted resolved manifest successfully drives a second export
+  - incomplete retained universes and covariance-only detector payloads fail
+    without publishing partial directories
+  - Collie's fit executable was not used for this check because the sibling
+    `CollieLimit` target does not compile against the container ROOT API; the
+    exporter intentionally requires only the independently buildable I/O target
+
+#### Milestone C: Document, review, and verify
+- status: done
+- hypothesis: exact commands and strict tests make the new boundary easier to
+  use than the previous prose-only handoff
+- files / symbols touched:
+  - analysis contract and command/install/usage documentation
+  - full implementation and tracking records
+- expected behavior risk: low after focused round-trip verification
+- verification commands:
+  - full default Docker build and CTest suite
+  - enabled Collie build and focused/full configured tests
+  - required shell syntax checks and `git diff --check`
+- acceptance criteria:
+  - normal command flow is documented end to end
+  - analysis memory records the native export and retained-universe requirement
+  - final review finds no duplicated fit implementation or stale handoff claim
+- verification results:
+  - the full Collie-enabled build passed all 19 configured tests in 217.35
+    seconds; the exact-final focused round trip passed again in 11.44 seconds
+  - installation into a fresh prefix produced a `mk_collie` RUNPATH containing
+    both `$ORIGIN/../lib` and the sibling Collie library directory; `ldd`
+    reported no missing libraries and installed `mk_collie --help` passed
+  - CLI source checks, required shell syntax checks, JSON parsing, and
+    `git diff --check` passed
+  - repository-wide review removed stale direct-cache handoff claims and found
+    no Collie dependency outside the optional application and conditional test
+
+### 7. Public-surface check
+- compatibility impact: adds an opt-in installed executable and one opt-in
+  `mk_dist` cache-detail flag; existing libraries, executables, and persisted
+  schemas remain compatible
+- migration note: multi-process correlated multisim export requires caches
+  built with retained universe histograms
+
+### 8. Reduction ledger
+- files deleted: 0
+- wrappers removed: 0; one application directly owns the foreign-format
+  boundary instead of introducing an adapter library
+- shell branches removed: 0
+- stale docs removed: old direct-`DistributionIO` Collie handoff claims in two
+  internal architecture documents
+- approximate LOC delta:
+  - exporter: `+1526`
+  - rigorous native round-trip regression: `+388`
+  - other implementation and documentation, excluding tracking records:
+    `+203 / -45`
+
+### 9. Decision log
+- write Collie's native format through its public writer API; do not reproduce
+  that ROOT schema locally
+- process the full manifest together so multisim modes are decomposed once and
+  sliced consistently across channels and processes
+- use explicit MC-stat nuisances and do not also enable Collie histogram-stat
+  fluctuations
+- validate native output with Collie's I/O classes so export does not acquire a
+  dependency on the fit / limit library
+
+### 10. Stop conditions
+- stop when generated native inputs validate and preserve the reviewed nominal,
+  correlation, and MC-stat contracts
+- stop before adding fit execution, result interpretation, or a second fitter
+  to `amarantin`

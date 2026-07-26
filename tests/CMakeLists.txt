@@ -232,6 +232,31 @@ if(TARGET IO)
   endif()
 endif()
 
+if(TARGET mk_collie)
+  add_executable(collie_export_rigorous_check collie_export_rigorous_check.cc)
+
+  target_link_libraries(collie_export_rigorous_check
+    PRIVATE
+      IO
+      Collie::IO
+      amarantin_build_options
+  )
+
+  set_target_properties(collie_export_rigorous_check PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+  )
+  add_dependencies(collie_export_rigorous_check mk_collie)
+
+  add_test(NAME collie_export_rigorous_check
+    COMMAND "${CMAKE_BINARY_DIR}/bin/collie_export_rigorous_check"
+      "${CMAKE_BINARY_DIR}/bin/mk_collie"
+  )
+
+  if(TARGET check)
+    add_dependencies(check mk_collie collie_export_rigorous_check)
+  endif()
+endif()
+
 if(TARGET IO AND TARGET Ana)
   add_executable(pipeline_normalization_check pipeline_normalization_check.cc)
 

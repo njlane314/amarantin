@@ -4247,3 +4247,66 @@
 ## Remaining hotspots
 - broader repository diagnostics remain ongoing; production persistence readers
   now reject unusable branches and negative ROOT entry reads contextually
+
+---
+
+## Current milestone
+- status: done
+- subsystem: native `collie` export boundary
+- design rule from `DESIGN.md`: keep the foreign-format workflow in one
+  application and leave installed libraries independent
+
+## What changed
+- added opt-in `mk_collie`, which reads one two-directive model manifest and
+  writes one native Collie file per channel
+- added `mk_dist --retain-universes` so shared multisim families can preserve
+  exact cross-process and cross-channel covariance
+- made detector and GENIE-knob labels, joint multisim modes, rate effects, and
+  explicit per-bin MC stat the only native nuisance paths
+- added atomic directory publication, provenance, resolved manifest / input
+  list output, and a complete native reload before publication
+
+## Why this is simpler
+- one explicit native exporter replaces prose that claimed a downstream
+  handoff without providing an executable path
+- a two-directive text manifest will describe channels, processes, and rate
+  effects without a new fit-object hierarchy
+- Collie remains absent from every installed library and from default builds
+
+## Verification
+- default warning-enabled Docker build passes without Collie discovery
+- all 18 default configured tests pass in 209.37 seconds
+- all 19 Collie-enabled configured tests pass in 217.35 seconds
+- the exact-final native round-trip regression passes in 11.44 seconds
+- the regression reopens native files through Collie I/O, reconstructs the
+  shared covariance, checks rate/source/MC-stat effects, replays the resolved
+  manifest, and proves malformed exports publish nothing
+- a fresh install records the sibling Collie library in `mk_collie`'s RUNPATH;
+  `ldd` reports no missing libraries and installed `mk_collie --help` passes
+- CLI source checks, shell syntax checks, JSON parsing, and `git diff --check`
+  pass
+- final code, naming, ownership, covariance, lifecycle, portability,
+  installation, documentation, and boundary review finds no blocking issue
+
+## Reduction ledger
+- files deleted: 0
+- wrappers removed: 0; no adapter library or fit-object hierarchy was added
+- shell branches removed: 0
+- stale docs removed: two direct-cache Collie handoff claims
+- approximate LOC delta:
+  - exporter: `+1526`
+  - rigorous native round-trip regression: `+388`
+  - other implementation and documentation, excluding tracking records:
+    `+203 / -45`
+
+## Decisions
+- keep `collie` optional and confined to the exporter target
+- require retained universes when cross-process multisim correlations cannot
+  otherwise be reconstructed
+- encode MC statistics once as named per-bin nuisances
+- depend on Collie's public I/O target only; fit execution remains downstream
+
+## Remaining hotspots
+- Collie's fit / limit target needs its own ROOT-API compatibility repair before
+  its CLI can be rebuilt in the current container; native I/O generation and
+  reload are independently verified here

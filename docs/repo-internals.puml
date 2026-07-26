@@ -125,7 +125,7 @@ package "Persistent surfaces" {
 package "Read side" <<art>> {
   component "row-wise reads\nsnapshot::*\ndraw_event_display(...)\nevaluate(... direct)" as ROW_READ <<tools>>
   component "cached reads\nmake_histogram(...)\nevaluate(... cached)" as BIN_READ <<tools>>
-  component "external fit handoff\ncached DistributionIO or mk_cov\nfor ~/programs/collie" as FIT <<art>>
+  component "external fit handoff\nmk_collie native channels\nor mk_cov covariance views" as FIT <<art>>
   artifact "fit outputs\nowned outside this repo" as REPORT <<data>>
 
   ROW_READ -[hidden]down-> BIN_READ

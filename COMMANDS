@@ -29,6 +29,9 @@ Primary executables
   * build/bin/mk_dist
   * build/bin/mk_cov
 
+Optional executable when configured with `AMARANTIN_BUILD_COLLIE_EXPORT=ON`
+  * build/bin/mk_collie
+
 Canonical build path
 --------------------
 Treat CMake as the source of truth. Prefer out-of-source builds.
@@ -86,6 +89,7 @@ Build selected targets
   cmake --build build --target mk_eventlist
   cmake --build build --target mk_dist
   cmake --build build --target mk_cov
+  cmake --build build --target mk_collie  # optional enabled build
 
 Sample workflow
 ---------------
@@ -190,6 +194,7 @@ Build one canonical two-lane systematics cache:
     --genie-knobs \
     --flux \
     --reint \
+    --retain-universes \
     build/dists/run1-numi-fhc.root \
     build/eventlists/run1-numi-fhc.root \
     beam-s0 \
@@ -206,6 +211,9 @@ Notes:
   lane from branches on the nominal sample.
   `--genie-knobs` enables the optional paired `weightsGenieUp` /
   `weightsGenieDn` source-shift lane when those branches are present.
+  `--retain-universes` keeps the exact multisim rows needed to preserve
+  correlations across processes and channels in `mk_collie` or stacked
+  `mk_cov` exports.
   The logical flux family prefers `weightsPPFX` and falls back to
   `weightsFlux`.
   `--no-overwrite` keeps existing matching cache entries instead of
@@ -260,9 +268,28 @@ Downstream fit boundary
 The repository-owned downstream handoff surfaces are:
   * cached `DistributionIO` requests built by `mk_dist`
   * covariance exports built by `mk_cov`
+  * native channel files built by the optional `mk_collie`
 
-Use those outputs from the sibling `~/programs/collie` checkout for limit or
-cross-section fits. `collie` owns its own build system and CLI/examples.
+Build native inputs from one reviewed model manifest:
+
+  build/bin/mk_collie \
+    --manifest model.collie.manifest \
+    build/dists/measurement.root \
+    build/collie/measurement
+
+Manifest rows are:
+
+  process channel process data|signal|background sample-key cache-key
+  rate channel process nuisance down-fraction up-fraction gaussian|lognormal
+
+The output directory contains one native ROOT file per channel and an
+`inputs.list`. Validate and fit those files with the sibling checkout:
+
+  ~/programs/collie/build/bin/collie validate --strict \
+    --input-list build/collie/measurement/inputs.list
+  ~/programs/collie/build/bin/collie fit \
+    --output build/collie/measurement.fit.root \
+    --input-list build/collie/measurement/inputs.list
 
 Macro runner
 ------------

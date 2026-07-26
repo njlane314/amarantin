@@ -20,10 +20,22 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(AMARANTIN_BUILD_APP "Build the CLI applications" ON)
+option(AMARANTIN_BUILD_COLLIE_EXPORT
+  "Build the optional native collie exporter" OFF)
+
+if(AMARANTIN_BUILD_COLLIE_EXPORT AND NOT AMARANTIN_BUILD_APP)
+  message(FATAL_ERROR
+    "AMARANTIN_BUILD_COLLIE_EXPORT requires AMARANTIN_BUILD_APP=ON")
+endif()
 
 include(CTest)
 
 find_package(SQLite3 REQUIRED)
+
+if(AMARANTIN_BUILD_COLLIE_EXPORT)
+  find_package(Eigen3 REQUIRED)
+  find_package(Collie 0.4 CONFIG REQUIRED)
+endif()
 
 add_library(amarantin_root_deps INTERFACE)
 

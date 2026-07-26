@@ -15,9 +15,10 @@ The usual workflow is:
   4. Optionally assemble multiple persistent samples into one DatasetIO file
   5. Build persistent EventListIO files from DatasetIO using event-tree selections
   6. Optionally run mk_dist to create cached DistributionIO requests
-  7. Optionally export one cached spectrum as an SBNFit-style covariance matrix
-  8. Optionally hand cached outputs to `~/programs/collie` for downstream fits
-  9. Optionally drive many sample builds through samples-dag.mk
+  7. Optionally export an SBNFit-style covariance matrix with mk_cov
+  8. Optionally export native `~/programs/collie` channels with mk_collie
+  9. Run downstream validation, fits, or limits from `~/programs/collie`
+  10. Optionally drive many sample builds through samples-dag.mk
 
 Basic build workflow
 --------------------
@@ -391,6 +392,7 @@ Canonical form:
       [--genie-knobs] \
       [--flux] \
       [--reint] \
+      [--retain-universes] \
       [--no-overwrite] \
       output.dists.root \
       input.eventlist.root \
@@ -423,6 +425,8 @@ Reading the cache inputs from left to right:
     reweighting families on the nominal sample
   * `--genie-knobs` enables the optional paired-source lane from
     `weightsGenieUp` / `weightsGenieDn`
+  * `--retain-universes` persists exact multisim rows for correlated
+    multi-process exports
   * `output.dists.root` is the `DistributionIO` file to update
   * `input.eventlist.root` is the persisted selected-row input
   * `<sample-key> <branch-expr> <nbins> <xmin> <xmax>` names the nominal
@@ -454,17 +458,44 @@ handoff surfaces are:
 
   * the cached `DistributionIO` entries themselves
   * optional covariance exports written by `mk_cov`
+  * native Collie channel sets written by optional `mk_collie`
 
-For example, export a covariance view:
+Configure the exporter against an installed sibling checkout as described in
+`INSTALL`. Build caches with `--retain-universes` whenever a multisim family
+appears on more than one process or channel. Then describe the complete model:
 
-    build/bin/mk_cov \
-      --matrix-name frac_covariance \
-      build/dists/run1-numi-fhc.root \
-      beam-s0 \
-      build/exports/beam-s0.frac_cov.root
+    cat > measurement.collie.manifest <<'EOF'
+    process run1_fhc_sr observed data data_sr fit
+    process run1_fhc_sr measurement_signal signal signal_sr fit
+    process run1_fhc_sr other_strange_background background strange_bkg_sr fit
+    process run1_fhc_cr observed data data_cr fit
+    process run1_fhc_cr measurement_signal signal signal_cr fit
+    process run1_fhc_cr other_strange_background background strange_bkg_cr fit
+    rate run1_fhc_sr measurement_signal flux_norm 0.05 0.05 lognormal
+    rate run1_fhc_cr measurement_signal flux_norm 0.05 0.05 lognormal
+    EOF
 
-Then run the fit or limit workflow from the sibling `~/programs/collie`
-checkout. `collie` owns its own setup, build, and fit-side manifests.
+    build/bin/mk_collie \
+      --manifest measurement.collie.manifest \
+      build/dists/measurement.root \
+      build/collie/measurement
+
+Each channel must contain exactly one data process, one consistently named
+signal process, and at least one background. Shared nuisance names encode
+correlations. `mk_collie` derives joint multisim modes, adds local per-bin
+MC-stat nuisances, reloads every native file, and publishes the directory only
+after validation succeeds. The destination must not already exist.
+
+Run the downstream workflow from the sibling checkout:
+
+    ~/programs/collie/build/bin/collie validate --strict \
+      --input-list build/collie/measurement/inputs.list
+    ~/programs/collie/build/bin/collie fit \
+      --output build/collie/measurement.fit.root \
+      --input-list build/collie/measurement/inputs.list
+
+`amarantin` stops at native input construction. Collie owns fit execution,
+limits, diagnostics, and result interpretation.
 
 Common metadata values
 ----------------------
@@ -655,9 +686,9 @@ After an EventListIO file exists, produce one cached `DistributionIO` request:
 Typical downstream fit handoff
 ------------------------------
 
-After a `DistributionIO` cache already exists, either hand that cache directly
-to your `collie`-side preparation step or export one covariance view with
-`mk_cov` first.
+After a `DistributionIO` cache already exists, use `mk_collie` for native
+Collie channel files or `mk_cov` for an SBNFit-style covariance view. Do not
+treat those formats as interchangeable.
 
 Typical debug macro workflow
 ----------------------------

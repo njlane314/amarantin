@@ -69,11 +69,13 @@
     "require_per_bin_mc_stat_nuisances": true,
     "amarantin_handoff_surfaces": [
       "DistributionIO_caches",
-      "mk_cov_exports"
+      "mk_cov_exports",
+      "mk_collie_native_channel_sets"
     ],
+    "mk_collie_requires_retained_universes_for_shared_multisim_families": true,
     "collie_owned_steps": [
-      "fit_side_manifests_and_nuisance_configuration",
       "profile_or_limit_execution",
+      "fit_diagnostics",
       "fit_reports_and_final_result"
     ]
   },

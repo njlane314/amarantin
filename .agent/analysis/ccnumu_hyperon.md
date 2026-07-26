@@ -167,15 +167,14 @@ style.
   - do not let the broad logical `strange` sample masquerade as the fit POI
   - treat `other_strange_background` as an explicit fit component, not generic
     overlay
-  - `amarantin` stops at cached `DistributionIO` plus optional `mk_cov`
-    exports; downstream fitting is assumed to run in `~/programs/collie`
-  - `~/programs/collie` owns fit-side manifests, nuisance configuration,
-    profile / limit execution, and final result reporting
-  - prefer covariance-first family payloads at that external fit boundary;
-    stored eigenmodes are optional derived views, not the only fit-ready
-    contract
-  - sigma-only family fallback is a diagonal approximation and should be
-    surfaced explicitly as lower-fidelity than covariance-backed payloads
+  - `amarantin` stops at cached `DistributionIO`, optional `mk_cov` exports,
+    and native channel sets written by optional `mk_collie`
+  - the `mk_collie` manifest describes the complete simultaneous model;
+    shared nuisance names preserve correlations across channel files
+  - cross-process multisim families require caches built with
+    `mk_dist --retain-universes`; missing correlation information is an error
+  - `~/programs/collie` owns profile / limit execution, diagnostics, and final
+    result reporting
 
 ## Systematics
 - include all major uncertainty families
@@ -236,6 +235,7 @@ style.
   - training snapshots with the columns needed upstream
   - `DistributionIO` caches for score / energy observables
   - covariance exports
+  - validated native Collie channel files and resolved model manifests
   - validation and diagnostic plots
 - downstream `collie`-side outputs are required for the full analysis:
   - fit-side manifests / configuration
@@ -287,9 +287,10 @@ style.
 - build event lists
 - produce training snapshots for the upstream training workflows
 - build score / energy caches
-- export covariance products
-- hand cached `DistributionIO` entries or `mk_cov` exports to
-  `~/programs/collie`
+- build caches with retained universes for shared multisim families
+- export native channel sets with `mk_collie`, or separate SBNFit-style
+  covariance products with `mk_cov`
+- validate the native input list with `~/programs/collie`
 - run the downstream `collie` fit or limit workflow
 - produce validation and result plots
 

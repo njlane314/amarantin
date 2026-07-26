@@ -4,6 +4,27 @@ add_executable(mk_eventlist mk_eventlist.cc)
 add_executable(mk_dist mk_dist.cc)
 add_executable(mk_cov mk_cov.cc)
 
+set(AMARANTIN_APP_TARGETS
+  mk_sample
+  mk_dataset
+  mk_eventlist
+  mk_dist
+  mk_cov
+)
+
+if(AMARANTIN_BUILD_COLLIE_EXPORT)
+  add_executable(mk_collie mk_collie.cc)
+  target_link_libraries(mk_collie
+    PRIVATE
+      IO
+      Collie::IO
+      Eigen3::Eigen
+      amarantin_build_options
+  )
+  set_property(TARGET mk_collie PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+  list(APPEND AMARANTIN_APP_TARGETS mk_collie)
+endif()
+
 target_link_libraries(mk_sample
   PRIVATE
     IO
@@ -37,7 +58,7 @@ target_link_libraries(mk_cov
     amarantin_build_options
 )
 
-foreach(target_name mk_sample mk_dataset mk_eventlist mk_dist mk_cov)
+foreach(target_name IN LISTS AMARANTIN_APP_TARGETS)
 
   set_target_properties(${target_name} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
@@ -52,6 +73,6 @@ foreach(target_name mk_sample mk_dataset mk_eventlist mk_dist mk_cov)
   endif()
 endforeach()
 
-install(TARGETS mk_sample mk_dataset mk_eventlist mk_dist mk_cov
+install(TARGETS ${AMARANTIN_APP_TARGETS}
   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 )

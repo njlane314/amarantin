@@ -37,6 +37,7 @@ namespace
         bool enable_genie_knobs = false;
         bool enable_flux = false;
         bool enable_reint = false;
+        bool retain_universes = false;
         bool overwrite = true;
     };
 
@@ -93,10 +94,12 @@ namespace
     void print_usage(std::ostream &os)
     {
         os << "usage: mk_dist [--selection <expr>] [--detvars <csv>] [--fine-nbins <n>] "
-              "[--genie] [--genie-knobs] [--flux] [--reint] [--no-overwrite] "
+              "[--genie] [--genie-knobs] [--flux] [--reint] [--retain-universes] "
+              "[--no-overwrite] "
               "<output.root> <eventlist.root> <sample-key> <branch-expr> <nbins> <xmin> <xmax>\n"
               "   or: mk_dist [--detvars <csv>] [--fine-nbins <n>] "
-              "[--genie] [--genie-knobs] [--flux] [--reint] [--no-overwrite] "
+              "[--genie] [--genie-knobs] [--flux] [--reint] [--retain-universes] "
+              "[--no-overwrite] "
               "--manifest <requests.manifest> <output.root> <eventlist.root>\n"
               "\n"
               "manifest rows: <sample-key> <branch-expr> <nbins> <xmin> <xmax> [<selection-expr...>]\n";
@@ -337,6 +340,11 @@ namespace
                 options.enable_reint = true;
                 continue;
             }
+            if (arg == "--retain-universes")
+            {
+                options.retain_universes = true;
+                continue;
+            }
             if (arg == "--no-overwrite")
             {
                 options.overwrite = false;
@@ -391,6 +399,7 @@ int main(int argc, char **argv)
         cache_options.enable_genie_knobs = options.enable_genie_knobs;
         cache_options.enable_flux = options.enable_flux;
         cache_options.enable_reint = options.enable_reint;
+        cache_options.retain_universe_histograms = options.retain_universes;
 
         if (options.use_manifest)
         {
